@@ -4,69 +4,63 @@
 	<meta charset="utf-8">
 	<title>Sasoid</title>
 	<link rel="stylesheet" href="style.css">
+	<script type="text/c++">
 
-	<script type="text/javascript">
-
-
-
-		var score = 0;
-	
-		function checkAnswer(inputId, answers){
-			var userAnswer = document.getElementById(inputId).value;
-			userAnswer = userAnswer.toLowerCase();
-			for(var i = 0; i < answers.length; i++){
-				if(userAnswer == answers[i]){
-					score++;
-					break;
-				}
-			}
-		}
-		
-		function checkAnswers() {
-
-			checkAnswer("userAnswer1", ["rv1n", "w083by"]);
-			checkAnswer("userAnswer2", ["987122", "qwerty228"]);
-
-			if( score == 2 ){
-				document.location.href = "main.html";		
-			} else{
-				alert("Неверный логин или пароль");
-				document.location.href = "index.html";
-			}
-		}
-
-
+	// Функции с кодом программой
+   	
 
 
 	</script>
 </head>
 <body>
 
-<div class="header">
-	<h1>Sasoid</h1>
-</div>
-<div class="content">
+<div class="header"><h1>Сontrol panel</h1></div>
+<div class="contentWarp">
+	<div class="content">
+		<div class="center">
 
-	<div class="center">
-	<h1>Sign in</h1>
+			<!-- Вместо # вставить функцию -->
 
-				<center>
-				<div class="box">
+			<a href="#" class="buttons3" onClick = "#">Power</a>
 
-				<p>Login</p>
-				<input type="text" id="userAnswer1">
+			<br>
 
-				<p>Password</p>
-				<input type="text" id="userAnswer2">
+			<a href="#" class="buttons3" onClick = "#">Restart</a>
 
-				</center>
-				<br><br>
-				<a href="#" class="buttons" onClick = "checkAnswers();">Sign in</a>
+			<br>
+
+			<a href="#" class="buttons3" onClick = "#">Shutdown</a>
+
+			<center>
+
+			<div class="box">
+
+			<p><small><a href="lab5.html">Lab5</a></small></p>
+
+			<p><small><a href="laba1.html">Lab</a></small></p>
+
+			<p><small><a href="knopka.html">knopka</a></small></p>
+
+			<small>If you have questions go to this <a href="img/1.png">link</a></small>
+			
+
 			</div>
-	</div>
+
+
+		</div>
+</div>
+
+
+
+
+
+
+
+
+	
 </div>
 <div class="footer">
-	<p>Copyright &copy;Sasoid</p>
+	<p>Copyright &copy; Sasoid</p>
 </div>
 
 </body>
