@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Портфель акций MOEX</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📈 Портфель акций Московской биржи</h1>
+            <div class="header-controls">
+                <div class="last-update">
+                    Последнее обновление: <span id="last-update-time">-</span>
+                    <span class="update-timer"> | До обновления: <span id="next-update-timer">-</span></span>
+                </div>
+                <button id="refresh-btn" class="btn btn-refresh" onclick="manualRefresh()" title="Обновить данные">
+                    🔄 Обновить
+                </button>
+            </div>
+        </header>
+
+        <!-- Сводка портфеля -->
+        <div class="portfolio-summary" id="portfolio-summary">
+            <div class="summary-card">
+                <div class="summary-label">Общая стоимость</div>
+                <div class="summary-value" id="total-value">0 ₽</div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-label">Общая прибыль/убыток</div>
+                <div class="summary-value" id="total-pnl">0 ₽</div>
+                <div class="summary-percent" id="total-pnl-percent">0%</div>
+            </div>
+        </div>
+
+        <!-- Форма добавления позиции -->
+        <div class="add-form-container">
+            <h2>Добавить позицию</h2>
+            <form id="add-form">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="ticker">Тикер *</label>
+                        <input type="text" id="ticker" name="ticker" required placeholder="SBER" maxlength="20">
+                    </div>
+                    <div class="form-group">
+                        <label for="company_name">Название компании</label>
+                        <input type="text" id="company_name" name="company_name" placeholder="Сбербанк">
+                    </div>
+                    <div class="form-group">
+                        <label for="quantity">Количество *</label>
+                        <input type="number" id="quantity" name="quantity" required min="0.01" step="0.01" placeholder="10">
+                    </div>
+                    <div class="form-group">
+                        <label for="average_buy_price">Цена покупки *</label>
+                        <input type="number" id="average_buy_price" name="average_buy_price" required min="0.01" step="0.01" placeholder="250.50">
+                    </div>
+                    <div class="form-group">
+                        <button type="submit" class="btn btn-primary">Добавить</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        <!-- Таблица портфеля -->
+        <div class="portfolio-table-container">
+            <h2>Мой портфель</h2>
+            <div id="loading" class="loading">Загрузка данных...</div>
+            <div id="error-message" class="error-message" style="display: none;"></div>
+            
+            <table class="portfolio-table" id="portfolio-table" style="display: none;">
+                <thead>
+                    <tr>
+                        <th>Тикер</th>
+                        <th>Компания</th>
+                        <th>Количество</th>
+                        <th>Цена сейчас</th>
+                        <th>Изменение</th>
+                        <th>Цена покупки</th>
+                        <th>P/L ₽</th>
+                        <th>P/L %</th>
+                        <th>Объем</th>
+                        <th>Действия</th>
+                    </tr>
+                </thead>
+                <tbody id="portfolio-tbody">
+                    <!-- Данные загружаются через JavaScript -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Модальное окно для редактирования -->
+    <div id="edit-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2>Редактировать позицию</h2>
+            <form id="edit-form">
+                <input type="hidden" id="edit-id">
+                <div class="form-group">
+                    <label for="edit-company_name">Название компании</label>
+                    <input type="text" id="edit-company_name" name="company_name">
+                </div>
+                <div class="form-group">
+                    <label for="edit-quantity">Количество *</label>
+                    <input type="number" id="edit-quantity" name="quantity" required min="0.01" step="0.01">
+                </div>
+                <div class="form-group">
+                    <label for="edit-average_buy_price">Цена покупки *</label>
+                    <input type="number" id="edit-average_buy_price" name="average_buy_price" required min="0.01" step="0.01">
+                </div>
+                <div class="form-group">
+                    <button type="submit" class="btn btn-primary">Сохранить</button>
+                    <button type="button" class="btn btn-secondary" onclick="closeEditModal()">Отмена</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>
