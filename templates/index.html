@@ -41,11 +41,31 @@
                 <div class="form-row">
                     <div class="form-group">
                         <label for="ticker">Тикер *</label>
-                        <input type="text" id="ticker" name="ticker" required placeholder="SBER" maxlength="20">
+                        <div class="ticker-input-container">
+                            <input type="text" id="ticker" name="ticker" required placeholder="SBER" maxlength="20">
+                            <span id="ticker-status" class="ticker-status"></span>
+                        </div>
+                        <small id="ticker-hint" class="ticker-hint"></small>
                     </div>
                     <div class="form-group">
                         <label for="company_name">Название компании</label>
                         <input type="text" id="company_name" name="company_name" placeholder="Сбербанк">
+                    </div>
+                    <div class="form-group">
+                        <label for="category">Категория</label>
+                        <select id="category" name="category">
+                            <option value="">Не выбрано</option>
+                            <option value="Нефть и газ">Нефть и газ</option>
+                            <option value="Электроэнергетика">Электроэнергетика</option>
+                            <option value="Телекоммуникации">Телекоммуникации</option>
+                            <option value="Металлы и добыча">Металлы и добыча</option>
+                            <option value="Финансовый сектор">Финансовый сектор</option>
+                            <option value="Потребительский сектор">Потребительский сектор</option>
+                            <option value="Химия и нефтехимия">Химия и нефтехимия</option>
+                            <option value="Информационные технологии (IT)">Информационные технологии (IT)</option>
+                            <option value="Строительные компании и недвижимость">Строительные компании и недвижимость</option>
+                            <option value="Транспорт">Транспорт</option>
+                        </select>
                     </div>
                     <div class="form-group">
                         <label for="quantity">Количество *</label>
@@ -55,7 +75,8 @@
                         <label for="average_buy_price">Цена покупки *</label>
                         <input type="number" id="average_buy_price" name="average_buy_price" required min="0.01" step="0.01" placeholder="250.50">
                     </div>
-                    <div class="form-group">
+                    <div class="form-group form-group-button">
+                        <label>&nbsp;</label>
                         <button type="submit" class="btn btn-primary">Добавить</button>
                     </div>
                 </div>
@@ -64,29 +85,52 @@
 
         <!-- Таблица портфеля -->
         <div class="portfolio-table-container">
-            <h2>Мой портфель</h2>
+            <!-- Переключатель представлений -->
+            <div class="view-switcher">
+                <button id="btn-table-view" class="view-btn active" onclick="switchView('table')">
+                    📊 Мой портфель
+                </button>
+                <button id="btn-chart-view" class="view-btn" onclick="switchView('chart')">
+                    📈 Распределение по категориям
+                </button>
+            </div>
+
             <div id="loading" class="loading">Загрузка данных...</div>
             <div id="error-message" class="error-message" style="display: none;"></div>
             
-            <table class="portfolio-table" id="portfolio-table" style="display: none;">
-                <thead>
-                    <tr>
-                        <th>Тикер</th>
-                        <th>Компания</th>
-                        <th>Количество</th>
-                        <th>Цена сейчас</th>
-                        <th>Изменение</th>
-                        <th>Цена покупки</th>
-                        <th>P/L ₽</th>
-                        <th>P/L %</th>
-                        <th>Объем</th>
-                        <th>Действия</th>
-                    </tr>
-                </thead>
-                <tbody id="portfolio-tbody">
-                    <!-- Данные загружаются через JavaScript -->
-                </tbody>
-            </table>
+            <!-- Представление таблицы портфеля -->
+            <div id="table-view" class="portfolio-view active">
+                <table class="portfolio-table" id="portfolio-table" style="display: none;">
+                    <thead>
+                        <tr>
+                            <th>Тикер</th>
+                            <th>Компания</th>
+                            <th>Категория</th>
+                            <th>Количество</th>
+                            <th>Цена сейчас</th>
+                            <th>Изменение</th>
+                            <th>Цена покупки</th>
+                            <th>P/L ₽</th>
+                            <th>P/L %</th>
+                            <th>Объем</th>
+                            <th>Действия</th>
+                        </tr>
+                    </thead>
+                    <tbody id="portfolio-tbody">
+                        <!-- Данные загружаются через JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Представление диаграммы категорий -->
+            <div id="chart-view" class="portfolio-view" style="display: none;">
+                <div class="category-chart-container">
+                    <h3>Распределение портфеля по категориям</h3>
+                    <div id="category-chart" class="category-chart">
+                        <!-- Диаграмма загружается через JavaScript -->
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -100,6 +144,22 @@
                 <div class="form-group">
                     <label for="edit-company_name">Название компании</label>
                     <input type="text" id="edit-company_name" name="company_name">
+                </div>
+                <div class="form-group">
+                    <label for="edit-category">Категория</label>
+                    <select id="edit-category" name="category">
+                        <option value="">Не выбрано</option>
+                        <option value="Нефть и газ">Нефть и газ</option>
+                        <option value="Электроэнергетика">Электроэнергетика</option>
+                        <option value="Телекоммуникации">Телекоммуникации</option>
+                        <option value="Металлы и добыча">Металлы и добыча</option>
+                        <option value="Финансовый сектор">Финансовый сектор</option>
+                        <option value="Потребительский сектор">Потребительский сектор</option>
+                        <option value="Химия и нефтехимия">Химия и нефтехимия</option>
+                        <option value="Информационные технологии (IT)">Информационные технологии (IT)</option>
+                        <option value="Строительные компании и недвижимость">Строительные компании и недвижимость</option>
+                        <option value="Транспорт">Транспорт</option>
+                    </select>
                 </div>
                 <div class="form-group">
                     <label for="edit-quantity">Количество *</label>

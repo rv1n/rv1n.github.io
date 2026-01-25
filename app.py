@@ -59,6 +59,7 @@ def get_portfolio():
                 'id': item.id,
                 'ticker': item.ticker,
                 'company_name': item.company_name,
+                'category': item.category if hasattr(item, 'category') else None,
                 'quantity': item.quantity,
                 'average_buy_price': item.average_buy_price,
                 'current_price': current_price,
@@ -99,43 +100,68 @@ def get_portfolio():
 @app.route('/api/portfolio', methods=['POST'])
 def add_portfolio_item():
     """
-    Добавить новую позицию в портфель
+    Добавить новую позицию в портфель или обновить существующую
+    При добавлении дубликата тикера рассчитывается средняя цена покупки
     """
     try:
         data = request.json
         ticker = data.get('ticker', '').upper().strip()
         company_name = data.get('company_name', '').strip()
+        category = data.get('category', '').strip()
         quantity = float(data.get('quantity', 0))
-        average_buy_price = float(data.get('average_buy_price', 0))
+        buy_price = float(data.get('average_buy_price', 0))
         
-        if not ticker or quantity <= 0 or average_buy_price <= 0:
+        if not ticker or quantity <= 0 or buy_price <= 0:
             return jsonify({
                 'success': False,
                 'error': 'Неверные данные: тикер, количество и цена должны быть положительными'
             }), 400
         
-        # Проверяем, нет ли уже такого тикера
+        # Проверяем, есть ли уже такой тикер
         existing = db_session.query(Portfolio).filter_by(ticker=ticker).first()
+        
         if existing:
+            # Если тикер уже есть - рассчитываем среднюю цену покупки
+            # Формула: (количество1 * цена1 + количество2 * цена2) / (количество1 + количество2)
+            total_cost = (existing.quantity * existing.average_buy_price) + (quantity * buy_price)
+            new_quantity = existing.quantity + quantity
+            new_average_price = total_cost / new_quantity
+            
+            # Обновляем существующую позицию
+            existing.quantity = new_quantity
+            existing.average_buy_price = new_average_price
+            if company_name:
+                existing.company_name = company_name
+            if category:
+                existing.category = category
+            
+            db_session.commit()
+            
             return jsonify({
-                'success': False,
-                'error': f'Тикер {ticker} уже есть в портфеле'
-            }), 400
-        
-        new_item = Portfolio(
-            ticker=ticker,
-            company_name=company_name or ticker,
-            quantity=quantity,
-            average_buy_price=average_buy_price
-        )
-        
-        db_session.add(new_item)
-        db_session.commit()
-        
-        return jsonify({
-            'success': True,
-            'message': f'Позиция {ticker} добавлена в портфель'
-        })
+                'success': True,
+                'message': f'Позиция {ticker} обновлена. Новое количество: {new_quantity:.2f}, средняя цена: {new_average_price:.2f} ₽',
+                'updated': True,
+                'new_quantity': new_quantity,
+                'new_average_price': new_average_price
+            })
+        else:
+            # Создаем новую позицию
+            new_item = Portfolio(
+                ticker=ticker,
+                company_name=company_name or ticker,
+                category=category or None,
+                quantity=quantity,
+                average_buy_price=buy_price
+            )
+            
+            db_session.add(new_item)
+            db_session.commit()
+            
+            return jsonify({
+                'success': True,
+                'message': f'Позиция {ticker} добавлена в портфель',
+                'updated': False
+            })
     except Exception as e:
         db_session.rollback()
         return jsonify({
@@ -164,6 +190,8 @@ def update_portfolio_item(item_id):
             item.average_buy_price = float(data['average_buy_price'])
         if 'company_name' in data:
             item.company_name = data['company_name'].strip()
+        if 'category' in data:
+            item.category = data['category'].strip() if data['category'] else None
         
         db_session.commit()
         
@@ -227,6 +255,52 @@ def get_quote(ticker):
                 'success': False,
                 'error': f'Не удалось получить данные для тикера {ticker}'
             }), 404
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/validate-ticker/<ticker>', methods=['GET'])
+def validate_ticker(ticker):
+    """
+    Проверить существование тикера на MOEX
+    """
+    try:
+        ticker = ticker.upper().strip()
+        
+        if not ticker:
+            return jsonify({
+                'success': False,
+                'error': 'Тикер не указан'
+            }), 400
+        
+        # Пытаемся получить информацию о тикере
+        quote_data = moex_service.get_current_price(ticker)
+        security_info = moex_service.get_security_info(ticker)
+        
+        if quote_data or security_info:
+            # Тикер существует
+            company_name = ''
+            if security_info:
+                company_name = security_info.get('short_name') or security_info.get('name') or ''
+            
+            return jsonify({
+                'success': True,
+                'ticker': ticker,
+                'exists': True,
+                'company_name': company_name,
+                'current_price': quote_data.get('price') if quote_data else None
+            })
+        else:
+            # Тикер не найден
+            return jsonify({
+                'success': True,
+                'ticker': ticker,
+                'exists': False,
+                'error': f'Тикер {ticker} не найден на Московской бирже'
+            })
     except Exception as e:
         return jsonify({
             'success': False,

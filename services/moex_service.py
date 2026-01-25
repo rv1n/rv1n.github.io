@@ -222,11 +222,11 @@ class MOEXService:
             Словарь с информацией о бумаге или None
         """
         ticker = ticker.upper().strip()
-        url = f"{self.BASE_URL}/engines/stock/markets/shares/securities/{ticker}.json"
+        url = f"{self.BASE_URL}/securities/{ticker}.json"
         
         params = {
             'iss.meta': 'off',
-            'securities.columns': 'SECID,SECNAME,SHORTNAME'
+            'iss.json': 'extended'
         }
         
         data = self._make_request(url, params)
@@ -236,18 +236,46 @@ class MOEXService:
         
         try:
             data_dict = data[1]
-            securities_table = data_dict.get('securities', [])
             
-            if securities_table and isinstance(securities_table, list) and len(securities_table) > 0:
-                # Берем последний элемент (актуальные данные)
-                securities_dict = securities_table[-1]
-                if isinstance(securities_dict, dict):
-                    return {
-                        'ticker': securities_dict.get('SECID'),
-                        'name': securities_dict.get('SECNAME'),
-                        'short_name': securities_dict.get('SHORTNAME')
-                    }
+            # Сначала пробуем получить из description
+            description_table = data_dict.get('description', [])
+            if description_table and isinstance(description_table, list):
+                result = {}
+                for item in description_table:
+                    if isinstance(item, dict):
+                        name = item.get('name')
+                        value = item.get('value')
+                        if name == 'SECID':
+                            result['ticker'] = value
+                        elif name == 'NAME':
+                            result['name'] = value
+                        elif name == 'SHORTNAME':
+                            result['short_name'] = value
+                
+                # Если нашли хотя бы название
+                if result.get('name') or result.get('short_name'):
+                    print(f"Информация о бумаге {ticker}: {result}")
+                    return result
+            
+            # Если не нашли в description, пробуем в boards
+            boards_table = data_dict.get('boards', [])
+            if boards_table and isinstance(boards_table, list) and len(boards_table) > 0:
+                first_board = boards_table[0]
+                if isinstance(first_board, dict):
+                    secid = first_board.get('secid')
+                    title = first_board.get('title') or first_board.get('shortname')
+                    if secid and title:
+                        result = {
+                            'ticker': secid,
+                            'name': title,
+                            'short_name': title
+                        }
+                        print(f"Информация о бумаге {ticker} из boards: {result}")
+                        return result
+                        
         except Exception as e:
             print(f"Ошибка получения информации о бумаге {ticker}: {e}")
+            import traceback
+            traceback.print_exc()
         
         return None

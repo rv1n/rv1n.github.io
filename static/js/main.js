@@ -1,15 +1,18 @@
 /**
  * Главный JavaScript файл для управления портфелем акций MOEX
- * Обеспечивает автообновление данных каждые 3 минуты
- * Также обновляет данные при изменении цен
+ * Обеспечивает автообновление данных каждые 5 минут
+ * Также обновляет данные при изменении цен (проверка каждые 5 секунд)
  */
 
-const UPDATE_INTERVAL = 60000; // Обновление каждые 1 минуту
+const UPDATE_INTERVAL = 300000; // Обновление каждые 5 минут (300 секунд)
+const PRICE_CHECK_INTERVAL = 5000; // Проверка изменений цен каждые 5 секунд
 let updateTimer = null;
 let previousPrices = {}; // Хранение предыдущих цен для отслеживания изменений
-let priceCheckInterval = 5000; // Интервал для проверки изменений цен (5 секунд)
+let priceCheckInterval = null; // Интервал для проверки изменений цен
 let countdownTimer = null; // Таймер обратного отсчета
 let lastUpdateTime = null; // Время последнего обновления
+let tickerValidationTimeout = null; // Таймаут для валидации тикера
+let lastValidatedTicker = ''; // Последний валидированный тикер
 
 /**
  * Инициализация приложения при загрузке страницы
@@ -51,6 +54,13 @@ function setupEventListeners() {
                 closeEditModal();
             }
         });
+    }
+    
+    // Валидация тикера при вводе
+    const tickerInput = document.getElementById('ticker');
+    if (tickerInput) {
+        tickerInput.addEventListener('input', handleTickerInput);
+        tickerInput.addEventListener('blur', handleTickerBlur);
     }
 }
 
@@ -193,6 +203,9 @@ function displayPortfolio(portfolio, summary) {
     
     // Обновление сводки
     updateSummary(summary);
+    
+    // Обновление диаграммы категорий
+    updateCategoryChart(portfolio);
 }
 
 /**
@@ -209,6 +222,7 @@ function createPortfolioRow(item) {
     row.innerHTML = `
         <td><strong>${item.ticker}</strong></td>
         <td>${item.company_name || item.ticker}</td>
+        <td><span class="category-badge">${item.category || '-'}</span></td>
         <td>${formatNumber(item.quantity)}</td>
         <td><strong>${formatCurrency(item.current_price)}</strong></td>
         <td class="${changeClass}">
@@ -224,11 +238,11 @@ function createPortfolioRow(item) {
         </td>
         <td>${formatNumber(item.volume)}</td>
         <td>
-            <button class="btn btn-edit" onclick="openEditModal(${item.id}, '${item.company_name}', ${item.quantity}, ${item.average_buy_price})">
-                Редактировать
+            <button class="btn btn-edit" onclick="openEditModal(${item.id}, '${item.company_name}', '${item.category || ''}', ${item.quantity}, ${item.average_buy_price})" title="Редактировать">
+                ✏️
             </button>
-            <button class="btn btn-danger" onclick="deletePosition(${item.id}, '${item.ticker}')">
-                Удалить
+            <button class="btn btn-danger" onclick="deletePosition(${item.id}, '${item.ticker}')" title="Удалить">
+                🗑️
             </button>
         </td>
     `;
@@ -260,14 +274,121 @@ function updateSummary(summary) {
 }
 
 /**
+ * Обработка ввода тикера с отложенной валидацией
+ */
+function handleTickerInput(e) {
+    const ticker = e.target.value.trim().toUpperCase();
+    const statusEl = document.getElementById('ticker-status');
+    const hintEl = document.getElementById('ticker-hint');
+    
+    // Очищаем предыдущий таймаут
+    if (tickerValidationTimeout) {
+        clearTimeout(tickerValidationTimeout);
+    }
+    
+    // Показываем статус ожидания
+    if (ticker.length > 0) {
+        statusEl.textContent = '⏳';
+        statusEl.className = 'ticker-status validating';
+        hintEl.textContent = 'Проверка...';
+        hintEl.className = 'ticker-hint';
+        
+        // Задержка перед валидацией (500мс)
+        tickerValidationTimeout = setTimeout(() => {
+            validateTicker(ticker);
+        }, 500);
+    } else {
+        statusEl.textContent = '';
+        statusEl.className = 'ticker-status';
+        hintEl.textContent = '';
+    }
+}
+
+/**
+ * Обработка потери фокуса на поле тикера
+ */
+function handleTickerBlur(e) {
+    const ticker = e.target.value.trim().toUpperCase();
+    if (ticker.length > 0 && ticker !== lastValidatedTicker) {
+        validateTicker(ticker);
+    }
+}
+
+/**
+ * Валидация тикера через API
+ */
+async function validateTicker(ticker) {
+    if (!ticker) return;
+    
+    const statusEl = document.getElementById('ticker-status');
+    const hintEl = document.getElementById('ticker-hint');
+    const companyNameInput = document.getElementById('company_name');
+    
+    if (!statusEl || !hintEl || !companyNameInput) {
+        console.error('Не найдены необходимые элементы формы');
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/validate-ticker/${ticker}`);
+        const data = await response.json();
+        
+        if (data.success && data.exists) {
+            // Тикер существует
+            statusEl.textContent = '✓';
+            statusEl.className = 'ticker-status valid';
+            hintEl.textContent = data.company_name ? `${data.company_name}` : 'Тикер найден на MOEX';
+            hintEl.className = 'ticker-hint success';
+            
+            // Автозаполнение названия компании (всегда заполняем при валидации)
+            if (data.company_name) {
+                companyNameInput.value = data.company_name;
+            }
+            
+            lastValidatedTicker = ticker;
+        } else {
+            // Тикер не существует
+            statusEl.textContent = '✗';
+            statusEl.className = 'ticker-status invalid';
+            hintEl.textContent = data.error || 'Тикер не найден на Московской бирже';
+            hintEl.className = 'ticker-hint error';
+            lastValidatedTicker = '';
+            // Очищаем название компании при невалидном тикере
+            companyNameInput.value = '';
+        }
+    } catch (error) {
+        console.error('Ошибка валидации тикера:', error);
+        statusEl.textContent = '⚠';
+        statusEl.className = 'ticker-status warning';
+        hintEl.textContent = 'Не удалось проверить тикер';
+        hintEl.className = 'ticker-hint warning';
+    }
+}
+
+/**
  * Обработка добавления новой позиции
  */
 async function handleAddPosition(e) {
     e.preventDefault();
     
+    const ticker = document.getElementById('ticker').value.trim().toUpperCase();
+    
+    // Проверяем, что тикер валидирован
+    if (ticker !== lastValidatedTicker) {
+        alert('Пожалуйста, дождитесь проверки тикера на Московской бирже');
+        return;
+    }
+    
+    const statusEl = document.getElementById('ticker-status');
+    if (statusEl.classList.contains('invalid')) {
+        alert('Указан несуществующий тикер. Пожалуйста, проверьте правильность написания.');
+        return;
+    }
+    
     const formData = {
-        ticker: document.getElementById('ticker').value.trim(),
+        ticker: ticker,
         company_name: document.getElementById('company_name').value.trim(),
+        category: document.getElementById('category').value,
         quantity: parseFloat(document.getElementById('quantity').value),
         average_buy_price: parseFloat(document.getElementById('average_buy_price').value)
     };
@@ -291,9 +412,26 @@ async function handleAddPosition(e) {
         if (data.success) {
             // Очистка формы
             document.getElementById('add-form').reset();
+            // Сброс валидации тикера
+            const statusEl = document.getElementById('ticker-status');
+            const hintEl = document.getElementById('ticker-hint');
+            if (statusEl) {
+                statusEl.textContent = '';
+                statusEl.className = 'ticker-status';
+            }
+            if (hintEl) {
+                hintEl.textContent = '';
+            }
+            lastValidatedTicker = '';
             // Перезагрузка портфеля
             loadPortfolio();
-            alert('Позиция успешно добавлена!');
+            
+            // Показываем сообщение в зависимости от того, была ли позиция обновлена
+            if (data.updated) {
+                alert(`Позиция ${formData.ticker} обновлена!\n\nНовое количество: ${data.new_quantity.toFixed(2)}\nСредняя цена покупки: ${data.new_average_price.toFixed(2)} ₽`);
+            } else {
+                alert('Позиция успешно добавлена!');
+            }
         } else {
             alert('Ошибка: ' + data.error);
         }
@@ -306,9 +444,10 @@ async function handleAddPosition(e) {
 /**
  * Открытие модального окна для редактирования
  */
-function openEditModal(id, companyName, quantity, averageBuyPrice) {
+function openEditModal(id, companyName, category, quantity, averageBuyPrice) {
     document.getElementById('edit-id').value = id;
     document.getElementById('edit-company_name').value = companyName;
+    document.getElementById('edit-category').value = category || '';
     document.getElementById('edit-quantity').value = quantity;
     document.getElementById('edit-average_buy_price').value = averageBuyPrice;
     document.getElementById('edit-modal').style.display = 'flex';
@@ -330,6 +469,7 @@ async function handleEditPosition(e) {
     const id = document.getElementById('edit-id').value;
     const formData = {
         company_name: document.getElementById('edit-company_name').value.trim(),
+        category: document.getElementById('edit-category').value,
         quantity: parseFloat(document.getElementById('edit-quantity').value),
         average_buy_price: parseFloat(document.getElementById('edit-average_buy_price').value)
     };
@@ -402,15 +542,15 @@ function startAutoUpdate() {
         clearInterval(priceCheckInterval);
     }
     
-    // Автообновление каждые 600 секунд (10 минут)
+    // Автообновление каждые 300 секунд (5 минут)
     updateTimer = setInterval(() => {
         loadPortfolio(false, false); // Полное обновление с индикатором загрузки
     }, UPDATE_INTERVAL);
     
-    // Проверка изменений цен каждые 30 секунд (для быстрого реагирования на изменения)
+    // Проверка изменений цен каждые 5 секунд (для быстрого реагирования на изменения)
     priceCheckInterval = setInterval(() => {
         loadPortfolio(true, true); // Тихая проверка с отслеживанием изменений
-    }, 30000); // 30 секунд
+    }, PRICE_CHECK_INTERVAL);
 }
 
 /**
@@ -540,4 +680,97 @@ function formatNumber(value) {
         minimumFractionDigits: 0,
         maximumFractionDigits: 2
     }).format(value);
+}
+
+/**
+ * Переключение между представлениями (таблица/диаграмма)
+ */
+function switchView(viewType) {
+    const tableView = document.getElementById('table-view');
+    const chartView = document.getElementById('chart-view');
+    const btnTable = document.getElementById('btn-table-view');
+    const btnChart = document.getElementById('btn-chart-view');
+    
+    if (viewType === 'table') {
+        tableView.style.display = 'block';
+        chartView.style.display = 'none';
+        btnTable.classList.add('active');
+        btnChart.classList.remove('active');
+    } else if (viewType === 'chart') {
+        tableView.style.display = 'none';
+        chartView.style.display = 'block';
+        btnTable.classList.remove('active');
+        btnChart.classList.add('active');
+    }
+}
+
+/**
+ * Обновление диаграммы распределения по категориям
+ */
+function updateCategoryChart(portfolio) {
+    const chartContainer = document.getElementById('category-chart');
+    
+    if (!chartContainer || portfolio.length === 0) {
+        if (chartContainer) {
+            chartContainer.innerHTML = '<p style="text-align: center; color: #7f8c8d; padding: 40px;">Нет данных для отображения</p>';
+        }
+        return;
+    }
+    
+    // Подсчет стоимости по категориям
+    const categoryData = {};
+    let totalValue = 0;
+    
+    portfolio.forEach(item => {
+        const category = item.category || 'Без категории';
+        const value = item.total_cost || 0;
+        
+        if (!categoryData[category]) {
+            categoryData[category] = 0;
+        }
+        categoryData[category] += value;
+        totalValue += value;
+    });
+    
+    // Сортировка категорий по стоимости (по убыванию)
+    const sortedCategories = Object.entries(categoryData)
+        .sort((a, b) => b[1] - a[1])
+        .map(([category, value]) => ({
+            category,
+            value,
+            percentage: totalValue > 0 ? (value / totalValue * 100) : 0
+        }));
+    
+    // Цвета для категорий
+    const colors = [
+        '#667eea', '#764ba2', '#f093fb', '#4facfe',
+        '#43e97b', '#fa709a', '#fee140', '#30cfd0',
+        '#a8edea', '#fbc2eb'
+    ];
+    
+    // Создание HTML для диаграммы
+    let chartHTML = '<div class="category-list">';
+    
+    sortedCategories.forEach((item, index) => {
+        const color = colors[index % colors.length];
+        chartHTML += `
+            <div class="category-item">
+                <div class="category-info">
+                    <div class="category-color" style="background: ${color};"></div>
+                    <div class="category-details">
+                        <div class="category-name">${item.category}</div>
+                        <div class="category-value">${formatCurrency(item.value)}</div>
+                    </div>
+                </div>
+                <div class="category-bar-container">
+                    <div class="category-bar" style="width: ${item.percentage}%; background: ${color};"></div>
+                </div>
+                <div class="category-percentage">${item.percentage.toFixed(2)}%</div>
+            </div>
+        `;
+    });
+    
+    chartHTML += '</div>';
+    
+    chartContainer.innerHTML = chartHTML;
 }
