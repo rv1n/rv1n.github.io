@@ -21,4 +21,5 @@ def init_db():
     Инициализация базы данных - создание всех таблиц
     """
     from models.portfolio import Portfolio
+    from models.price_history import PriceHistory
     Base.metadata.create_all(bind=engine)

@@ -688,19 +688,34 @@ function formatNumber(value) {
 function switchView(viewType) {
     const tableView = document.getElementById('table-view');
     const chartView = document.getElementById('chart-view');
+    const historyView = document.getElementById('history-view');
     const btnTable = document.getElementById('btn-table-view');
     const btnChart = document.getElementById('btn-chart-view');
+    const btnHistory = document.getElementById('btn-history-view');
     
     if (viewType === 'table') {
         tableView.style.display = 'block';
         chartView.style.display = 'none';
+        historyView.style.display = 'none';
         btnTable.classList.add('active');
         btnChart.classList.remove('active');
+        btnHistory.classList.remove('active');
     } else if (viewType === 'chart') {
         tableView.style.display = 'none';
         chartView.style.display = 'block';
+        historyView.style.display = 'none';
         btnTable.classList.remove('active');
         btnChart.classList.add('active');
+        btnHistory.classList.remove('active');
+    } else if (viewType === 'history') {
+        tableView.style.display = 'none';
+        chartView.style.display = 'none';
+        historyView.style.display = 'block';
+        btnTable.classList.remove('active');
+        btnChart.classList.remove('active');
+        btnHistory.classList.add('active');
+        // Загружаем историю цен при переключении
+        loadPriceHistory();
     }
 }
 
@@ -774,3 +789,270 @@ function updateCategoryChart(portfolio) {
     
     chartContainer.innerHTML = chartHTML;
 }
+
+/**
+ * Загрузка истории цен
+ */
+async function loadPriceHistory() {
+    const tickerFilter = document.getElementById('history-ticker-filter');
+    const daysFilter = document.getElementById('history-days-filter');
+    const contentContainer = document.getElementById('price-history-content');
+    
+    if (!contentContainer) return;
+    
+    const ticker = tickerFilter ? tickerFilter.value : '';
+    const days = daysFilter ? daysFilter.value : 30;
+    
+    try {
+        contentContainer.innerHTML = '<p style="text-align: center; padding: 40px;">Загрузка истории...</p>';
+        
+        const url = `/api/price-history?${ticker ? `ticker=${ticker}&` : ''}days=${days}`;
+        const response = await fetch(url);
+        const data = await response.json();
+        
+        if (data.success) {
+            renderPriceHistory(data.history, ticker);
+            // Обновляем список тикеров в фильтре
+            updateTickerFilter();
+        } else {
+            contentContainer.innerHTML = `<p style="text-align: center; color: #e74c3c; padding: 40px;">Ошибка: ${data.error}</p>`;
+        }
+    } catch (error) {
+        console.error('Ошибка загрузки истории:', error);
+        contentContainer.innerHTML = '<p style="text-align: center; color: #e74c3c; padding: 40px;">Не удалось загрузить историю цен</p>';
+    }
+}
+
+/**
+ * Отрисовка истории цен
+ */
+function renderPriceHistory(history, ticker) {
+    const contentContainer = document.getElementById('price-history-content');
+    
+    if (!contentContainer) return;
+    
+    if (ticker) {
+        // Показываем историю для конкретного тикера
+        renderTickerHistory(history, ticker);
+    } else {
+        // Показываем историю всех тикеров, сгруппированную по датам
+        renderGroupedHistory(history);
+    }
+}
+
+/**
+ * Отрисовка истории для конкретного тикера
+ */
+function renderTickerHistory(history, ticker) {
+    const contentContainer = document.getElementById('price-history-content');
+    
+    if (!history || history.length === 0) {
+        contentContainer.innerHTML = `
+            <div class="no-history-message">
+                <p>📊 История цен для ${ticker} пока не записана</p>
+                <p>Цены будут автоматически логироваться каждый день в 00:00 МСК</p>
+                <p>Вы также можете нажать кнопку "📝 Записать цены сейчас"</p>
+            </div>
+        `;
+        return;
+    }
+    
+    let html = `<table class="history-table">
+        <thead>
+            <tr>
+                <th>Дата и время</th>
+                <th>Цена</th>
+                <th>Изменение</th>
+                <th>Изменение %</th>
+                <th>Объём торгов</th>
+            </tr>
+        </thead>
+        <tbody>`;
+    
+    history.forEach(item => {
+        const changeClass = item.change >= 0 ? 'positive' : 'negative';
+        html += `
+            <tr>
+                <td>${item.logged_at}</td>
+                <td class="price-cell">${formatCurrency(item.price)}</td>
+                <td class="${changeClass}">${item.change >= 0 ? '+' : ''}${item.change.toFixed(2)} ₽</td>
+                <td class="${changeClass}">${item.change_percent >= 0 ? '+' : ''}${item.change_percent.toFixed(2)}%</td>
+                <td>${formatNumber(item.volume)}</td>
+            </tr>
+        `;
+    });
+    
+    html += '</tbody></table>';
+    contentContainer.innerHTML = html;
+}
+
+/**
+ * Отрисовка сгруппированной истории (все тикеры по датам)
+ */
+function renderGroupedHistory(groupedHistory) {
+    const contentContainer = document.getElementById('price-history-content');
+    
+    if (!groupedHistory || Object.keys(groupedHistory).length === 0) {
+        contentContainer.innerHTML = `
+            <div class="no-history-message">
+                <p>📊 История цен пока не записана</p>
+                <p>Цены будут автоматически логироваться каждый день в 00:00 МСК</p>
+                <p>Вы также можете нажать кнопку "📝 Записать цены сейчас"</p>
+            </div>
+        `;
+        return;
+    }
+    
+    let html = '';
+    
+    // Сортируем даты (от новых к старым)
+    const sortedDates = Object.keys(groupedHistory).sort((a, b) => new Date(b) - new Date(a));
+    
+    sortedDates.forEach(date => {
+        const items = groupedHistory[date];
+        
+        html += `
+            <div class="history-date-group">
+                <div class="history-date-header">${formatDate(date)}</div>
+                <div class="history-items">`;
+        
+        items.forEach(item => {
+            const changeClass = item.change >= 0 ? 'positive' : 'negative';
+            html += `
+                <div class="history-item">
+                    <div class="history-item-header">
+                        <span class="history-ticker">${item.ticker}</span>
+                        <span class="history-time">${item.logged_at.split(' ')[1]}</span>
+                    </div>
+                    <div class="history-company">${item.company_name || ''}</div>
+                    <div class="history-price">${formatCurrency(item.price)}</div>
+                    <div class="history-change ${changeClass}">
+                        <span>${item.change >= 0 ? '↑' : '↓'} ${item.change.toFixed(2)} ₽</span>
+                        <span>${item.change_percent >= 0 ? '+' : ''}${item.change_percent.toFixed(2)}%</span>
+                    </div>
+                    <div class="history-volume">Объём: ${formatNumber(item.volume)}</div>
+                </div>
+            `;
+        });
+        
+        html += '</div></div>';
+    });
+    
+    contentContainer.innerHTML = html;
+}
+
+/**
+ * Форматирование даты
+ */
+function formatDate(dateString) {
+    const date = new Date(dateString);
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    
+    if (date.toDateString() === today.toDateString()) {
+        return '📅 Сегодня, ' + date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
+    } else if (date.toDateString() === yesterday.toDateString()) {
+        return '📅 Вчера, ' + date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
+    } else {
+        return '📅 ' + date.toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    }
+}
+
+/**
+ * Обновление фильтра тикеров
+ */
+async function updateTickerFilter() {
+    const tickerFilter = document.getElementById('history-ticker-filter');
+    if (!tickerFilter) return;
+    
+    try {
+        const response = await fetch('/api/portfolio');
+        const data = await response.json();
+        
+        if (data.success && data.portfolio) {
+            // Получаем уникальные тикеры
+            const uniqueTickers = [...new Set(data.portfolio.map(item => item.ticker))];
+            
+            // Сохраняем текущий выбор
+            const currentValue = tickerFilter.value;
+            
+            // Очищаем и заполняем заново
+            tickerFilter.innerHTML = '<option value="">Все тикеры</option>';
+            
+            uniqueTickers.sort().forEach(ticker => {
+                const option = document.createElement('option');
+                option.value = ticker;
+                option.textContent = ticker;
+                tickerFilter.appendChild(option);
+            });
+            
+            // Восстанавливаем выбор
+            tickerFilter.value = currentValue;
+        }
+    } catch (error) {
+        console.error('Ошибка обновления фильтра тикеров:', error);
+    }
+}
+
+/**
+ * Ручное логирование цен
+ */
+async function logPricesNow() {
+    const btn = document.getElementById('manual-log-btn');
+    if (!btn) return;
+    
+    const originalText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = '⏳ Логирование...';
+    
+    try {
+        const response = await fetch('/api/log-prices-now', {
+            method: 'POST'
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+            btn.textContent = '✅ Готово!';
+            // Перезагружаем историю
+            setTimeout(() => {
+                loadPriceHistory();
+                btn.textContent = originalText;
+                btn.disabled = false;
+            }, 1000);
+        } else {
+            btn.textContent = '❌ Ошибка';
+            alert('Ошибка: ' + data.error);
+            setTimeout(() => {
+                btn.textContent = originalText;
+                btn.disabled = false;
+            }, 2000);
+        }
+    } catch (error) {
+        console.error('Ошибка логирования:', error);
+        btn.textContent = '❌ Ошибка';
+        setTimeout(() => {
+            btn.textContent = originalText;
+            btn.disabled = false;
+        }, 2000);
+    }
+}
+
+// Добавляем обработчики событий для фильтров истории
+document.addEventListener('DOMContentLoaded', function() {
+    const tickerFilter = document.getElementById('history-ticker-filter');
+    const daysFilter = document.getElementById('history-days-filter');
+    const manualLogBtn = document.getElementById('manual-log-btn');
+    
+    if (tickerFilter) {
+        tickerFilter.addEventListener('change', loadPriceHistory);
+    }
+    
+    if (daysFilter) {
+        daysFilter.addEventListener('change', loadPriceHistory);
+    }
+    
+    if (manualLogBtn) {
+        manualLogBtn.addEventListener('click', logPricesNow);
+    }
+});

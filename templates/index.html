@@ -93,6 +93,9 @@
                 <button id="btn-chart-view" class="view-btn" onclick="switchView('chart')">
                     📈 Распределение по категориям
                 </button>
+                <button id="btn-history-view" class="view-btn" onclick="switchView('history')">
+                    📜 История цен
+                </button>
             </div>
 
             <div id="loading" class="loading">Загрузка данных...</div>
@@ -128,6 +131,29 @@
                     <h3>Распределение портфеля по категориям</h3>
                     <div id="category-chart" class="category-chart">
                         <!-- Диаграмма загружается через JavaScript -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Представление истории цен -->
+            <div id="history-view" class="portfolio-view" style="display: none;">
+                <div class="price-history-container">
+                    <h3>История цен</h3>
+                    <div class="history-controls">
+                        <select id="history-ticker-filter" class="history-filter">
+                            <option value="">Все тикеры</option>
+                            <!-- Опции заполняются через JavaScript -->
+                        </select>
+                        <select id="history-days-filter" class="history-filter">
+                            <option value="7">За 7 дней</option>
+                            <option value="14">За 14 дней</option>
+                            <option value="30" selected>За 30 дней</option>
+                            <option value="90">За 90 дней</option>
+                        </select>
+                        <button id="manual-log-btn" class="btn btn-secondary">📝 Записать цены сейчас</button>
+                    </div>
+                    <div id="price-history-content" class="price-history-content">
+                        <!-- История загружается через JavaScript -->
                     </div>
                 </div>
             </div>

@@ -4,8 +4,13 @@
 from flask import Flask, render_template, jsonify, request
 from models.database import init_db, db_session
 from models.portfolio import Portfolio
+from models.price_history import PriceHistory
 from services.moex_service import MOEXService
+from services.price_logger import PriceLogger
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.cron import CronTrigger
 import atexit
+import pytz
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your-secret-key-here'
@@ -13,8 +18,25 @@ app.config['SECRET_KEY'] = 'your-secret-key-here'
 # Инициализация БД
 init_db()
 
-# Инициализация сервиса MOEX
+# Инициализация сервисов
 moex_service = MOEXService()
+price_logger = PriceLogger(moex_service)
+
+# Инициализация планировщика задач
+scheduler = BackgroundScheduler(timezone=pytz.timezone('Europe/Moscow'))
+
+# Добавляем задачу логирования цен каждый день в 00:00 МСК
+scheduler.add_job(
+    func=price_logger.log_all_prices,
+    trigger=CronTrigger(hour=0, minute=0, timezone='Europe/Moscow'),
+    id='daily_price_logging',
+    name='Ежедневное логирование цен в 00:00 МСК',
+    replace_existing=True
+)
+
+# Запускаем планировщик
+scheduler.start()
+print("Планировщик запущен. Логирование цен будет выполняться каждый день в 00:00 МСК")
 
 
 @app.route('/')
@@ -308,6 +330,60 @@ def validate_ticker(ticker):
         }), 500
 
 
+@app.route('/api/price-history', methods=['GET'])
+def get_price_history():
+    """
+    Получить историю цен
+    
+    Query параметры:
+    - ticker: тикер акции (опционально, если не указан - все тикеры)
+    - days: количество дней истории (по умолчанию 30)
+    """
+    try:
+        ticker = request.args.get('ticker')
+        days = request.args.get('days', 30, type=int)
+        
+        if ticker:
+            # История для конкретного тикера
+            history = price_logger.get_price_history(ticker=ticker, days=days)
+        else:
+            # История для всех тикеров, сгруппированная по датам
+            history = price_logger.get_price_history_grouped(days=days)
+        
+        return jsonify({
+            'success': True,
+            'history': history,
+            'ticker': ticker,
+            'days': days
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/log-prices-now', methods=['POST'])
+def log_prices_now():
+    """
+    Ручное логирование цен (для тестирования)
+    
+    В продакшене это выполняется автоматически в 00:00 МСК
+    """
+    try:
+        price_logger.log_all_prices()
+        return jsonify({
+            'success': True,
+            'message': 'Цены успешно залогированы'
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
 @app.teardown_appcontext
 def shutdown_session(exception=None):
     """Закрытие сессии БД после запроса"""
@@ -317,6 +393,9 @@ def shutdown_session(exception=None):
 def close_db():
     """Закрытие соединения с БД при завершении приложения"""
     db_session.remove()
+    # Останавливаем планировщик
+    if scheduler.running:
+        scheduler.shutdown()
 
 
 atexit.register(close_db)
