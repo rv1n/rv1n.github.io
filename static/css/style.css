@@ -451,6 +451,265 @@ header h1 {
     color: #27ae60;
 }
 
+/* История транзакций (покупки/продажи) */
+.transactions-container {
+    padding: 20px;
+}
+
+.transactions-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.transactions-header h3 {
+    margin: 0;
+    color: #2c3e50;
+}
+
+.transactions-filters {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 20px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.trans-filter {
+    padding: 10px 15px;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    font-size: 1em;
+    background-color: white;
+    cursor: pointer;
+    transition: border-color 0.3s;
+}
+
+.trans-filter:hover,
+.trans-filter:focus {
+    outline: none;
+    border-color: #667eea;
+}
+
+.trans-filter[type="date"] {
+    font-family: inherit;
+}
+
+.transactions-content {
+    background: white;
+    border-radius: 10px;
+    overflow-x: auto;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+}
+
+.transactions-table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 1000px;
+}
+
+.transactions-table th {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 15px 10px;
+    text-align: left;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.transactions-table td {
+    padding: 15px 10px;
+    border-bottom: 1px solid #ecf0f1;
+    vertical-align: middle;
+}
+
+.transactions-table tbody tr:hover {
+    background: #f8f9fa;
+}
+
+.transaction-type-buy {
+    display: inline-block;
+    padding: 5px 12px;
+    border-radius: 20px;
+    background: linear-gradient(135deg, #27ae60 0%, #2ecc71 100%);
+    color: white;
+    font-weight: 600;
+    font-size: 0.9em;
+}
+
+.transaction-type-sell {
+    display: inline-block;
+    padding: 5px 12px;
+    border-radius: 20px;
+    background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+    color: white;
+    font-weight: 600;
+    font-size: 0.9em;
+}
+
+.transaction-notes {
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: #7f8c8d;
+    font-size: 0.9em;
+}
+
+.transaction-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.no-data-message {
+    text-align: center;
+    padding: 60px 20px;
+    color: #95a5a6;
+}
+
+.no-data-message p {
+    margin: 10px 0;
+    font-size: 1.1em;
+}
+
+/* Стили для модальных окон транзакций */
+.modal textarea {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    font-family: inherit;
+    font-size: 1em;
+    resize: vertical;
+    transition: border-color 0.3s;
+}
+
+.modal textarea:focus {
+    outline: none;
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.modal input[type="datetime-local"] {
+    font-family: inherit;
+}
+
+/* Адаптация кнопки добавления транзакции */
+#add-transaction-btn {
+    white-space: nowrap;
+}
+
+/* Управление категориями */
+.categories-container {
+    padding: 20px;
+}
+
+.categories-header {
+    margin-bottom: 20px;
+}
+
+.categories-header h3 {
+    margin: 0 0 10px 0;
+    color: #2c3e50;
+}
+
+.categories-description {
+    margin: 0;
+    color: #7f8c8d;
+    font-size: 0.95em;
+}
+
+.categories-content {
+    background: white;
+    border-radius: 10px;
+    overflow-x: auto;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+}
+
+.categories-table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 700px;
+}
+
+.categories-table th {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 15px 10px;
+    text-align: left;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.categories-table td {
+    padding: 15px 10px;
+    border-bottom: 1px solid #ecf0f1;
+    vertical-align: middle;
+}
+
+.categories-table tbody tr:hover {
+    background: #f8f9fa;
+}
+
+.category-select {
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    font-size: 1em;
+    background-color: white;
+    cursor: pointer;
+    transition: border-color 0.3s;
+    width: 100%;
+    max-width: 300px;
+}
+
+.category-select:hover,
+.category-select:focus {
+    outline: none;
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.category-save-btn {
+    background: linear-gradient(135deg, #27ae60 0%, #229954 100%);
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 0.95em;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.category-save-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(39, 174, 96, 0.3);
+}
+
+.category-save-btn:disabled {
+    background: #95a5a6;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.ticker-company-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.ticker-company-ticker {
+    font-weight: 700;
+    font-size: 1.1em;
+    color: #2c3e50;
+}
+
+.ticker-company-name {
+    font-size: 0.9em;
+    color: #7f8c8d;
+}
+
 @keyframes shake {
     0%, 100% {
         transform: translateX(0);
@@ -693,6 +952,30 @@ header h1 {
 .btn-edit:hover {
     background: #2980b9;
     transform: scale(1.1);
+}
+
+.btn-sell {
+    background: linear-gradient(135deg, #27ae60 0%, #229954 100%);
+    color: white;
+    padding: 8px 12px;
+    font-size: 1.3em;
+    min-width: auto;
+    width: 40px;
+    height: 40px;
+    white-space: nowrap;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    cursor: pointer;
+    border: none;
+}
+
+.btn-sell:hover {
+    background: linear-gradient(135deg, #229954 0%, #1e8449 100%);
+    transform: scale(1.1);
+    box-shadow: 0 5px 15px rgba(39, 174, 96, 0.3);
 }
 
 /* Таблица портфеля */

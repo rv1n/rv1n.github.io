@@ -52,22 +52,6 @@
                         <input type="text" id="company_name" name="company_name" placeholder="Сбербанк">
                     </div>
                     <div class="form-group">
-                        <label for="category">Категория</label>
-                        <select id="category" name="category">
-                            <option value="">Не выбрано</option>
-                            <option value="Нефть и газ">Нефть и газ</option>
-                            <option value="Электроэнергетика">Электроэнергетика</option>
-                            <option value="Телекоммуникации">Телекоммуникации</option>
-                            <option value="Металлы и добыча">Металлы и добыча</option>
-                            <option value="Финансовый сектор">Финансовый сектор</option>
-                            <option value="Потребительский сектор">Потребительский сектор</option>
-                            <option value="Химия и нефтехимия">Химия и нефтехимия</option>
-                            <option value="Информационные технологии (IT)">Информационные технологии (IT)</option>
-                            <option value="Строительные компании и недвижимость">Строительные компании и недвижимость</option>
-                            <option value="Транспорт">Транспорт</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
                         <label for="quantity">Количество *</label>
                         <input type="number" id="quantity" name="quantity" required min="0.01" step="0.01" placeholder="10">
                     </div>
@@ -90,11 +74,17 @@
                 <button id="btn-table-view" class="view-btn active" onclick="switchView('table')">
                     📊 Мой портфель
                 </button>
+                <button id="btn-transactions-view" class="view-btn" onclick="switchView('transactions')">
+                    💼 История покупок/продаж
+                </button>
                 <button id="btn-chart-view" class="view-btn" onclick="switchView('chart')">
                     📈 Распределение по категориям
                 </button>
                 <button id="btn-history-view" class="view-btn" onclick="switchView('history')">
                     📜 История цен
+                </button>
+                <button id="btn-categories-view" class="view-btn" onclick="switchView('categories')">
+                    🏷️ Категории
                 </button>
             </div>
 
@@ -115,7 +105,6 @@
                             <th>Цена покупки</th>
                             <th>P/L ₽</th>
                             <th>P/L %</th>
-                            <th>Объем</th>
                             <th>Действия</th>
                         </tr>
                     </thead>
@@ -154,6 +143,87 @@
                     </div>
                     <div id="price-history-content" class="price-history-content">
                         <!-- История загружается через JavaScript -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Представление категорий -->
+            <div id="categories-view" class="portfolio-view" style="display: none;">
+                <div class="categories-container">
+                    <div class="categories-header">
+                        <h3>Управление категориями</h3>
+                        <p class="categories-description">Назначьте категорию для каждого тикера в вашем портфеле</p>
+                    </div>
+                    
+                    <!-- Таблица категорий -->
+                    <div class="categories-content">
+                        <table class="categories-table" id="categories-table">
+                            <thead>
+                                <tr>
+                                    <th>Тикер</th>
+                                    <th>Компания</th>
+                                    <th>Категория</th>
+                                    <th>Действия</th>
+                                </tr>
+                            </thead>
+                            <tbody id="categories-tbody">
+                                <!-- Категории загружаются через JavaScript -->
+                            </tbody>
+                        </table>
+                        <div id="no-categories" class="no-data-message" style="display: none;">
+                            <p>📁 В портфеле пока нет тикеров</p>
+                            <p>Добавьте акции через форму на главной странице</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Представление истории транзакций -->
+            <div id="transactions-view" class="portfolio-view" style="display: none;">
+                <div class="transactions-container">
+                    <div class="transactions-header">
+                        <h3>История покупок/продаж</h3>
+                    </div>
+                    
+                    <!-- Фильтры -->
+                    <div class="transactions-filters">
+                        <select id="trans-ticker-filter" class="trans-filter">
+                            <option value="">Все тикеры</option>
+                            <!-- Опции заполняются через JavaScript -->
+                        </select>
+                        <select id="trans-type-filter" class="trans-filter">
+                            <option value="">Все операции</option>
+                            <option value="Покупка">Покупка</option>
+                            <option value="Продажа">Продажа</option>
+                        </select>
+                        <input type="date" id="trans-date-from" class="trans-filter" placeholder="Дата от">
+                        <input type="date" id="trans-date-to" class="trans-filter" placeholder="Дата до">
+                        <button id="trans-reset-filters" class="btn btn-secondary">🔄 Сбросить фильтры</button>
+                    </div>
+                    
+                    <!-- Таблица транзакций -->
+                    <div id="transactions-content" class="transactions-content">
+                        <table class="transactions-table" id="transactions-table">
+                            <thead>
+                                <tr>
+                                    <th>Дата операции</th>
+                                    <th>Тикер</th>
+                                    <th>Компания</th>
+                                    <th>Вид операции</th>
+                                    <th>Цена</th>
+                                    <th>Количество</th>
+                                    <th>Сумма</th>
+                                    <th>Действия</th>
+                                </tr>
+                            </thead>
+                            <tbody id="transactions-tbody">
+                                <!-- Транзакции загружаются через JavaScript -->
+                            </tbody>
+                        </table>
+                        <div id="no-transactions" class="no-data-message" style="display: none;">
+                            <p>📝 История транзакций пуста</p>
+                            <p>Нажмите "➕ Добавить операцию" для создания первой записи</p>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -198,6 +268,151 @@
                 <div class="form-group">
                     <button type="submit" class="btn btn-primary">Сохранить</button>
                     <button type="button" class="btn btn-secondary" onclick="closeEditModal()">Отмена</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Модальное окно для добавления транзакции -->
+    <div id="add-transaction-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <span class="close" onclick="closeAddTransactionModal()">&times;</span>
+            <h2>Добавить операцию</h2>
+            <form id="add-transaction-form">
+                <div class="form-group">
+                    <label for="trans-add-date">Дата операции *</label>
+                    <input type="datetime-local" id="trans-add-date" name="date" required>
+                </div>
+                <div class="form-group">
+                    <label for="trans-add-ticker">Тикер *</label>
+                    <input type="text" id="trans-add-ticker" name="ticker" required placeholder="SBER">
+                </div>
+                <div class="form-group">
+                    <label for="trans-add-company">Название компании</label>
+                    <input type="text" id="trans-add-company" name="company_name" placeholder="Сбербанк">
+                </div>
+                <div class="form-group">
+                    <label for="trans-add-type">Вид операции *</label>
+                    <select id="trans-add-type" name="operation_type" required>
+                        <option value="">Выберите операцию</option>
+                        <option value="Покупка">Покупка</option>
+                        <option value="Продажа">Продажа</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="trans-add-price">Цена *</label>
+                    <input type="number" id="trans-add-price" name="price" required min="0.01" step="0.01" placeholder="250.50">
+                </div>
+                <div class="form-group">
+                    <label for="trans-add-quantity">Количество *</label>
+                    <input type="number" id="trans-add-quantity" name="quantity" required min="0.01" step="0.01" placeholder="10">
+                </div>
+                <div class="form-group">
+                    <label for="trans-add-total">Сумма</label>
+                    <input type="number" id="trans-add-total" name="total" readonly placeholder="Рассчитается автоматически">
+                </div>
+                <div class="form-group">
+                    <label for="trans-add-notes">Заметки</label>
+                    <textarea id="trans-add-notes" name="notes" rows="3" placeholder="Дополнительная информация"></textarea>
+                </div>
+                <div class="modal-buttons">
+                    <button type="submit" class="btn btn-primary">Добавить</button>
+                    <button type="button" class="btn btn-secondary" onclick="closeAddTransactionModal()">Отмена</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Модальное окно для редактирования транзакции -->
+    <div id="edit-transaction-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <span class="close" onclick="closeEditTransactionModal()">&times;</span>
+            <h2>Редактировать операцию</h2>
+            <form id="edit-transaction-form">
+                <input type="hidden" id="trans-edit-id">
+                <div class="form-group">
+                    <label for="trans-edit-date">Дата операции *</label>
+                    <input type="datetime-local" id="trans-edit-date" name="date" required>
+                </div>
+                <div class="form-group">
+                    <label for="trans-edit-ticker">Тикер *</label>
+                    <input type="text" id="trans-edit-ticker" name="ticker" required>
+                </div>
+                <div class="form-group">
+                    <label for="trans-edit-company">Название компании</label>
+                    <input type="text" id="trans-edit-company" name="company_name">
+                </div>
+                <div class="form-group">
+                    <label for="trans-edit-type">Вид операции *</label>
+                    <select id="trans-edit-type" name="operation_type" required>
+                        <option value="Покупка">Покупка</option>
+                        <option value="Продажа">Продажа</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="trans-edit-price">Цена *</label>
+                    <input type="number" id="trans-edit-price" name="price" required min="0.01" step="0.01">
+                </div>
+                <div class="form-group">
+                    <label for="trans-edit-quantity">Количество *</label>
+                    <input type="number" id="trans-edit-quantity" name="quantity" required min="0.01" step="0.01">
+                </div>
+                <div class="form-group">
+                    <label for="trans-edit-total">Сумма</label>
+                    <input type="number" id="trans-edit-total" name="total" readonly>
+                </div>
+                <div class="form-group">
+                    <label for="trans-edit-notes">Заметки</label>
+                    <textarea id="trans-edit-notes" name="notes" rows="3"></textarea>
+                </div>
+                <div class="modal-buttons">
+                    <button type="submit" class="btn btn-primary">Сохранить</button>
+                    <button type="button" class="btn btn-secondary" onclick="closeEditTransactionModal()">Отмена</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Модальное окно для продажи -->
+    <div id="sell-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <span class="close" onclick="closeSellModal()">&times;</span>
+            <h2>🛒 Продать акции</h2>
+            <form id="sell-form">
+                <input type="hidden" id="sell-portfolio-id">
+                <input type="hidden" id="sell-ticker">
+                <input type="hidden" id="sell-company-name">
+                <div class="form-group">
+                    <label>Тикер</label>
+                    <input type="text" id="sell-ticker-display" readonly style="background: #f5f5f5;">
+                </div>
+                <div class="form-group">
+                    <label>Компания</label>
+                    <input type="text" id="sell-company-display" readonly style="background: #f5f5f5;">
+                </div>
+                <div class="form-group">
+                    <label>Доступно для продажи</label>
+                    <input type="text" id="sell-available-display" readonly style="background: #f5f5f5;">
+                </div>
+                <div class="form-group">
+                    <label for="sell-quantity">Количество для продажи *</label>
+                    <input type="number" id="sell-quantity" name="quantity" required min="0.01" step="0.01" placeholder="0">
+                </div>
+                <div class="form-group">
+                    <label for="sell-price">Цена продажи *</label>
+                    <input type="number" id="sell-price" name="price" required min="0.01" step="0.01" placeholder="0.00">
+                </div>
+                <div class="form-group">
+                    <label for="sell-total">Сумма продажи</label>
+                    <input type="number" id="sell-total" readonly style="background: #f5f5f5;" placeholder="Рассчитается автоматически">
+                </div>
+                <div class="form-group">
+                    <label for="sell-notes">Заметки</label>
+                    <textarea id="sell-notes" name="notes" rows="3" placeholder="Комментарий к продаже"></textarea>
+                </div>
+                <div class="modal-buttons">
+                    <button type="submit" class="btn btn-primary">Продать</button>
+                    <button type="button" class="btn btn-secondary" onclick="closeSellModal()">Отмена</button>
                 </div>
             </form>
         </div>

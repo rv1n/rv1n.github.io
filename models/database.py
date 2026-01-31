@@ -22,4 +22,5 @@ def init_db():
     """
     from models.portfolio import Portfolio
     from models.price_history import PriceHistory
+    from models.transaction import Transaction
     Base.metadata.create_all(bind=engine)

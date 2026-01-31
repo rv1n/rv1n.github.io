@@ -52,13 +52,30 @@ class PriceLogger:
                         print(f"[{datetime.now(self.moscow_tz)}] Не удалось получить данные для {ticker}")
                         continue
                     
+                    current_price = quote_data.get('price', 0)
+                    
+                    # Получаем последнюю запись из истории для расчета изменения
+                    last_history_entry = db_session.query(PriceHistory).filter(
+                        PriceHistory.ticker == ticker
+                    ).order_by(PriceHistory.logged_at.desc()).first()
+                    
+                    if last_history_entry and current_price > 0:
+                        # Рассчитываем изменение относительно предыдущей записи
+                        last_logged_price = last_history_entry.price
+                        price_change = current_price - last_logged_price
+                        price_change_percent = (price_change / last_logged_price * 100) if last_logged_price > 0 else 0
+                    else:
+                        # Если это первая запись, изменение = 0
+                        price_change = 0
+                        price_change_percent = 0
+                    
                     # Создаем запись в истории
                     price_log = PriceHistory(
                         ticker=ticker,
                         company_name=company_name,
-                        price=quote_data.get('price', 0),
-                        change=quote_data.get('change', 0),
-                        change_percent=quote_data.get('change_percent', 0),
+                        price=current_price,
+                        change=round(price_change, 2),
+                        change_percent=round(price_change_percent, 2),
                         volume=quote_data.get('volume', 0),
                         logged_at=datetime.now(self.moscow_tz)
                     )
@@ -66,7 +83,7 @@ class PriceLogger:
                     db_session.add(price_log)
                     logged_count += 1
                     
-                    print(f"[{datetime.now(self.moscow_tz)}] Залогирована цена для {ticker}: {quote_data.get('price')} ₽")
+                    print(f"[{datetime.now(self.moscow_tz)}] Залогирована цена для {ticker}: {current_price} ₽ (изменение: {price_change:+.2f} ₽, {price_change_percent:+.2f}%)")
                     
                 except Exception as e:
                     print(f"[{datetime.now(self.moscow_tz)}] Ошибка логирования цены для {ticker}: {e}")

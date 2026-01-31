@@ -5,10 +5,12 @@ from flask import Flask, render_template, jsonify, request
 from models.database import init_db, db_session
 from models.portfolio import Portfolio
 from models.price_history import PriceHistory
+from models.transaction import Transaction, TransactionType
 from services.moex_service import MOEXService
 from services.price_logger import PriceLogger
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
+from datetime import datetime
 import atexit
 import pytz
 
@@ -49,6 +51,7 @@ def index():
 def get_portfolio():
     """
     Получить весь портфель с актуальными ценами
+    Средняя цена покупки рассчитывается из истории транзакций покупки
     """
     try:
         portfolio_items = db_session.query(Portfolio).all()
@@ -60,22 +63,47 @@ def get_portfolio():
             
             if current_price_data:
                 current_price = current_price_data.get('price', 0)
-                price_change = current_price_data.get('change', 0)
-                price_change_percent = current_price_data.get('change_percent', 0)
-                volume = current_price_data.get('volume', 0)
                 last_update = current_price_data.get('last_update', '')
             else:
                 current_price = 0
-                price_change = 0
-                price_change_percent = 0
-                volume = 0
                 last_update = ''
             
-            # Расчеты прибыли/убытка
-            total_cost = item.quantity * current_price
-            total_buy_cost = item.quantity * item.average_buy_price
-            profit_loss = total_cost - total_buy_cost
-            profit_loss_percent = ((current_price - item.average_buy_price) / item.average_buy_price * 100) if item.average_buy_price > 0 else 0
+            # Вычисляем среднюю цену покупки из истории транзакций
+            buy_transactions = db_session.query(Transaction).filter(
+                Transaction.ticker == item.ticker,
+                Transaction.operation_type == TransactionType.BUY
+            ).all()
+            
+            if buy_transactions:
+                # Взвешенная средняя цена: sum(price * quantity) / sum(quantity)
+                total_cost = sum(t.price * t.quantity for t in buy_transactions)
+                total_quantity = sum(t.quantity for t in buy_transactions)
+                calculated_avg_price = total_cost / total_quantity if total_quantity > 0 else item.average_buy_price
+            else:
+                # Если транзакций нет, используем цену из портфеля
+                calculated_avg_price = item.average_buy_price
+            
+            # Получаем последнюю цену из истории для расчета изменения
+            last_history_entry = db_session.query(PriceHistory).filter(
+                PriceHistory.ticker == item.ticker
+            ).order_by(PriceHistory.logged_at.desc()).first()
+            
+            # Рассчитываем изменение: последняя залогированная цена - цена покупки
+            if last_history_entry and calculated_avg_price > 0:
+                last_logged_price = last_history_entry.price
+                price_change = last_logged_price - calculated_avg_price
+                price_change_percent = (price_change / calculated_avg_price * 100) if calculated_avg_price > 0 else 0
+            else:
+                # Если истории нет, изменение = 0
+                last_logged_price = calculated_avg_price  # используем цену покупки как базу
+                price_change = 0
+                price_change_percent = 0
+            
+            # Расчеты прибыли/убытка (используем ту же логику - относительно последней залогированной цены)
+            total_logged_value = item.quantity * last_logged_price
+            total_buy_cost = item.quantity * calculated_avg_price
+            profit_loss = total_logged_value - total_buy_cost
+            profit_loss_percent = price_change_percent  # то же самое, что и изменение в процентах
             
             result.append({
                 'id': item.id,
@@ -83,12 +111,11 @@ def get_portfolio():
                 'company_name': item.company_name,
                 'category': item.category if hasattr(item, 'category') else None,
                 'quantity': item.quantity,
-                'average_buy_price': item.average_buy_price,
+                'average_buy_price': calculated_avg_price,
                 'current_price': current_price,
                 'price_change': price_change,
                 'price_change_percent': price_change_percent,
-                'volume': volume,
-                'total_cost': total_cost,
+                'total_cost': total_logged_value,  # стоимость по последней залогированной цене
                 'total_buy_cost': total_buy_cost,
                 'profit_loss': profit_loss,
                 'profit_loss_percent': profit_loss_percent,
@@ -284,6 +311,52 @@ def get_quote(ticker):
         }), 500
 
 
+@app.route('/api/update-category', methods=['PUT'])
+def update_category():
+    """
+    Обновить категорию для тикера
+    """
+    try:
+        data = request.get_json()
+        
+        ticker = data.get('ticker', '').upper()
+        category = data.get('category', '')
+        
+        if not ticker:
+            return jsonify({
+                'success': False,
+                'error': 'Тикер не указан'
+            }), 400
+        
+        # Обновляем категорию для всех записей с этим тикером
+        portfolio_items = db_session.query(Portfolio).filter(Portfolio.ticker == ticker).all()
+        
+        if not portfolio_items:
+            return jsonify({
+                'success': False,
+                'error': f'Тикер {ticker} не найден в портфеле'
+            }), 404
+        
+        for item in portfolio_items:
+            item.category = category if category else None
+        
+        db_session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': f'Категория для {ticker} успешно обновлена',
+            'ticker': ticker,
+            'category': category
+        })
+        
+    except Exception as e:
+        db_session.rollback()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
 @app.route('/api/validate-ticker/<ticker>', methods=['GET'])
 def validate_ticker(ticker):
     """
@@ -324,6 +397,240 @@ def validate_ticker(ticker):
                 'error': f'Тикер {ticker} не найден на Московской бирже'
             })
     except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/transactions', methods=['GET'])
+def get_transactions():
+    """
+    Получить все транзакции с фильтрацией
+    
+    Query параметры:
+    - ticker: фильтр по тикеру (опционально)
+    - operation_type: фильтр по типу операции (Покупка/Продажа) (опционально)
+    - date_from: фильтр по дате от (YYYY-MM-DD) (опционально)
+    - date_to: фильтр по дате до (YYYY-MM-DD) (опционально)
+    """
+    try:
+        query = db_session.query(Transaction)
+        
+        # Фильтр по тикеру
+        ticker = request.args.get('ticker')
+        if ticker:
+            query = query.filter(Transaction.ticker == ticker.upper())
+        
+        # Фильтр по типу операции
+        operation_type = request.args.get('operation_type')
+        if operation_type:
+            if operation_type == "Покупка":
+                query = query.filter(Transaction.operation_type == TransactionType.BUY)
+            elif operation_type == "Продажа":
+                query = query.filter(Transaction.operation_type == TransactionType.SELL)
+        
+        # Фильтр по датам
+        date_from = request.args.get('date_from')
+        if date_from:
+            try:
+                date_from_obj = datetime.strptime(date_from, '%Y-%m-%d')
+                query = query.filter(Transaction.date >= date_from_obj)
+            except ValueError:
+                pass
+        
+        date_to = request.args.get('date_to')
+        if date_to:
+            try:
+                date_to_obj = datetime.strptime(date_to, '%Y-%m-%d')
+                date_to_obj = date_to_obj.replace(hour=23, minute=59, second=59)
+                query = query.filter(Transaction.date <= date_to_obj)
+            except ValueError:
+                pass
+        
+        # Сортировка по дате (от новых к старым)
+        query = query.order_by(Transaction.date.desc())
+        
+        transactions = query.all()
+        
+        return jsonify({
+            'success': True,
+            'transactions': [t.to_dict() for t in transactions]
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/transactions', methods=['POST'])
+def add_transaction():
+    """
+    Добавить новую транзакцию
+    """
+    try:
+        data = request.get_json()
+        
+        # Валидация обязательных полей
+        required_fields = ['ticker', 'operation_type', 'price', 'quantity']
+        for field in required_fields:
+            if field not in data:
+                return jsonify({
+                    'success': False,
+                    'error': f'Отсутствует обязательное поле: {field}'
+                }), 400
+        
+        # Валидация типа операции
+        operation_type_str = data['operation_type']
+        if operation_type_str == "Покупка":
+            operation_type = TransactionType.BUY
+        elif operation_type_str == "Продажа":
+            operation_type = TransactionType.SELL
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'Неверный тип операции. Должно быть "Покупка" или "Продажа"'
+            }), 400
+        
+        # Парсинг даты (если указана)
+        transaction_date = datetime.now()
+        if 'date' in data and data['date']:
+            try:
+                transaction_date = datetime.strptime(data['date'], '%Y-%m-%d %H:%M:%S')
+            except ValueError:
+                try:
+                    transaction_date = datetime.strptime(data['date'], '%Y-%m-%d')
+                except ValueError:
+                    pass
+        
+        # Вычисление суммы
+        price = float(data['price'])
+        quantity = float(data['quantity'])
+        total = price * quantity
+        
+        # Создание новой транзакции
+        transaction = Transaction(
+            date=transaction_date,
+            ticker=data['ticker'].upper(),
+            company_name=data.get('company_name', ''),
+            operation_type=operation_type,
+            price=price,
+            quantity=quantity,
+            total=total,
+            notes=data.get('notes', '')
+        )
+        
+        db_session.add(transaction)
+        db_session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Транзакция успешно добавлена',
+            'transaction': transaction.to_dict()
+        })
+        
+    except Exception as e:
+        db_session.rollback()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/transactions/<int:transaction_id>', methods=['PUT'])
+def update_transaction(transaction_id):
+    """
+    Обновить существующую транзакцию
+    """
+    try:
+        transaction = db_session.query(Transaction).filter(Transaction.id == transaction_id).first()
+        
+        if not transaction:
+            return jsonify({
+                'success': False,
+                'error': 'Транзакция не найдена'
+            }), 404
+        
+        data = request.get_json()
+        
+        # Обновление полей
+        if 'ticker' in data:
+            transaction.ticker = data['ticker'].upper()
+        
+        if 'company_name' in data:
+            transaction.company_name = data['company_name']
+        
+        if 'operation_type' in data:
+            operation_type_str = data['operation_type']
+            if operation_type_str == "Покупка":
+                transaction.operation_type = TransactionType.BUY
+            elif operation_type_str == "Продажа":
+                transaction.operation_type = TransactionType.SELL
+        
+        if 'date' in data and data['date']:
+            try:
+                transaction.date = datetime.strptime(data['date'], '%Y-%m-%d %H:%M:%S')
+            except ValueError:
+                try:
+                    transaction.date = datetime.strptime(data['date'], '%Y-%m-%d')
+                except ValueError:
+                    pass
+        
+        # Обновление цены и количества
+        if 'price' in data:
+            transaction.price = float(data['price'])
+        
+        if 'quantity' in data:
+            transaction.quantity = float(data['quantity'])
+        
+        # Пересчёт суммы
+        transaction.total = transaction.price * transaction.quantity
+        
+        if 'notes' in data:
+            transaction.notes = data['notes']
+        
+        db_session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Транзакция успешно обновлена',
+            'transaction': transaction.to_dict()
+        })
+        
+    except Exception as e:
+        db_session.rollback()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/transactions/<int:transaction_id>', methods=['DELETE'])
+def delete_transaction(transaction_id):
+    """
+    Удалить транзакцию
+    """
+    try:
+        transaction = db_session.query(Transaction).filter(Transaction.id == transaction_id).first()
+        
+        if not transaction:
+            return jsonify({
+                'success': False,
+                'error': 'Транзакция не найдена'
+            }), 404
+        
+        db_session.delete(transaction)
+        db_session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Транзакция успешно удалена'
+        })
+        
+    except Exception as e:
+        db_session.rollback()
         return jsonify({
             'success': False,
             'error': str(e)

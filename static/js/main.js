@@ -1,16 +1,10 @@
 /**
  * Главный JavaScript файл для управления портфелем акций MOEX
- * Обеспечивает автообновление данных каждые 5 минут
- * Также обновляет данные при изменении цен (проверка каждые 5 секунд)
+ * Обновление данных только по кнопке "Обновить"
  */
 
-const UPDATE_INTERVAL = 300000; // Обновление каждые 5 минут (300 секунд)
-const PRICE_CHECK_INTERVAL = 5000; // Проверка изменений цен каждые 5 секунд
-let updateTimer = null;
+// Автообновление отключено - только ручное обновление
 let previousPrices = {}; // Хранение предыдущих цен для отслеживания изменений
-let priceCheckInterval = null; // Интервал для проверки изменений цен
-let countdownTimer = null; // Таймер обратного отсчета
-let lastUpdateTime = null; // Время последнего обновления
 let tickerValidationTimeout = null; // Таймаут для валидации тикера
 let lastValidatedTicker = ''; // Последний валидированный тикер
 
@@ -20,8 +14,7 @@ let lastValidatedTicker = ''; // Последний валидированный
 document.addEventListener('DOMContentLoaded', function() {
     loadPortfolio();
     setupEventListeners();
-    startAutoUpdate();
-    startCountdownTimer();
+    // Автообновление отключено - только ручное обновление кнопкой
 });
 
 /**
@@ -74,7 +67,7 @@ function manualRefresh() {
         refreshBtn.textContent = '🔄 Обновление...';
     }
     
-    loadPortfolio().finally(() => {
+    loadPortfolio(false).finally(() => {
         if (refreshBtn) {
             refreshBtn.disabled = false;
             refreshBtn.textContent = '🔄 Обновить';
@@ -84,10 +77,9 @@ function manualRefresh() {
 
 /**
  * Загрузка данных портфеля с сервера
- * @param {boolean} silent - Если true, не показывать индикатор загрузки (для фоновых обновлений)
- * @param {boolean} checkPriceChanges - Если true, проверять изменения цен
+ * @param {boolean} silent - Если true, не показывать индикатор загрузки
  */
-async function loadPortfolio(silent = false, checkPriceChanges = false) {
+async function loadPortfolio(silent = false) {
     const loading = document.getElementById('loading');
     const table = document.getElementById('portfolio-table');
     const errorMessage = document.getElementById('error-message');
@@ -104,38 +96,12 @@ async function loadPortfolio(silent = false, checkPriceChanges = false) {
         const data = await response.json();
         
         if (data.success) {
-            // Проверка изменений цен
-            if (checkPriceChanges && Object.keys(previousPrices).length > 0) {
-                const priceChanged = checkPriceChanges(data.portfolio);
-                if (priceChanged) {
-                    // Если цена изменилась, обновляем интерфейс
-                    displayPortfolio(data.portfolio, data.summary);
-                    updateLastUpdateTime();
-                    // Показываем таблицу если она была скрыта
-                    if (table) {
-                        table.style.display = 'table';
-                    }
-                    if (!silent && loading) {
-                        loading.style.display = 'none';
-                    }
-                    return;
-                }
-                // Если цены не изменились, просто обновляем время (тихо)
-                // Но убеждаемся, что таблица видна
-                if (table && table.style.display === 'none') {
-                    table.style.display = 'table';
-                }
-                if (!silent) {
-                    updateLastUpdateTime();
-                }
-            } else {
-                // Первая загрузка или обновление без проверки - просто отображаем
-                displayPortfolio(data.portfolio, data.summary);
-                updateLastUpdateTime();
-                if (!silent) {
-                    if (loading) loading.style.display = 'none';
-                    if (table) table.style.display = 'table';
-                }
+            // Просто отображаем данные
+            displayPortfolio(data.portfolio, data.summary);
+            updateLastUpdateTime();
+            if (!silent) {
+                if (loading) loading.style.display = 'none';
+                if (table) table.style.display = 'table';
             }
         } else {
             if (!silent) {
@@ -236,13 +202,9 @@ function createPortfolioRow(item) {
         <td class="${pnlPercentClass}">
             ${item.profit_loss_percent >= 0 ? '+' : ''}${item.profit_loss_percent.toFixed(2)}%
         </td>
-        <td>${formatNumber(item.volume)}</td>
         <td>
-            <button class="btn btn-edit" onclick="openEditModal(${item.id}, '${item.company_name}', '${item.category || ''}', ${item.quantity}, ${item.average_buy_price})" title="Редактировать">
-                ✏️
-            </button>
-            <button class="btn btn-danger" onclick="deletePosition(${item.id}, '${item.ticker}')" title="Удалить">
-                🗑️
+            <button class="btn btn-sell" onclick="openSellModal(${item.id}, '${item.ticker}', '${item.company_name}', ${item.quantity}, ${item.current_price})" title="Продать">
+                🛒
             </button>
         </td>
     `;
@@ -388,7 +350,6 @@ async function handleAddPosition(e) {
     const formData = {
         ticker: ticker,
         company_name: document.getElementById('company_name').value.trim(),
-        category: document.getElementById('category').value,
         quantity: parseFloat(document.getElementById('quantity').value),
         average_buy_price: parseFloat(document.getElementById('average_buy_price').value)
     };
@@ -399,6 +360,32 @@ async function handleAddPosition(e) {
     }
     
     try {
+        // 1. Создаём транзакцию покупки
+        const transactionData = {
+            ticker: formData.ticker,
+            company_name: formData.company_name,
+            operation_type: 'Покупка',
+            price: formData.average_buy_price,
+            quantity: formData.quantity,
+            notes: 'Покупка через форму добавления'
+        };
+        
+        const transResponse = await fetch('/api/transactions', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(transactionData)
+        });
+        
+        const transData = await transResponse.json();
+        
+        if (!transData.success) {
+            alert('Ошибка при создании транзакции: ' + transData.error);
+            return;
+        }
+        
+        // 2. Обновляем портфель
         const response = await fetch('/api/portfolio', {
             method: 'POST',
             headers: {
@@ -428,12 +415,12 @@ async function handleAddPosition(e) {
             
             // Показываем сообщение в зависимости от того, была ли позиция обновлена
             if (data.updated) {
-                alert(`Позиция ${formData.ticker} обновлена!\n\nНовое количество: ${data.new_quantity.toFixed(2)}\nСредняя цена покупки: ${data.new_average_price.toFixed(2)} ₽`);
+                alert(`✅ Покупка успешно оформлена!\n\nТикер: ${formData.ticker}\nКуплено: ${formData.quantity} шт. по ${formData.average_buy_price} ₽\n\nНовое количество в портфеле: ${data.new_quantity.toFixed(2)}\nСредняя цена: ${data.new_average_price.toFixed(2)} ₽`);
             } else {
-                alert('Позиция успешно добавлена!');
+                alert(`✅ Покупка успешно оформлена!\n\nТикер: ${formData.ticker}\nКуплено: ${formData.quantity} шт. по ${formData.average_buy_price} ₽\nСумма: ${(formData.quantity * formData.average_buy_price).toFixed(2)} ₽`);
             }
         } else {
-            alert('Ошибка: ' + data.error);
+            alert('Ошибка при обновлении портфеля: ' + data.error);
         }
     } catch (error) {
         console.error('Ошибка добавления позиции:', error);
@@ -531,110 +518,15 @@ async function deletePosition(id, ticker) {
 }
 
 /**
- * Запуск автоматического обновления
- */
-function startAutoUpdate() {
-    // Очищаем предыдущие таймеры
-    if (updateTimer) {
-        clearInterval(updateTimer);
-    }
-    if (priceCheckInterval) {
-        clearInterval(priceCheckInterval);
-    }
-    
-    // Автообновление каждые 300 секунд (5 минут)
-    updateTimer = setInterval(() => {
-        loadPortfolio(false, false); // Полное обновление с индикатором загрузки
-    }, UPDATE_INTERVAL);
-    
-    // Проверка изменений цен каждые 5 секунд (для быстрого реагирования на изменения)
-    priceCheckInterval = setInterval(() => {
-        loadPortfolio(true, true); // Тихая проверка с отслеживанием изменений
-    }, PRICE_CHECK_INTERVAL);
-}
-
-/**
- * Остановка автоматического обновления
- */
-function stopAutoUpdate() {
-    if (updateTimer) {
-        clearInterval(updateTimer);
-        updateTimer = null;
-    }
-    if (priceCheckInterval) {
-        clearInterval(priceCheckInterval);
-        priceCheckInterval = null;
-    }
-    if (countdownTimer) {
-        clearInterval(countdownTimer);
-        countdownTimer = null;
-    }
-}
-
-/**
  * Обновление времени последнего обновления
  */
 function updateLastUpdateTime() {
     const now = new Date();
-    lastUpdateTime = now; // Сохраняем время последнего обновления
     const timeString = now.toLocaleTimeString('ru-RU');
     const lastUpdateEl = document.getElementById('last-update-time');
     if (lastUpdateEl) {
         lastUpdateEl.textContent = timeString;
     }
-    // Перезапускаем таймер обратного отсчета
-    startCountdownTimer();
-}
-
-/**
- * Запуск таймера обратного отсчета до следующего обновления
- */
-function startCountdownTimer() {
-    // Останавливаем предыдущий таймер если есть
-    if (countdownTimer) {
-        clearInterval(countdownTimer);
-    }
-    
-    // Если время последнего обновления не установлено, устанавливаем текущее
-    if (!lastUpdateTime) {
-        lastUpdateTime = new Date();
-    }
-    
-    // Обновляем таймер сразу
-    updateCountdownTimer();
-    
-    // Обновляем таймер каждую секунду
-    countdownTimer = setInterval(() => {
-        updateCountdownTimer();
-    }, 1000);
-}
-
-/**
- * Обновление отображения таймера обратного отсчета
- */
-function updateCountdownTimer() {
-    const timerEl = document.getElementById('next-update-timer');
-    if (!timerEl || !lastUpdateTime) {
-        return;
-    }
-    
-    const now = new Date();
-    const elapsed = now - lastUpdateTime; // Прошедшее время в миллисекундах
-    const remaining = UPDATE_INTERVAL - elapsed; // Оставшееся время в миллисекундах
-    
-    if (remaining <= 0) {
-        timerEl.textContent = '0:00';
-        return;
-    }
-    
-    // Конвертируем миллисекунды в минуты и секунды
-    const totalSeconds = Math.floor(remaining / 1000);
-    const minutes = Math.floor(totalSeconds / 60);
-    const seconds = totalSeconds % 60;
-    
-    // Форматируем время (MM:SS)
-    const formattedTime = `${minutes}:${seconds.toString().padStart(2, '0')}`;
-    timerEl.textContent = formattedTime;
 }
 
 /**
@@ -689,33 +581,75 @@ function switchView(viewType) {
     const tableView = document.getElementById('table-view');
     const chartView = document.getElementById('chart-view');
     const historyView = document.getElementById('history-view');
+    const transactionsView = document.getElementById('transactions-view');
+    const categoriesView = document.getElementById('categories-view');
     const btnTable = document.getElementById('btn-table-view');
     const btnChart = document.getElementById('btn-chart-view');
     const btnHistory = document.getElementById('btn-history-view');
+    const btnTransactions = document.getElementById('btn-transactions-view');
+    const btnCategories = document.getElementById('btn-categories-view');
     
     if (viewType === 'table') {
         tableView.style.display = 'block';
         chartView.style.display = 'none';
         historyView.style.display = 'none';
+        transactionsView.style.display = 'none';
+        categoriesView.style.display = 'none';
         btnTable.classList.add('active');
         btnChart.classList.remove('active');
         btnHistory.classList.remove('active');
+        btnTransactions.classList.remove('active');
+        btnCategories.classList.remove('active');
     } else if (viewType === 'chart') {
         tableView.style.display = 'none';
         chartView.style.display = 'block';
         historyView.style.display = 'none';
+        transactionsView.style.display = 'none';
+        categoriesView.style.display = 'none';
         btnTable.classList.remove('active');
         btnChart.classList.add('active');
         btnHistory.classList.remove('active');
+        btnTransactions.classList.remove('active');
+        btnCategories.classList.remove('active');
     } else if (viewType === 'history') {
         tableView.style.display = 'none';
         chartView.style.display = 'none';
         historyView.style.display = 'block';
+        transactionsView.style.display = 'none';
+        categoriesView.style.display = 'none';
         btnTable.classList.remove('active');
         btnChart.classList.remove('active');
         btnHistory.classList.add('active');
+        btnTransactions.classList.remove('active');
+        btnCategories.classList.remove('active');
         // Загружаем историю цен при переключении
         loadPriceHistory();
+    } else if (viewType === 'transactions') {
+        tableView.style.display = 'none';
+        chartView.style.display = 'none';
+        historyView.style.display = 'none';
+        transactionsView.style.display = 'block';
+        categoriesView.style.display = 'none';
+        btnTable.classList.remove('active');
+        btnChart.classList.remove('active');
+        btnHistory.classList.remove('active');
+        btnTransactions.classList.add('active');
+        btnCategories.classList.remove('active');
+        // Загружаем транзакции при переключении
+        loadTransactions();
+    } else if (viewType === 'categories') {
+        tableView.style.display = 'none';
+        chartView.style.display = 'none';
+        historyView.style.display = 'none';
+        transactionsView.style.display = 'none';
+        categoriesView.style.display = 'block';
+        btnTable.classList.remove('active');
+        btnChart.classList.remove('active');
+        btnHistory.classList.remove('active');
+        btnTransactions.classList.remove('active');
+        btnCategories.classList.add('active');
+        // Загружаем категории при переключении
+        loadCategories();
     }
 }
 
@@ -864,7 +798,6 @@ function renderTickerHistory(history, ticker) {
                 <th>Цена</th>
                 <th>Изменение</th>
                 <th>Изменение %</th>
-                <th>Объём торгов</th>
             </tr>
         </thead>
         <tbody>`;
@@ -877,7 +810,6 @@ function renderTickerHistory(history, ticker) {
                 <td class="price-cell">${formatCurrency(item.price)}</td>
                 <td class="${changeClass}">${item.change >= 0 ? '+' : ''}${item.change.toFixed(2)} ₽</td>
                 <td class="${changeClass}">${item.change_percent >= 0 ? '+' : ''}${item.change_percent.toFixed(2)}%</td>
-                <td>${formatNumber(item.volume)}</td>
             </tr>
         `;
     });
@@ -930,7 +862,6 @@ function renderGroupedHistory(groupedHistory) {
                         <span>${item.change >= 0 ? '↑' : '↓'} ${item.change.toFixed(2)} ₽</span>
                         <span>${item.change_percent >= 0 ? '+' : ''}${item.change_percent.toFixed(2)}%</span>
                     </div>
-                    <div class="history-volume">Объём: ${formatNumber(item.volume)}</div>
                 </div>
             `;
         });
@@ -1055,4 +986,691 @@ document.addEventListener('DOMContentLoaded', function() {
     if (manualLogBtn) {
         manualLogBtn.addEventListener('click', logPricesNow);
     }
+    
+    // Обработчики для формы продажи
+    const sellForm = document.getElementById('sell-form');
+    if (sellForm) {
+        sellForm.addEventListener('submit', handleSell);
+        // Автоматический расчет суммы продажи
+        const priceInput = document.getElementById('sell-price');
+        const quantityInput = document.getElementById('sell-quantity');
+        const totalInput = document.getElementById('sell-total');
+        
+        if (priceInput && quantityInput && totalInput) {
+            const calculateTotal = () => {
+                const price = parseFloat(priceInput.value) || 0;
+                const quantity = parseFloat(quantityInput.value) || 0;
+                totalInput.value = (price * quantity).toFixed(2);
+            };
+            priceInput.addEventListener('input', calculateTotal);
+            quantityInput.addEventListener('input', calculateTotal);
+        }
+    }
+    
+    const editTransactionForm = document.getElementById('edit-transaction-form');
+    if (editTransactionForm) {
+        editTransactionForm.addEventListener('submit', handleEditTransaction);
+        // Автоматический расчет суммы
+        const priceInput = document.getElementById('trans-edit-price');
+        const quantityInput = document.getElementById('trans-edit-quantity');
+        const totalInput = document.getElementById('trans-edit-total');
+        
+        if (priceInput && quantityInput && totalInput) {
+            const calculateTotal = () => {
+                const price = parseFloat(priceInput.value) || 0;
+                const quantity = parseFloat(quantityInput.value) || 0;
+                totalInput.value = (price * quantity).toFixed(2);
+            };
+            priceInput.addEventListener('input', calculateTotal);
+            quantityInput.addEventListener('input', calculateTotal);
+        }
+    }
+    
+    // Фильтры транзакций
+    const transTickerFilter = document.getElementById('trans-ticker-filter');
+    const transTypeFilter = document.getElementById('trans-type-filter');
+    const transDateFrom = document.getElementById('trans-date-from');
+    const transDateTo = document.getElementById('trans-date-to');
+    const transResetBtn = document.getElementById('trans-reset-filters');
+    
+    if (transTickerFilter) {
+        transTickerFilter.addEventListener('change', loadTransactions);
+    }
+    if (transTypeFilter) {
+        transTypeFilter.addEventListener('change', loadTransactions);
+    }
+    if (transDateFrom) {
+        transDateFrom.addEventListener('change', loadTransactions);
+    }
+    if (transDateTo) {
+        transDateTo.addEventListener('change', loadTransactions);
+    }
+    if (transResetBtn) {
+        transResetBtn.addEventListener('click', resetTransactionFilters);
+    }
+    
+    // Установка текущей даты и времени по умолчанию
+    const transAddDate = document.getElementById('trans-add-date');
+    if (transAddDate) {
+        const now = new Date();
+        now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+        transAddDate.value = now.toISOString().slice(0, 16);
+    }
 });
+
+/**
+ * ==========================================
+ * ФУНКЦИИ ДЛЯ РАБОТЫ С ТРАНЗАКЦИЯМИ
+ * ==========================================
+ */
+
+/**
+ * Загрузка транзакций с фильтрацией
+ */
+async function loadTransactions() {
+    const tbody = document.getElementById('transactions-tbody');
+    const noTransactionsMsg = document.getElementById('no-transactions');
+    const table = document.getElementById('transactions-table');
+    
+    if (!tbody) return;
+    
+    try {
+        // Получаем значения фильтров
+        const ticker = document.getElementById('trans-ticker-filter')?.value || '';
+        const operationType = document.getElementById('trans-type-filter')?.value || '';
+        const dateFrom = document.getElementById('trans-date-from')?.value || '';
+        const dateTo = document.getElementById('trans-date-to')?.value || '';
+        
+        // Формируем URL с параметрами
+        let url = '/api/transactions?';
+        if (ticker) url += `ticker=${ticker}&`;
+        if (operationType) url += `operation_type=${operationType}&`;
+        if (dateFrom) url += `date_from=${dateFrom}&`;
+        if (dateTo) url += `date_to=${dateTo}&`;
+        
+        const response = await fetch(url);
+        const data = await response.json();
+        
+        if (data.success) {
+            if (data.transactions.length === 0) {
+                table.style.display = 'none';
+                noTransactionsMsg.style.display = 'block';
+            } else {
+                table.style.display = 'table';
+                noTransactionsMsg.style.display = 'none';
+                renderTransactions(data.transactions);
+            }
+            
+            // Обновляем фильтр тикеров
+            updateTransactionTickerFilter();
+        } else {
+            console.error('Ошибка загрузки транзакций:', data.error);
+        }
+    } catch (error) {
+        console.error('Ошибка загрузки транзакций:', error);
+    }
+}
+
+/**
+ * Отрисовка транзакций в таблице
+ */
+function renderTransactions(transactions) {
+    const tbody = document.getElementById('transactions-tbody');
+    if (!tbody) return;
+    
+    tbody.innerHTML = '';
+    
+    transactions.forEach(transaction => {
+        const row = document.createElement('tr');
+        
+        // Форматируем дату
+        const date = new Date(transaction.date);
+        const dateStr = date.toLocaleString('ru-RU', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+        
+        // Определяем класс для типа операции
+        const typeClass = transaction.operation_type === 'Покупка' ? 'transaction-type-buy' : 'transaction-type-sell';
+        
+        row.innerHTML = `
+            <td>${dateStr}</td>
+            <td><strong>${transaction.ticker}</strong></td>
+            <td>${transaction.company_name || '-'}</td>
+            <td><span class="${typeClass}">${transaction.operation_type}</span></td>
+            <td>${formatCurrency(transaction.price)}</td>
+            <td>${formatNumber(transaction.quantity)}</td>
+            <td><strong>${formatCurrency(transaction.total)}</strong></td>
+            <td>
+                <div class="transaction-actions">
+                    <button class="btn-edit" onclick="openEditTransactionModal(${transaction.id})" title="Редактировать">✏️</button>
+                    <button class="btn-danger" onclick="deleteTransaction(${transaction.id})" title="Удалить">🗑️</button>
+                </div>
+            </td>
+        `;
+        
+        tbody.appendChild(row);
+    });
+}
+
+/**
+ * Обновление фильтра тикеров для транзакций
+ */
+async function updateTransactionTickerFilter() {
+    const tickerFilter = document.getElementById('trans-ticker-filter');
+    if (!tickerFilter) return;
+    
+    try {
+        const response = await fetch('/api/portfolio');
+        const data = await response.json();
+        
+        if (data.success && data.portfolio) {
+            const uniqueTickers = [...new Set(data.portfolio.map(item => item.ticker))];
+            const currentValue = tickerFilter.value;
+            
+            tickerFilter.innerHTML = '<option value="">Все тикеры</option>';
+            
+            uniqueTickers.sort().forEach(ticker => {
+                const option = document.createElement('option');
+                option.value = ticker;
+                option.textContent = ticker;
+                tickerFilter.appendChild(option);
+            });
+            
+            tickerFilter.value = currentValue;
+        }
+    } catch (error) {
+        console.error('Ошибка обновления фильтра тикеров:', error);
+    }
+}
+
+/**
+ * Сброс фильтров транзакций
+ */
+function resetTransactionFilters() {
+    document.getElementById('trans-ticker-filter').value = '';
+    document.getElementById('trans-type-filter').value = '';
+    document.getElementById('trans-date-from').value = '';
+    document.getElementById('trans-date-to').value = '';
+    loadTransactions();
+}
+
+/**
+ * Открытие модального окна добавления транзакции
+ */
+function openAddTransactionModal() {
+    const modal = document.getElementById('add-transaction-modal');
+    if (modal) {
+        // Сброс формы
+        document.getElementById('add-transaction-form').reset();
+        
+        // Установка текущей даты и времени
+        const now = new Date();
+        now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+        document.getElementById('trans-add-date').value = now.toISOString().slice(0, 16);
+        
+        modal.style.display = 'flex';
+    }
+}
+
+/**
+ * Закрытие модального окна добавления транзакции
+ */
+function closeAddTransactionModal() {
+    const modal = document.getElementById('add-transaction-modal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+}
+
+/**
+ * Обработка добавления транзакции
+ */
+async function handleAddTransaction(event) {
+    event.preventDefault();
+    
+    const formData = {
+        date: document.getElementById('trans-add-date').value,
+        ticker: document.getElementById('trans-add-ticker').value.toUpperCase(),
+        company_name: document.getElementById('trans-add-company').value,
+        operation_type: document.getElementById('trans-add-type').value,
+        price: parseFloat(document.getElementById('trans-add-price').value),
+        quantity: parseFloat(document.getElementById('trans-add-quantity').value),
+        notes: document.getElementById('trans-add-notes').value
+    };
+    
+    try {
+        const response = await fetch('/api/transactions', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(formData)
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            closeAddTransactionModal();
+            loadTransactions();
+            alert('Транзакция успешно добавлена!');
+        } else {
+            alert('Ошибка: ' + data.error);
+        }
+    } catch (error) {
+        console.error('Ошибка добавления транзакции:', error);
+        alert('Не удалось добавить транзакцию');
+    }
+}
+
+/**
+ * Открытие модального окна редактирования транзакции
+ */
+async function openEditTransactionModal(transactionId) {
+    try {
+        const response = await fetch(`/api/transactions?`);
+        const data = await response.json();
+        
+        if (data.success) {
+            const transaction = data.transactions.find(t => t.id === transactionId);
+            
+            if (transaction) {
+                document.getElementById('trans-edit-id').value = transaction.id;
+                
+                // Конвертируем дату в формат datetime-local
+                const date = new Date(transaction.date);
+                date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
+                document.getElementById('trans-edit-date').value = date.toISOString().slice(0, 16);
+                
+                document.getElementById('trans-edit-ticker').value = transaction.ticker;
+                document.getElementById('trans-edit-company').value = transaction.company_name || '';
+                document.getElementById('trans-edit-type').value = transaction.operation_type;
+                document.getElementById('trans-edit-price').value = transaction.price;
+                document.getElementById('trans-edit-quantity').value = transaction.quantity;
+                document.getElementById('trans-edit-total').value = transaction.total;
+                document.getElementById('trans-edit-notes').value = transaction.notes || '';
+                
+                document.getElementById('edit-transaction-modal').style.display = 'flex';
+            }
+        }
+    } catch (error) {
+        console.error('Ошибка открытия формы редактирования:', error);
+    }
+}
+
+/**
+ * Закрытие модального окна редактирования транзакции
+ */
+function closeEditTransactionModal() {
+    const modal = document.getElementById('edit-transaction-modal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+}
+
+/**
+ * Обработка редактирования транзакции
+ */
+async function handleEditTransaction(event) {
+    event.preventDefault();
+    
+    const transactionId = document.getElementById('trans-edit-id').value;
+    
+    const formData = {
+        date: document.getElementById('trans-edit-date').value,
+        ticker: document.getElementById('trans-edit-ticker').value.toUpperCase(),
+        company_name: document.getElementById('trans-edit-company').value,
+        operation_type: document.getElementById('trans-edit-type').value,
+        price: parseFloat(document.getElementById('trans-edit-price').value),
+        quantity: parseFloat(document.getElementById('trans-edit-quantity').value),
+        notes: document.getElementById('trans-edit-notes').value
+    };
+    
+    try {
+        const response = await fetch(`/api/transactions/${transactionId}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(formData)
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            closeEditTransactionModal();
+            loadTransactions();
+            alert('Транзакция успешно обновлена!');
+        } else {
+            alert('Ошибка: ' + data.error);
+        }
+    } catch (error) {
+        console.error('Ошибка обновления транзакции:', error);
+        alert('Не удалось обновить транзакцию');
+    }
+}
+
+/**
+ * Удаление транзакции
+ */
+async function deleteTransaction(transactionId) {
+    if (!confirm('Вы уверены, что хотите удалить эту транзакцию?')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/transactions/${transactionId}`, {
+            method: 'DELETE'
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            loadTransactions();
+            alert('Транзакция успешно удалена!');
+        } else {
+            alert('Ошибка: ' + data.error);
+        }
+    } catch (error) {
+        console.error('Ошибка удаления транзакции:', error);
+        alert('Не удалось удалить транзакцию');
+    }
+}
+
+/**
+ * ==========================================
+ * ФУНКЦИИ ДЛЯ ПРОДАЖИ АКЦИЙ
+ * ==========================================
+ */
+
+/**
+ * Открытие модального окна продажи
+ */
+function openSellModal(portfolioId, ticker, companyName, availableQuantity, currentPrice) {
+    const modal = document.getElementById('sell-modal');
+    if (!modal) return;
+    
+    // Заполняем скрытые поля
+    document.getElementById('sell-portfolio-id').value = portfolioId;
+    document.getElementById('sell-ticker').value = ticker;
+    document.getElementById('sell-company-name').value = companyName;
+    
+    // Заполняем видимые поля
+    document.getElementById('sell-ticker-display').value = ticker;
+    document.getElementById('sell-company-display').value = companyName || ticker;
+    document.getElementById('sell-available-display').value = `${availableQuantity} шт.`;
+    
+    // Устанавливаем текущую цену как цену продажи по умолчанию
+    document.getElementById('sell-price').value = currentPrice.toFixed(2);
+    
+    // Устанавливаем максимальное количество для продажи
+    const quantityInput = document.getElementById('sell-quantity');
+    quantityInput.max = availableQuantity;
+    quantityInput.value = '';
+    
+    // Очищаем остальные поля
+    document.getElementById('sell-total').value = '';
+    document.getElementById('sell-notes').value = '';
+    
+    // Показываем модальное окно
+    modal.style.display = 'flex';
+}
+
+/**
+ * Закрытие модального окна продажи
+ */
+function closeSellModal() {
+    const modal = document.getElementById('sell-modal');
+    if (modal) {
+        modal.style.display = 'none';
+        document.getElementById('sell-form').reset();
+    }
+}
+
+/**
+ * Обработка продажи акций
+ */
+async function handleSell(e) {
+    e.preventDefault();
+    
+    const portfolioId = parseInt(document.getElementById('sell-portfolio-id').value);
+    const ticker = document.getElementById('sell-ticker').value;
+    const companyName = document.getElementById('sell-company-name').value;
+    const quantity = parseFloat(document.getElementById('sell-quantity').value);
+    const price = parseFloat(document.getElementById('sell-price').value);
+    const notes = document.getElementById('sell-notes').value;
+    const availableStr = document.getElementById('sell-available-display').value;
+    const availableQuantity = parseFloat(availableStr.split(' ')[0]);
+    
+    // Валидация количества
+    if (quantity <= 0) {
+        alert('Количество должно быть больше 0');
+        return;
+    }
+    
+    if (quantity > availableQuantity) {
+        alert(`Недостаточно акций для продажи!\nДоступно: ${availableQuantity}\nУказано: ${quantity}`);
+        return;
+    }
+    
+    if (!confirm(`Продать ${quantity} акций ${ticker} по ${price} ₽?\n\nСумма продажи: ${(quantity * price).toFixed(2)} ₽`)) {
+        return;
+    }
+    
+    try {
+        // 1. Создаём транзакцию продажи
+        const transactionData = {
+            ticker: ticker,
+            company_name: companyName,
+            operation_type: 'Продажа',
+            price: price,
+            quantity: quantity,
+            notes: notes || 'Продажа через кнопку портфеля'
+        };
+        
+        const transResponse = await fetch('/api/transactions', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(transactionData)
+        });
+        
+        const transData = await transResponse.json();
+        
+        if (!transData.success) {
+            alert('Ошибка при создании транзакции продажи: ' + transData.error);
+            return;
+        }
+        
+        // 2. Обновляем портфель (уменьшаем количество или удаляем позицию)
+        const remainingQuantity = availableQuantity - quantity;
+        
+        if (remainingQuantity <= 0.001) {
+            // Удаляем позицию полностью, если продали всё
+            const deleteResponse = await fetch(`/api/portfolio/${portfolioId}`, {
+                method: 'DELETE'
+            });
+            
+            const deleteData = await deleteResponse.json();
+            
+            if (!deleteData.success) {
+                alert('Ошибка при удалении позиции: ' + deleteData.error);
+                return;
+            }
+        } else {
+            // Обновляем количество в портфеле
+            const updateResponse = await fetch(`/api/portfolio/${portfolioId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    quantity: remainingQuantity
+                })
+            });
+            
+            const updateData = await updateResponse.json();
+            
+            if (!updateData.success) {
+                alert('Ошибка при обновлении портфеля: ' + updateData.error);
+                return;
+            }
+        }
+        
+        // Закрываем модальное окно и обновляем данные
+        closeSellModal();
+        loadPortfolio();
+        
+        // Показываем сообщение об успехе
+        const totalSum = (quantity * price).toFixed(2);
+        if (remainingQuantity <= 0.001) {
+            alert(`✅ Продажа успешно оформлена!\n\nТикер: ${ticker}\nПродано: ${quantity} шт. по ${price} ₽\nСумма: ${totalSum} ₽\n\n⚠️ Позиция полностью закрыта и удалена из портфеля`);
+        } else {
+            alert(`✅ Продажа успешно оформлена!\n\nТикер: ${ticker}\nПродано: ${quantity} шт. по ${price} ₽\nСумма: ${totalSum} ₽\n\nОсталось в портфеле: ${remainingQuantity.toFixed(2)} шт.`);
+        }
+        
+    } catch (error) {
+        console.error('Ошибка продажи:', error);
+        alert('Ошибка при выполнении операции продажи');
+    }
+}
+
+/**
+ * ==========================================
+ * ФУНКЦИИ ДЛЯ УПРАВЛЕНИЯ КАТЕГОРИЯМИ
+ * ==========================================
+ */
+
+// Список доступных категорий
+const CATEGORIES = [
+    'Нефть и газ',
+    'Электроэнергетика',
+    'Телекоммуникации',
+    'Металлы и добыча',
+    'Финансовый сектор',
+    'Потребительский сектор',
+    'Химия и нефтехимия',
+    'Информационные технологии (IT)',
+    'Строительные компании и недвижимость',
+    'Транспорт'
+];
+
+/**
+ * Загрузка категорий
+ */
+async function loadCategories() {
+    const tbody = document.getElementById('categories-tbody');
+    const noCategoriesMsg = document.getElementById('no-categories');
+    const table = document.getElementById('categories-table');
+    
+    if (!tbody) return;
+    
+    try {
+        const response = await fetch('/api/portfolio');
+        const data = await response.json();
+        
+        if (data.success && data.portfolio) {
+            if (data.portfolio.length === 0) {
+                table.style.display = 'none';
+                noCategoriesMsg.style.display = 'block';
+            } else {
+                table.style.display = 'table';
+                noCategoriesMsg.style.display = 'none';
+                
+                // Группируем по тикерам (берем первую встретившуюся запись для каждого тикера)
+                const uniqueTickers = {};
+                data.portfolio.forEach(item => {
+                    if (!uniqueTickers[item.ticker]) {
+                        uniqueTickers[item.ticker] = item;
+                    }
+                });
+                
+                renderCategories(Object.values(uniqueTickers));
+            }
+        } else {
+            console.error('Ошибка загрузки категорий:', data.error);
+        }
+    } catch (error) {
+        console.error('Ошибка загрузки категорий:', error);
+    }
+}
+
+/**
+ * Отрисовка таблицы категорий
+ */
+function renderCategories(items) {
+    const tbody = document.getElementById('categories-tbody');
+    if (!tbody) return;
+    
+    tbody.innerHTML = '';
+    
+    items.forEach(item => {
+        const row = document.createElement('tr');
+        
+        // Создаем select с категориями
+        let categorySelect = `<select class="category-select" id="cat-select-${item.ticker}" data-ticker="${item.ticker}">`;
+        categorySelect += `<option value="">Не выбрано</option>`;
+        
+        CATEGORIES.forEach(cat => {
+            const selected = item.category === cat ? 'selected' : '';
+            categorySelect += `<option value="${cat}" ${selected}>${cat}</option>`;
+        });
+        
+        categorySelect += '</select>';
+        
+        row.innerHTML = `
+            <td><strong>${item.ticker}</strong></td>
+            <td>${item.company_name || '-'}</td>
+            <td>${categorySelect}</td>
+            <td>
+                <button class="category-save-btn" onclick="updateCategoryForTicker('${item.ticker}')" title="Сохранить">
+                    💾 Сохранить
+                </button>
+            </td>
+        `;
+        
+        tbody.appendChild(row);
+    });
+}
+
+/**
+ * Обновление категории для тикера
+ */
+async function updateCategoryForTicker(ticker) {
+    const selectEl = document.getElementById(`cat-select-${ticker}`);
+    if (!selectEl) return;
+    
+    const category = selectEl.value;
+    
+    try {
+        const response = await fetch('/api/update-category', {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                ticker: ticker,
+                category: category
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            alert(`✅ Категория для ${ticker} успешно обновлена!`);
+            // Перезагружаем портфель, если он открыт
+            if (document.getElementById('btn-table-view').classList.contains('active')) {
+                loadPortfolio();
+            }
+        } else {
+            alert('Ошибка: ' + data.error);
+        }
+    } catch (error) {
+        console.error('Ошибка обновления категории:', error);
+        alert('Ошибка при обновлении категории');
+    }
+}
