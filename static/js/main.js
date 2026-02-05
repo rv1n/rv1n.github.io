@@ -1050,37 +1050,44 @@ function renderCategoriesPieChart(portfolio, containerId = 'categories-pie-chart
     let currentAngle = -90; // Начинаем сверху
     let svgPaths = '';
     
-    sortedCategories.forEach((item, index) => {
-        const angle = (item.percentage / 100) * 360;
-        const endAngle = currentAngle + angle;
-        
-        // Преобразование углов в радианы
-        const startRad = (currentAngle * Math.PI) / 180;
-        const endRad = (endAngle * Math.PI) / 180;
-        
-        // Вычисление координат дуги
-        const x1 = center + radius * Math.cos(startRad);
-        const y1 = center + radius * Math.sin(startRad);
-        const x2 = center + radius * Math.cos(endRad);
-        const y2 = center + radius * Math.sin(endRad);
-        
-        // Флаг большой дуги (если сектор больше 180 градусов)
-        const largeArcFlag = angle > 180 ? 1 : 0;
-        
-        const color = colors[index % colors.length];
-        
-        // Создание пути для сектора
-        const pathD = [
-            `M ${center} ${center}`,  // Перемещение в центр
-            `L ${x1} ${y1}`,          // Линия к началу дуги
-            `A ${radius} ${radius} 0 ${largeArcFlag} 1 ${x2} ${y2}`, // Дуга
-            'Z'                        // Закрытие пути
-        ].join(' ');
-        
-        svgPaths += `<path d="${pathD}" fill="${color}" stroke="white" stroke-width="2" class="pie-slice" data-category="${item.category}"/>`;
-        
-        currentAngle = endAngle;
-    });
+    // Специальная обработка для одной категории (100%)
+    if (sortedCategories.length === 1) {
+        const color = colors[0];
+        // Рисуем полный круг через элемент circle
+        svgPaths = `<circle cx="${center}" cy="${center}" r="${radius}" fill="${color}" stroke="white" stroke-width="2" class="pie-slice" data-category="${sortedCategories[0].category}"/>`;
+    } else {
+        sortedCategories.forEach((item, index) => {
+            const angle = (item.percentage / 100) * 360;
+            const endAngle = currentAngle + angle;
+            
+            // Преобразование углов в радианы
+            const startRad = (currentAngle * Math.PI) / 180;
+            const endRad = (endAngle * Math.PI) / 180;
+            
+            // Вычисление координат дуги
+            const x1 = center + radius * Math.cos(startRad);
+            const y1 = center + radius * Math.sin(startRad);
+            const x2 = center + radius * Math.cos(endRad);
+            const y2 = center + radius * Math.sin(endRad);
+            
+            // Флаг большой дуги (если сектор больше 180 градусов)
+            const largeArcFlag = angle > 180 ? 1 : 0;
+            
+            const color = colors[index % colors.length];
+            
+            // Создание пути для сектора
+            const pathD = [
+                `M ${center} ${center}`,  // Перемещение в центр
+                `L ${x1} ${y1}`,          // Линия к началу дуги
+                `A ${radius} ${radius} 0 ${largeArcFlag} 1 ${x2} ${y2}`, // Дуга
+                'Z'                        // Закрытие пути
+            ].join(' ');
+            
+            svgPaths += `<path d="${pathD}" fill="${color}" stroke="white" stroke-width="2" class="pie-slice" data-category="${item.category}"/>`;
+            
+            currentAngle = endAngle;
+        });
+    }
     
     // Создание легенды
     let legendHTML = '<div class="pie-chart-legend">';

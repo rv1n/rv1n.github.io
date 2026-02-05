@@ -830,6 +830,8 @@ header h1 {
     align-items: center;
     gap: 12px;
     min-width: 250px;
+    max-width: 250px;
+    flex-shrink: 0;
 }
 
 .category-color {
@@ -841,6 +843,8 @@ header h1 {
 
 .category-details {
     flex: 1;
+    min-width: 0;
+    overflow: hidden;
 }
 
 .category-name {
@@ -848,11 +852,17 @@ header h1 {
     color: #2c3e50;
     font-size: 0.95em;
     margin-bottom: 4px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .category-value {
     color: #7f8c8d;
     font-size: 0.9em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .category-bar-container {
@@ -1397,11 +1407,17 @@ header h1 {
     color: #2c3e50;
     font-size: 0.95em;
     margin-bottom: 2px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .pie-legend-value {
     color: #7f8c8d;
     font-size: 0.85em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .pie-legend-percentage {
