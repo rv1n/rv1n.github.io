@@ -240,11 +240,32 @@ function displayPortfolio(portfolio, summary) {
         tbody.appendChild(row);
     });
     
+    // Привязываем обработчики к кнопкам продажи
+    attachSellButtonHandlers();
+    
     // Обновление сводки
     updateSummary(summary);
     
     // Обновление диаграммы категорий
     updateCategoryChart(portfolio);
+}
+
+/**
+ * Привязка обработчиков событий к кнопкам продажи
+ */
+function attachSellButtonHandlers() {
+    const sellButtons = document.querySelectorAll('.btn-sell');
+    sellButtons.forEach(button => {
+        button.addEventListener('click', function() {
+            const portfolioId = parseInt(this.getAttribute('data-portfolio-id'));
+            const ticker = this.getAttribute('data-ticker');
+            const companyName = this.getAttribute('data-company-name');
+            const quantity = parseFloat(this.getAttribute('data-quantity'));
+            const price = parseFloat(this.getAttribute('data-price'));
+            
+            openSellModal(portfolioId, ticker, companyName, quantity, price);
+        });
+    });
 }
 
 /**
@@ -286,7 +307,13 @@ function createPortfolioRow(item, totalPortfolioValue = 0) {
             ${item.profit_loss_percent >= 0 ? '+' : ''}${item.profit_loss_percent.toFixed(2)}%
         </td>
         <td>
-            <button class="btn btn-sell" onclick="openSellModal(${item.id}, '${item.ticker}', '${item.company_name}', ${item.quantity}, ${item.current_price})" title="Продать"></button>
+            <button class="btn btn-sell" 
+                data-portfolio-id="${item.id}" 
+                data-ticker="${item.ticker}" 
+                data-company-name="${item.company_name || ''}" 
+                data-quantity="${item.quantity}" 
+                data-price="${item.current_price}" 
+                title="Продать"></button>
         </td>
     `;
     
@@ -531,7 +558,6 @@ async function handleBuy(e) {
     const quantity = parseFloat(document.getElementById('buy-quantity').value);
     const price = parseFloat(document.getElementById('buy-price').value);
     const companyName = document.getElementById('buy-company-name').value.trim();
-    const notes = document.getElementById('buy-notes').value.trim();
     
     if (!ticker || quantity <= 0 || price <= 0) {
         alert('Заполните все обязательные поля корректно');
@@ -546,7 +572,7 @@ async function handleBuy(e) {
             operation_type: 'Покупка',
             price: price,
             quantity: quantity,
-            notes: notes || 'Покупка через модальное окно'
+            notes: 'Покупка через модальное окно'
         };
         
         const transResponse = await fetch('/api/transactions', {
@@ -1168,20 +1194,15 @@ function renderTickerHistory(history, ticker) {
             <tr>
                 <th>Дата и время</th>
                 <th>Цена</th>
-                <th>Изменение</th>
-                <th>Изменение %</th>
             </tr>
         </thead>
         <tbody>`;
     
     history.forEach(item => {
-        const changeClass = item.change >= 0 ? 'positive' : 'negative';
         html += `
             <tr>
                 <td>${item.logged_at}</td>
                 <td class="price-cell">${formatCurrency(item.price)}</td>
-                <td class="${changeClass}">${item.change >= 0 ? '+' : ''}${item.change.toFixed(2)} ₽</td>
-                <td class="${changeClass}">${item.change_percent >= 0 ? '+' : ''}${item.change_percent.toFixed(2)}%</td>
             </tr>
         `;
     });
@@ -1227,22 +1248,17 @@ function renderGroupedHistory(groupedHistory) {
                     <th>Тикер</th>
                     <th>Компания</th>
                     <th>Цена</th>
-                    <th>Изменение</th>
-                    <th>Изменение %</th>
                 </tr>
             </thead>
             <tbody>`;
     
     allItems.forEach(item => {
-        const changeClass = item.change >= 0 ? 'positive' : 'negative';
         html += `
             <tr>
                 <td>${item.logged_at}</td>
                 <td><strong>${item.ticker}</strong></td>
                 <td>${item.company_name || '-'}</td>
                 <td class="price-cell"><strong>${formatCurrency(item.price)}</strong></td>
-                <td class="${changeClass}">${item.change >= 0 ? '+' : ''}${item.change.toFixed(2)} ₽</td>
-                <td class="${changeClass}">${item.change_percent >= 0 ? '+' : ''}${item.change_percent.toFixed(2)}%</td>
             </tr>
         `;
     });
@@ -1819,7 +1835,6 @@ function openSellModal(portfolioId, ticker, companyName, availableQuantity, curr
     
     // Очищаем остальные поля
     document.getElementById('sell-total').value = '';
-    document.getElementById('sell-notes').value = '';
     
     // Показываем модальное окно
     modal.style.display = 'flex';
@@ -1847,7 +1862,6 @@ async function handleSell(e) {
     const companyName = document.getElementById('sell-company-name').value;
     const quantity = parseFloat(document.getElementById('sell-quantity').value);
     const price = parseFloat(document.getElementById('sell-price').value);
-    const notes = document.getElementById('sell-notes').value;
     const availableStr = document.getElementById('sell-available-display').value;
     const availableQuantity = parseFloat(availableStr.split(' ')[0]);
     
@@ -1874,7 +1888,7 @@ async function handleSell(e) {
             operation_type: 'Продажа',
             price: price,
             quantity: quantity,
-            notes: notes || 'Продажа через кнопку портфеля'
+            notes: 'Продажа через кнопку портфеля'
         };
         
         const transResponse = await fetch('/api/transactions', {

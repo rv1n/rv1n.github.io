@@ -984,6 +984,7 @@ header h1 {
     background-size: contain;
     background-repeat: no-repeat;
     background-position: center;
+    pointer-events: none;
 }
 
 .btn-buy:hover {
@@ -1028,6 +1029,7 @@ header h1 {
     background-size: contain;
     background-repeat: no-repeat;
     background-position: center;
+    pointer-events: none;
 }
 
 .btn-sell:hover {
