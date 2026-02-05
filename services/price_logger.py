@@ -98,32 +98,45 @@ class PriceLogger:
             print(f"[{datetime.now(self.moscow_tz)}] Ошибка при логировании цен: {e}")
             db_session.rollback()
     
-    def get_price_history(self, ticker=None, days=30):
+    def get_price_history(self, ticker=None, days=None, date_from=None, date_to=None):
         """
         Получить историю цен
         
         Args:
             ticker: Тикер акции (если None, возвращает все)
-            days: Количество дней истории
+            days: Количество дней истории (если не указаны date_from/date_to)
+            date_from: Дата начала (формат: YYYY-MM-DD)
+            date_to: Дата окончания (формат: YYYY-MM-DD)
             
         Returns:
             Список записей истории цен
         """
         try:
+            from datetime import datetime, timedelta
+            
             query = db_session.query(PriceHistory)
             
             if ticker:
                 query = query.filter(PriceHistory.ticker == ticker.upper())
             
+            # Фильтрация по датам
+            if date_from:
+                date_from_dt = datetime.strptime(date_from, '%Y-%m-%d')
+                query = query.filter(PriceHistory.logged_at >= date_from_dt)
+            
+            if date_to:
+                date_to_dt = datetime.strptime(date_to, '%Y-%m-%d')
+                # Добавляем 1 день, чтобы включить весь день date_to
+                date_to_dt = date_to_dt + timedelta(days=1)
+                query = query.filter(PriceHistory.logged_at < date_to_dt)
+            
+            # Если даты не указаны, используем days
+            if not date_from and not date_to and days:
+                cutoff_date = datetime.now() - timedelta(days=days)
+                query = query.filter(PriceHistory.logged_at >= cutoff_date)
+            
             # Сортируем по дате (от новых к старым)
             query = query.order_by(PriceHistory.logged_at.desc())
-            
-            # Ограничиваем количество записей (примерно days записей на тикер)
-            if ticker:
-                query = query.limit(days)
-            else:
-                # Для всех тикеров берем больше записей
-                query = query.limit(days * 50)  # 50 тикеров максимум
             
             results = query.all()
             
@@ -133,18 +146,20 @@ class PriceLogger:
             print(f"Ошибка получения истории цен: {e}")
             return []
     
-    def get_price_history_grouped(self, days=30):
+    def get_price_history_grouped(self, days=None, date_from=None, date_to=None):
         """
         Получить историю цен, сгруппированную по датам и тикерам
         
         Args:
-            days: Количество дней истории
+            days: Количество дней истории (если не указаны date_from/date_to)
+            date_from: Дата начала (формат: YYYY-MM-DD)
+            date_to: Дата окончания (формат: YYYY-MM-DD)
             
         Returns:
             Словарь с историей цен, сгруппированной по датам
         """
         try:
-            history = self.get_price_history(ticker=None, days=days)
+            history = self.get_price_history(ticker=None, days=days, date_from=date_from, date_to=date_to)
             
             # Группируем по датам
             grouped = {}

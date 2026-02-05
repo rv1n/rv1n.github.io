@@ -13,7 +13,6 @@
             <div class="header-controls">
                 <div class="last-update">
                     Последнее обновление: <span id="last-update-time">-</span>
-                    <span class="update-timer"> | До обновления: <span id="next-update-timer">-</span></span>
                 </div>
                 <button id="refresh-btn" class="btn btn-refresh" onclick="manualRefresh()" title="Обновить данные">
                     🔄 Обновить
@@ -34,58 +33,28 @@
             </div>
         </div>
 
-        <!-- Форма добавления позиции -->
-        <div class="add-form-container">
-            <h2>Добавить позицию</h2>
-            <form id="add-form">
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="ticker">Тикер *</label>
-                        <div class="ticker-input-container">
-                            <input type="text" id="ticker" name="ticker" required placeholder="SBER" maxlength="20">
-                            <span id="ticker-status" class="ticker-status"></span>
-                        </div>
-                        <small id="ticker-hint" class="ticker-hint"></small>
-                    </div>
-                    <div class="form-group">
-                        <label for="company_name">Название компании</label>
-                        <input type="text" id="company_name" name="company_name" placeholder="Сбербанк">
-                    </div>
-                    <div class="form-group">
-                        <label for="quantity">Количество *</label>
-                        <input type="number" id="quantity" name="quantity" required min="0.01" step="0.01" placeholder="10">
-                    </div>
-                    <div class="form-group">
-                        <label for="average_buy_price">Цена покупки *</label>
-                        <input type="number" id="average_buy_price" name="average_buy_price" required min="0.01" step="0.01" placeholder="250.50">
-                    </div>
-                    <div class="form-group form-group-button">
-                        <label>&nbsp;</label>
-                        <button type="submit" class="btn btn-primary">Добавить</button>
-                    </div>
-                </div>
-            </form>
-        </div>
-
         <!-- Таблица портфеля -->
         <div class="portfolio-table-container">
-            <!-- Переключатель представлений -->
-            <div class="view-switcher">
-                <button id="btn-table-view" class="view-btn active" onclick="switchView('table')">
-                    📊 Мой портфель
-                </button>
-                <button id="btn-transactions-view" class="view-btn" onclick="switchView('transactions')">
-                    💼 История покупок/продаж
-                </button>
-                <button id="btn-chart-view" class="view-btn" onclick="switchView('chart')">
-                    📈 Распределение по категориям
-                </button>
-                <button id="btn-history-view" class="view-btn" onclick="switchView('history')">
-                    📜 История цен
-                </button>
-                <button id="btn-categories-view" class="view-btn" onclick="switchView('categories')">
-                    🏷️ Категории
-                </button>
+            <!-- Переключатель представлений и действия -->
+            <div class="view-controls">
+                <div class="view-switcher">
+                    <button id="btn-table-view" class="view-btn active" onclick="switchView('table')">
+                        📊 Мой портфель
+                    </button>
+                    <button id="btn-transactions-view" class="view-btn" onclick="switchView('transactions')">
+                        💼 История покупок/продаж
+                    </button>
+                    <button id="btn-chart-view" class="view-btn" onclick="switchView('chart')">
+                        📈 Распределение по категориям
+                    </button>
+                    <button id="btn-history-view" class="view-btn" onclick="switchView('history')">
+                        📜 История цен
+                    </button>
+                    <button id="btn-categories-view" class="view-btn" onclick="switchView('categories')">
+                        🏷️ Категории
+                    </button>
+                </div>
+                <button id="buy-btn" class="btn btn-buy" onclick="openBuyModal()" title="Купить акции"></button>
             </div>
 
             <div id="loading" class="loading">Загрузка данных...</div>
@@ -103,6 +72,7 @@
                             <th>Цена сейчас</th>
                             <th>Изменение</th>
                             <th>Цена покупки</th>
+                            <th>Общая стоимость</th>
                             <th>P/L ₽</th>
                             <th>P/L %</th>
                             <th>Действия</th>
@@ -117,9 +87,32 @@
             <!-- Представление диаграммы категорий -->
             <div id="chart-view" class="portfolio-view" style="display: none;">
                 <div class="category-chart-container">
-                    <h3>Распределение портфеля по категориям</h3>
-                    <div id="category-chart" class="category-chart">
-                        <!-- Диаграмма загружается через JavaScript -->
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                        <h3 style="margin: 0;">Распределение портфеля по категориям</h3>
+                        
+                        <!-- Переключатель типа диаграммы -->
+                        <div class="chart-type-toggle">
+                            <button id="chart-toggle-pie" class="chart-toggle-btn active" onclick="switchChartType('pie')">
+                                🥧 Круговая
+                            </button>
+                            <button id="chart-toggle-bar" class="chart-toggle-btn" onclick="switchChartType('bar')">
+                                📊 Столбчатая
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Круговая диаграмма -->
+                    <div id="distribution-pie-chart-container" class="categories-pie-chart-container" style="display: block;">
+                        <div id="distribution-pie-chart" class="categories-pie-chart">
+                            <!-- Диаграмма загружается через JavaScript -->
+                        </div>
+                    </div>
+                    
+                    <!-- Столбчатая диаграмма -->
+                    <div id="category-chart-container" style="display: none;">
+                        <div id="category-chart" class="category-chart">
+                            <!-- Диаграмма загружается через JavaScript -->
+                        </div>
                     </div>
                 </div>
             </div>
@@ -133,12 +126,9 @@
                             <option value="">Все тикеры</option>
                             <!-- Опции заполняются через JavaScript -->
                         </select>
-                        <select id="history-days-filter" class="history-filter">
-                            <option value="7">За 7 дней</option>
-                            <option value="14">За 14 дней</option>
-                            <option value="30" selected>За 30 дней</option>
-                            <option value="90">За 90 дней</option>
-                        </select>
+                        <input type="date" id="history-date-from" class="history-filter" placeholder="Дата от">
+                        <input type="date" id="history-date-to" class="history-filter" placeholder="Дата до">
+                        <button id="history-reset-filters" class="btn btn-secondary">🔄 Сбросить</button>
                         <button id="manual-log-btn" class="btn btn-secondary">📝 Записать цены сейчас</button>
                     </div>
                     <div id="price-history-content" class="price-history-content">
@@ -163,7 +153,6 @@
                                     <th>Тикер</th>
                                     <th>Компания</th>
                                     <th>Категория</th>
-                                    <th>Действия</th>
                                 </tr>
                             </thead>
                             <tbody id="categories-tbody">
@@ -285,11 +274,11 @@
                 </div>
                 <div class="form-group">
                     <label for="trans-add-ticker">Тикер *</label>
-                    <input type="text" id="trans-add-ticker" name="ticker" required placeholder="SBER">
+                    <input type="text" id="trans-add-ticker" name="ticker" required>
                 </div>
                 <div class="form-group">
                     <label for="trans-add-company">Название компании</label>
-                    <input type="text" id="trans-add-company" name="company_name" placeholder="Сбербанк">
+                    <input type="text" id="trans-add-company" name="company_name">
                 </div>
                 <div class="form-group">
                     <label for="trans-add-type">Вид операции *</label>
@@ -301,19 +290,19 @@
                 </div>
                 <div class="form-group">
                     <label for="trans-add-price">Цена *</label>
-                    <input type="number" id="trans-add-price" name="price" required min="0.01" step="0.01" placeholder="250.50">
+                    <input type="number" id="trans-add-price" name="price" required min="0.01" step="0.01">
                 </div>
                 <div class="form-group">
                     <label for="trans-add-quantity">Количество *</label>
-                    <input type="number" id="trans-add-quantity" name="quantity" required min="0.01" step="0.01" placeholder="10">
+                    <input type="number" id="trans-add-quantity" name="quantity" required min="0.01" step="0.01">
                 </div>
                 <div class="form-group">
                     <label for="trans-add-total">Сумма</label>
-                    <input type="number" id="trans-add-total" name="total" readonly placeholder="Рассчитается автоматически">
+                    <input type="number" id="trans-add-total" name="total" readonly>
                 </div>
                 <div class="form-group">
                     <label for="trans-add-notes">Заметки</label>
-                    <textarea id="trans-add-notes" name="notes" rows="3" placeholder="Дополнительная информация"></textarea>
+                    <textarea id="trans-add-notes" name="notes" rows="3"></textarea>
                 </div>
                 <div class="modal-buttons">
                     <button type="submit" class="btn btn-primary">Добавить</button>
@@ -373,11 +362,53 @@
         </div>
     </div>
 
+    <!-- Модальное окно для покупки -->
+    <div id="buy-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <span class="close" onclick="closeBuyModal()">&times;</span>
+            <h2>➕ Купить акции</h2>
+            <form id="buy-form">
+                <div class="form-group">
+                    <label for="buy-ticker">Тикер *</label>
+                    <div class="ticker-input-container">
+                        <input type="text" id="buy-ticker" name="ticker" required maxlength="20">
+                        <span id="buy-ticker-status" class="ticker-status"></span>
+                    </div>
+                    <small id="buy-ticker-hint" class="ticker-hint"></small>
+                </div>
+                <div class="form-group">
+                    <label for="buy-company-name">Название компании</label>
+                    <input type="text" id="buy-company-name" name="company_name" readonly style="background: #f5f5f5;">
+                </div>
+                <div class="form-group">
+                    <label for="buy-quantity">Количество *</label>
+                    <input type="number" id="buy-quantity" name="quantity" required min="0.01" step="0.01">
+                </div>
+                <div class="form-group">
+                    <label for="buy-price">Цена покупки *</label>
+                    <input type="number" id="buy-price" name="price" required min="0.01" step="0.01">
+                </div>
+                <div class="form-group">
+                    <label for="buy-total">Сумма покупки</label>
+                    <input type="number" id="buy-total" readonly style="background: #f5f5f5;">
+                </div>
+                <div class="form-group">
+                    <label for="buy-notes">Заметки</label>
+                    <textarea id="buy-notes" name="notes" rows="3"></textarea>
+                </div>
+                <div class="modal-buttons">
+                    <button type="submit" class="btn btn-primary">Купить</button>
+                    <button type="button" class="btn btn-secondary" onclick="closeBuyModal()">Отмена</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- Модальное окно для продажи -->
     <div id="sell-modal" class="modal" style="display: none;">
         <div class="modal-content">
             <span class="close" onclick="closeSellModal()">&times;</span>
-            <h2>🛒 Продать акции</h2>
+            <h2>➖ Продать акции</h2>
             <form id="sell-form">
                 <input type="hidden" id="sell-portfolio-id">
                 <input type="hidden" id="sell-ticker">

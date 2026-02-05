@@ -7,6 +7,9 @@
 let previousPrices = {}; // Хранение предыдущих цен для отслеживания изменений
 let tickerValidationTimeout = null; // Таймаут для валидации тикера
 let lastValidatedTicker = ''; // Последний валидированный тикер
+let categoriesChanged = false; // Флаг изменения категорий
+let currentPortfolioData = null; // Текущие данные портфеля
+let currentChartType = localStorage.getItem('chartType') || 'pie'; // Текущий тип диаграммы (pie/bar)
 
 /**
  * Инициализация приложения при загрузке страницы
@@ -21,10 +24,16 @@ document.addEventListener('DOMContentLoaded', function() {
  * Настройка обработчиков событий
  */
 function setupEventListeners() {
-    // Форма добавления позиции
-    const addForm = document.getElementById('add-form');
-    if (addForm) {
-        addForm.addEventListener('submit', handleAddPosition);
+    // Форма покупки акций
+    const buyForm = document.getElementById('buy-form');
+    if (buyForm) {
+        buyForm.addEventListener('submit', handleBuy);
+    }
+    
+    // Форма продажи акций
+    const sellForm = document.getElementById('sell-form');
+    if (sellForm) {
+        sellForm.addEventListener('submit', handleSell);
     }
     
     // Форма редактирования позиции
@@ -33,27 +42,27 @@ function setupEventListeners() {
         editForm.addEventListener('submit', handleEditPosition);
     }
     
-    // Закрытие модального окна
-    const closeBtn = document.querySelector('.close');
-    if (closeBtn) {
-        closeBtn.addEventListener('click', closeEditModal);
+    // Валидация тикера в форме покупки
+    const buyTickerInput = document.getElementById('buy-ticker');
+    if (buyTickerInput) {
+        buyTickerInput.addEventListener('input', handleBuyTickerInput);
+        buyTickerInput.addEventListener('blur', handleBuyTickerBlur);
     }
     
-    // Закрытие модального окна при клике вне его
-    const modal = document.getElementById('edit-modal');
-    if (modal) {
-        modal.addEventListener('click', function(e) {
-            if (e.target === modal) {
-                closeEditModal();
-            }
-        });
+    // Автоматический расчет суммы покупки
+    const buyQuantity = document.getElementById('buy-quantity');
+    const buyPrice = document.getElementById('buy-price');
+    if (buyQuantity && buyPrice) {
+        buyQuantity.addEventListener('input', calculateBuyTotal);
+        buyPrice.addEventListener('input', calculateBuyTotal);
     }
     
-    // Валидация тикера при вводе
-    const tickerInput = document.getElementById('ticker');
-    if (tickerInput) {
-        tickerInput.addEventListener('input', handleTickerInput);
-        tickerInput.addEventListener('blur', handleTickerBlur);
+    // Автоматический расчет суммы продажи
+    const sellQuantity = document.getElementById('sell-quantity');
+    const sellPrice = document.getElementById('sell-price');
+    if (sellQuantity && sellPrice) {
+        sellQuantity.addEventListener('input', calculateSellTotal);
+        sellPrice.addEventListener('input', calculateSellTotal);
     }
 }
 
@@ -96,6 +105,9 @@ async function loadPortfolio(silent = false) {
         const data = await response.json();
         
         if (data.success) {
+            // Сохраняем данные портфеля для последующего обновления категорий
+            currentPortfolioData = data.portfolio;
+            
             // Просто отображаем данные
             displayPortfolio(data.portfolio, data.summary);
             updateLastUpdateTime();
@@ -152,7 +164,7 @@ function displayPortfolio(portfolio, summary) {
     tbody.innerHTML = '';
     
     if (portfolio.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="10" style="text-align: center; padding: 40px; color: #7f8c8d;">Портфель пуст. Добавьте первую позицию.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="11" style="text-align: center; padding: 40px; color: #7f8c8d;">Портфель пуст. Добавьте первую позицию.</td></tr>';
         previousPrices = {}; // Очищаем сохраненные цены
         return;
     }
@@ -162,8 +174,11 @@ function displayPortfolio(portfolio, summary) {
         previousPrices[item.ticker] = item.current_price;
     });
     
+    // Получаем общую стоимость портфеля для расчета процентов
+    const totalPortfolioValue = summary.total_value || 0;
+    
     portfolio.forEach(item => {
-        const row = createPortfolioRow(item);
+        const row = createPortfolioRow(item, totalPortfolioValue);
         tbody.appendChild(row);
     });
     
@@ -177,13 +192,17 @@ function displayPortfolio(portfolio, summary) {
 /**
  * Создание строки таблицы для позиции
  */
-function createPortfolioRow(item) {
+function createPortfolioRow(item, totalPortfolioValue = 0) {
     const row = document.createElement('tr');
     
     // Определение классов для прибыли/убытка
     const pnlClass = item.profit_loss >= 0 ? 'profit' : 'loss';
     const pnlPercentClass = item.profit_loss_percent >= 0 ? 'profit' : 'loss';
     const changeClass = item.price_change >= 0 ? 'profit' : 'loss';
+    
+    // Рассчитываем процент от общего портфеля
+    const totalValue = item.quantity * item.current_price;
+    const portfolioPercent = totalPortfolioValue > 0 ? (totalValue / totalPortfolioValue * 100).toFixed(2) : 0;
     
     row.innerHTML = `
         <td><strong>${item.ticker}</strong></td>
@@ -196,6 +215,12 @@ function createPortfolioRow(item) {
             (${item.price_change_percent >= 0 ? '+' : ''}${item.price_change_percent.toFixed(2)}%)
         </td>
         <td>${formatCurrency(item.average_buy_price)}</td>
+        <td>
+            <div style="display: flex; flex-direction: column; align-items: flex-start;">
+                <strong>${formatCurrency(totalValue)}</strong>
+                <span style="font-size: 0.85em; color: #7f8c8d;">${portfolioPercent}%</span>
+            </div>
+        </td>
         <td class="${pnlClass}">
             ${item.profit_loss >= 0 ? '+' : ''}${formatCurrency(item.profit_loss)}
         </td>
@@ -203,9 +228,7 @@ function createPortfolioRow(item) {
             ${item.profit_loss_percent >= 0 ? '+' : ''}${item.profit_loss_percent.toFixed(2)}%
         </td>
         <td>
-            <button class="btn btn-sell" onclick="openSellModal(${item.id}, '${item.ticker}', '${item.company_name}', ${item.quantity}, ${item.current_price})" title="Продать">
-                🛒
-            </button>
+            <button class="btn btn-sell" onclick="openSellModal(${item.id}, '${item.ticker}', '${item.company_name}', ${item.quantity}, ${item.current_price})" title="Продать"></button>
         </td>
     `;
     
@@ -236,12 +259,53 @@ function updateSummary(summary) {
 }
 
 /**
- * Обработка ввода тикера с отложенной валидацией
+ * Обновление категорий во всех связанных вкладках
+ * Загружает данные один раз и обновляет обе вкладки: "Мой портфель" и "Распределение по категориям"
  */
-function handleTickerInput(e) {
+async function updateAllCategoryViews() {
+    try {
+        // Загружаем актуальные данные с сервера (один запрос для обеих вкладок)
+        const response = await fetch('/api/portfolio');
+        const data = await response.json();
+        
+        if (data.success && data.portfolio) {
+            // Обновляем сохраненные данные
+            currentPortfolioData = data.portfolio;
+            
+            // 1. Обновляем столбец категорий в таблице "Мой портфель" (если она существует)
+            const tbody = document.getElementById('portfolio-tbody');
+            if (tbody) {
+                const rows = tbody.getElementsByTagName('tr');
+                
+                data.portfolio.forEach((item, index) => {
+                    if (rows[index]) {
+                        // Находим ячейку категории (3-я колонка, индекс 2)
+                        const categoryCell = rows[index].cells[2];
+                        if (categoryCell) {
+                            categoryCell.innerHTML = `<span class="category-badge">${item.category || '-'}</span>`;
+                        }
+                    }
+                });
+            }
+            
+            // 2. Обновляем диаграмму "Распределение по категориям"
+            updateCategoryChart(data.portfolio);
+            
+            // Сбрасываем флаг изменений
+            categoriesChanged = false;
+        }
+    } catch (error) {
+        console.error('Ошибка обновления категорий:', error);
+    }
+}
+
+/**
+ * Обработка ввода тикера с отложенной валидацией (для модального окна покупки)
+ */
+function handleBuyTickerInput(e) {
     const ticker = e.target.value.trim().toUpperCase();
-    const statusEl = document.getElementById('ticker-status');
-    const hintEl = document.getElementById('ticker-hint');
+    const statusEl = document.getElementById('buy-ticker-status');
+    const hintEl = document.getElementById('buy-ticker-hint');
     
     // Очищаем предыдущий таймаут
     if (tickerValidationTimeout) {
@@ -257,7 +321,7 @@ function handleTickerInput(e) {
         
         // Задержка перед валидацией (500мс)
         tickerValidationTimeout = setTimeout(() => {
-            validateTicker(ticker);
+            validateBuyTicker(ticker);
         }, 500);
     } else {
         statusEl.textContent = '';
@@ -267,27 +331,27 @@ function handleTickerInput(e) {
 }
 
 /**
- * Обработка потери фокуса на поле тикера
+ * Обработка потери фокуса на поле тикера (для модального окна покупки)
  */
-function handleTickerBlur(e) {
+function handleBuyTickerBlur(e) {
     const ticker = e.target.value.trim().toUpperCase();
     if (ticker.length > 0 && ticker !== lastValidatedTicker) {
-        validateTicker(ticker);
+        validateBuyTicker(ticker);
     }
 }
 
 /**
- * Валидация тикера через API
+ * Валидация тикера через API (для модального окна покупки)
  */
-async function validateTicker(ticker) {
+async function validateBuyTicker(ticker) {
     if (!ticker) return;
     
-    const statusEl = document.getElementById('ticker-status');
-    const hintEl = document.getElementById('ticker-hint');
-    const companyNameInput = document.getElementById('company_name');
+    const statusEl = document.getElementById('buy-ticker-status');
+    const hintEl = document.getElementById('buy-ticker-hint');
+    const companyNameInput = document.getElementById('buy-company-name');
     
     if (!statusEl || !hintEl || !companyNameInput) {
-        console.error('Не найдены необходимые элементы формы');
+        console.error('Не найдены необходимые элементы формы покупки');
         return;
     }
     
@@ -328,12 +392,71 @@ async function validateTicker(ticker) {
 }
 
 /**
- * Обработка добавления новой позиции
+ * Расчет общей суммы покупки
  */
-async function handleAddPosition(e) {
+function calculateBuyTotal() {
+    const quantity = parseFloat(document.getElementById('buy-quantity').value) || 0;
+    const price = parseFloat(document.getElementById('buy-price').value) || 0;
+    const total = quantity * price;
+    
+    document.getElementById('buy-total').value = total > 0 ? total.toFixed(2) : '';
+}
+
+/**
+ * Расчет общей суммы продажи
+ */
+function calculateSellTotal() {
+    const quantity = parseFloat(document.getElementById('sell-quantity').value) || 0;
+    const price = parseFloat(document.getElementById('sell-price').value) || 0;
+    const total = quantity * price;
+    
+    document.getElementById('sell-total').value = total > 0 ? total.toFixed(2) : '';
+}
+
+/**
+ * Открытие модального окна для покупки акций
+ */
+function openBuyModal() {
+    const modal = document.getElementById('buy-modal');
+    if (!modal) return;
+    
+    // Очищаем форму
+    document.getElementById('buy-form').reset();
+    
+    // Сброс валидации тикера
+    const statusEl = document.getElementById('buy-ticker-status');
+    const hintEl = document.getElementById('buy-ticker-hint');
+    if (statusEl) {
+        statusEl.textContent = '';
+        statusEl.className = 'ticker-status';
+    }
+    if (hintEl) {
+        hintEl.textContent = '';
+    }
+    lastValidatedTicker = '';
+    
+    // Показываем модальное окно
+    modal.style.display = 'flex';
+}
+
+/**
+ * Закрытие модального окна покупки
+ */
+function closeBuyModal() {
+    const modal = document.getElementById('buy-modal');
+    if (modal) {
+        modal.style.display = 'none';
+        document.getElementById('buy-form').reset();
+    }
+}
+
+/**
+ * Обработка покупки акций
+ */
+async function handleBuy(e) {
     e.preventDefault();
     
-    const ticker = document.getElementById('ticker').value.trim().toUpperCase();
+    const ticker = document.getElementById('buy-ticker').value.trim().toUpperCase();
     
     // Проверяем, что тикер валидирован
     if (ticker !== lastValidatedTicker) {
@@ -341,20 +464,18 @@ async function handleAddPosition(e) {
         return;
     }
     
-    const statusEl = document.getElementById('ticker-status');
+    const statusEl = document.getElementById('buy-ticker-status');
     if (statusEl.classList.contains('invalid')) {
         alert('Указан несуществующий тикер. Пожалуйста, проверьте правильность написания.');
         return;
     }
     
-    const formData = {
-        ticker: ticker,
-        company_name: document.getElementById('company_name').value.trim(),
-        quantity: parseFloat(document.getElementById('quantity').value),
-        average_buy_price: parseFloat(document.getElementById('average_buy_price').value)
-    };
+    const quantity = parseFloat(document.getElementById('buy-quantity').value);
+    const price = parseFloat(document.getElementById('buy-price').value);
+    const companyName = document.getElementById('buy-company-name').value.trim();
+    const notes = document.getElementById('buy-notes').value.trim();
     
-    if (!formData.ticker || formData.quantity <= 0 || formData.average_buy_price <= 0) {
+    if (!ticker || quantity <= 0 || price <= 0) {
         alert('Заполните все обязательные поля корректно');
         return;
     }
@@ -362,12 +483,12 @@ async function handleAddPosition(e) {
     try {
         // 1. Создаём транзакцию покупки
         const transactionData = {
-            ticker: formData.ticker,
-            company_name: formData.company_name,
+            ticker: ticker,
+            company_name: companyName,
             operation_type: 'Покупка',
-            price: formData.average_buy_price,
-            quantity: formData.quantity,
-            notes: 'Покупка через форму добавления'
+            price: price,
+            quantity: quantity,
+            notes: notes || 'Покупка через модальное окно'
         };
         
         const transResponse = await fetch('/api/transactions', {
@@ -386,6 +507,13 @@ async function handleAddPosition(e) {
         }
         
         // 2. Обновляем портфель
+        const formData = {
+            ticker: ticker,
+            company_name: companyName,
+            quantity: quantity,
+            average_buy_price: price
+        };
+        
         const response = await fetch('/api/portfolio', {
             method: 'POST',
             headers: {
@@ -397,33 +525,23 @@ async function handleAddPosition(e) {
         const data = await response.json();
         
         if (data.success) {
-            // Очистка формы
-            document.getElementById('add-form').reset();
-            // Сброс валидации тикера
-            const statusEl = document.getElementById('ticker-status');
-            const hintEl = document.getElementById('ticker-hint');
-            if (statusEl) {
-                statusEl.textContent = '';
-                statusEl.className = 'ticker-status';
-            }
-            if (hintEl) {
-                hintEl.textContent = '';
-            }
-            lastValidatedTicker = '';
+            // Закрываем модальное окно
+            closeBuyModal();
+            
             // Перезагрузка портфеля
             loadPortfolio();
             
             // Показываем сообщение в зависимости от того, была ли позиция обновлена
             if (data.updated) {
-                alert(`✅ Покупка успешно оформлена!\n\nТикер: ${formData.ticker}\nКуплено: ${formData.quantity} шт. по ${formData.average_buy_price} ₽\n\nНовое количество в портфеле: ${data.new_quantity.toFixed(2)}\nСредняя цена: ${data.new_average_price.toFixed(2)} ₽`);
+                alert(`✅ Покупка успешно оформлена!\n\nТикер: ${ticker}\nКуплено: ${quantity} шт. по ${price} ₽\n\nНовое количество в портфеле: ${data.new_quantity.toFixed(2)}\nСредняя цена: ${data.new_average_price.toFixed(2)} ₽`);
             } else {
-                alert(`✅ Покупка успешно оформлена!\n\nТикер: ${formData.ticker}\nКуплено: ${formData.quantity} шт. по ${formData.average_buy_price} ₽\nСумма: ${(formData.quantity * formData.average_buy_price).toFixed(2)} ₽`);
+                alert(`✅ Покупка успешно оформлена!\n\nТикер: ${ticker}\nКуплено: ${quantity} шт. по ${price} ₽\nСумма: ${(quantity * price).toFixed(2)} ₽`);
             }
         } else {
             alert('Ошибка при обновлении портфеля: ' + data.error);
         }
     } catch (error) {
-        console.error('Ошибка добавления позиции:', error);
+        console.error('Ошибка покупки:', error);
         alert('Ошибка соединения с сервером');
     }
 }
@@ -600,6 +718,11 @@ function switchView(viewType) {
         btnHistory.classList.remove('active');
         btnTransactions.classList.remove('active');
         btnCategories.classList.remove('active');
+        
+        // Обновляем обе вкладки, если категории были изменены
+        if (categoriesChanged) {
+            updateAllCategoryViews();
+        }
     } else if (viewType === 'chart') {
         tableView.style.display = 'none';
         chartView.style.display = 'block';
@@ -611,6 +734,17 @@ function switchView(viewType) {
         btnHistory.classList.remove('active');
         btnTransactions.classList.remove('active');
         btnCategories.classList.remove('active');
+        
+        // Обновляем обе вкладки, если категории были изменены
+        if (categoriesChanged) {
+            updateAllCategoryViews();
+        } else if (currentPortfolioData) {
+            // Используем уже загруженные данные
+            updateCategoryChart(currentPortfolioData);
+        }
+        
+        // Применяем выбор типа диаграммы
+        applyChartTypeSelection();
     } else if (viewType === 'history') {
         tableView.style.display = 'none';
         chartView.style.display = 'none';
@@ -722,6 +856,174 @@ function updateCategoryChart(portfolio) {
     chartHTML += '</div>';
     
     chartContainer.innerHTML = chartHTML;
+    
+    // Отрисовываем круговую диаграмму для раздела распределения
+    renderCategoriesPieChart(portfolio, 'distribution-pie-chart', 'distribution-pie-chart-container');
+    
+    // Применяем текущий выбор типа диаграммы
+    applyChartTypeSelection();
+}
+
+/**
+ * Переключение типа диаграммы
+ */
+function switchChartType(type) {
+    currentChartType = type;
+    localStorage.setItem('chartType', type);
+    
+    applyChartTypeSelection();
+}
+
+/**
+ * Применение выбора типа диаграммы
+ */
+function applyChartTypeSelection() {
+    const pieContainer = document.getElementById('distribution-pie-chart-container');
+    const barContainer = document.getElementById('category-chart-container');
+    const pieBtn = document.getElementById('chart-toggle-pie');
+    const barBtn = document.getElementById('chart-toggle-bar');
+    
+    if (!pieContainer || !barContainer) return;
+    
+    if (currentChartType === 'pie') {
+        // Показываем круговую диаграмму
+        pieContainer.style.display = 'block';
+        barContainer.style.display = 'none';
+        
+        if (pieBtn) pieBtn.classList.add('active');
+        if (barBtn) barBtn.classList.remove('active');
+    } else {
+        // Показываем столбчатую диаграмму
+        pieContainer.style.display = 'none';
+        barContainer.style.display = 'block';
+        
+        if (pieBtn) pieBtn.classList.remove('active');
+        if (barBtn) barBtn.classList.add('active');
+    }
+}
+
+/**
+ * Отрисовка круговой диаграммы категорий
+ * @param {Array} portfolio - данные портфеля
+ * @param {string} containerId - ID контейнера для диаграммы (по умолчанию 'categories-pie-chart')
+ * @param {string} wrapperContainerId - ID обертки контейнера (по умолчанию 'categories-pie-chart-container')
+ */
+function renderCategoriesPieChart(portfolio, containerId = 'categories-pie-chart', wrapperContainerId = 'categories-pie-chart-container') {
+    const chartContainer = document.getElementById(containerId);
+    const chartContainerWrapper = document.getElementById(wrapperContainerId);
+    
+    if (!chartContainer || !portfolio || portfolio.length === 0) {
+        if (chartContainerWrapper) {
+            chartContainerWrapper.style.display = 'none';
+        }
+        return;
+    }
+    
+    // Подсчет стоимости по категориям
+    const categoryData = {};
+    let totalValue = 0;
+    
+    portfolio.forEach(item => {
+        const category = item.category || 'Без категории';
+        const value = item.quantity * item.current_price || 0;
+        
+        if (!categoryData[category]) {
+            categoryData[category] = 0;
+        }
+        categoryData[category] += value;
+        totalValue += value;
+    });
+    
+    // Фильтруем пустые категории и сортируем
+    const sortedCategories = Object.entries(categoryData)
+        .filter(([_, value]) => value > 0)
+        .sort((a, b) => b[1] - a[1])
+        .map(([category, value]) => ({
+            category,
+            value,
+            percentage: totalValue > 0 ? (value / totalValue * 100) : 0
+        }));
+    
+    if (sortedCategories.length === 0) {
+        chartContainerWrapper.style.display = 'none';
+        return;
+    }
+    
+    chartContainerWrapper.style.display = 'block';
+    
+    // Цвета для категорий
+    const colors = [
+        '#667eea', '#764ba2', '#f093fb', '#4facfe',
+        '#43e97b', '#fa709a', '#fee140', '#30cfd0',
+        '#a8edea', '#fbc2eb'
+    ];
+    
+    // Создание SVG круговой диаграммы
+    const size = 300;
+    const center = size / 2;
+    const radius = size / 2 - 20;
+    
+    let currentAngle = -90; // Начинаем сверху
+    let svgPaths = '';
+    
+    sortedCategories.forEach((item, index) => {
+        const angle = (item.percentage / 100) * 360;
+        const endAngle = currentAngle + angle;
+        
+        // Преобразование углов в радианы
+        const startRad = (currentAngle * Math.PI) / 180;
+        const endRad = (endAngle * Math.PI) / 180;
+        
+        // Вычисление координат дуги
+        const x1 = center + radius * Math.cos(startRad);
+        const y1 = center + radius * Math.sin(startRad);
+        const x2 = center + radius * Math.cos(endRad);
+        const y2 = center + radius * Math.sin(endRad);
+        
+        // Флаг большой дуги (если сектор больше 180 градусов)
+        const largeArcFlag = angle > 180 ? 1 : 0;
+        
+        const color = colors[index % colors.length];
+        
+        // Создание пути для сектора
+        const pathD = [
+            `M ${center} ${center}`,  // Перемещение в центр
+            `L ${x1} ${y1}`,          // Линия к началу дуги
+            `A ${radius} ${radius} 0 ${largeArcFlag} 1 ${x2} ${y2}`, // Дуга
+            'Z'                        // Закрытие пути
+        ].join(' ');
+        
+        svgPaths += `<path d="${pathD}" fill="${color}" stroke="white" stroke-width="2" class="pie-slice" data-category="${item.category}"/>`;
+        
+        currentAngle = endAngle;
+    });
+    
+    // Создание легенды
+    let legendHTML = '<div class="pie-chart-legend">';
+    sortedCategories.forEach((item, index) => {
+        const color = colors[index % colors.length];
+        legendHTML += `
+            <div class="pie-legend-item">
+                <div class="pie-legend-color" style="background: ${color};"></div>
+                <div class="pie-legend-details">
+                    <div class="pie-legend-name">${item.category}</div>
+                    <div class="pie-legend-value">${formatCurrency(item.value)}</div>
+                </div>
+                <div class="pie-legend-percentage">${item.percentage.toFixed(1)}%</div>
+            </div>
+        `;
+    });
+    legendHTML += '</div>';
+    
+    // Собираем итоговый HTML
+    const chartHTML = `
+        <svg class="pie-chart-svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+            ${svgPaths}
+        </svg>
+        ${legendHTML}
+    `;
+    
+    chartContainer.innerHTML = chartHTML;
 }
 
 /**
@@ -729,25 +1031,37 @@ function updateCategoryChart(portfolio) {
  */
 async function loadPriceHistory() {
     const tickerFilter = document.getElementById('history-ticker-filter');
-    const daysFilter = document.getElementById('history-days-filter');
+    const dateFromFilter = document.getElementById('history-date-from');
+    const dateToFilter = document.getElementById('history-date-to');
     const contentContainer = document.getElementById('price-history-content');
     
     if (!contentContainer) return;
     
     const ticker = tickerFilter ? tickerFilter.value : '';
-    const days = daysFilter ? daysFilter.value : 30;
+    const dateFrom = dateFromFilter ? dateFromFilter.value : '';
+    const dateTo = dateToFilter ? dateToFilter.value : '';
     
     try {
         contentContainer.innerHTML = '<p style="text-align: center; padding: 40px;">Загрузка истории...</p>';
         
-        const url = `/api/price-history?${ticker ? `ticker=${ticker}&` : ''}days=${days}`;
+        // Строим URL с параметрами
+        let url = '/api/price-history?';
+        if (ticker) url += `ticker=${ticker}&`;
+        if (dateFrom) url += `date_from=${dateFrom}&`;
+        if (dateTo) url += `date_to=${dateTo}&`;
+        
+        // Если даты не указаны, показываем последние 30 дней
+        if (!dateFrom && !dateTo) {
+            url += 'days=30';
+        }
+        
         const response = await fetch(url);
         const data = await response.json();
         
         if (data.success) {
             renderPriceHistory(data.history, ticker);
             // Обновляем список тикеров в фильтре
-            updateTickerFilter();
+            updateHistoryTickerFilter();
         } else {
             contentContainer.innerHTML = `<p style="text-align: center; color: #e74c3c; padding: 40px;">Ошибка: ${data.error}</p>`;
         }
@@ -835,39 +1149,47 @@ function renderGroupedHistory(groupedHistory) {
         return;
     }
     
-    let html = '';
-    
-    // Сортируем даты (от новых к старым)
-    const sortedDates = Object.keys(groupedHistory).sort((a, b) => new Date(b) - new Date(a));
-    
-    sortedDates.forEach(date => {
-        const items = groupedHistory[date];
-        
-        html += `
-            <div class="history-date-group">
-                <div class="history-date-header">${formatDate(date)}</div>
-                <div class="history-items">`;
-        
-        items.forEach(item => {
-            const changeClass = item.change >= 0 ? 'positive' : 'negative';
-            html += `
-                <div class="history-item">
-                    <div class="history-item-header">
-                        <span class="history-ticker">${item.ticker}</span>
-                        <span class="history-time">${item.logged_at.split(' ')[1]}</span>
-                    </div>
-                    <div class="history-company">${item.company_name || ''}</div>
-                    <div class="history-price">${formatCurrency(item.price)}</div>
-                    <div class="history-change ${changeClass}">
-                        <span>${item.change >= 0 ? '↑' : '↓'} ${item.change.toFixed(2)} ₽</span>
-                        <span>${item.change_percent >= 0 ? '+' : ''}${item.change_percent.toFixed(2)}%</span>
-                    </div>
-                </div>
-            `;
+    // Создаем массив всех записей для сортировки
+    let allItems = [];
+    Object.keys(groupedHistory).forEach(date => {
+        groupedHistory[date].forEach(item => {
+            allItems.push(item);
         });
-        
-        html += '</div></div>';
     });
+    
+    // Сортируем по дате (от новых к старым)
+    allItems.sort((a, b) => new Date(b.logged_at) - new Date(a.logged_at));
+    
+    // Создаем таблицу
+    let html = `
+        <table class="history-table">
+            <thead>
+                <tr>
+                    <th>Дата и время</th>
+                    <th>Тикер</th>
+                    <th>Компания</th>
+                    <th>Цена</th>
+                    <th>Изменение</th>
+                    <th>Изменение %</th>
+                </tr>
+            </thead>
+            <tbody>`;
+    
+    allItems.forEach(item => {
+        const changeClass = item.change >= 0 ? 'positive' : 'negative';
+        html += `
+            <tr>
+                <td>${item.logged_at}</td>
+                <td><strong>${item.ticker}</strong></td>
+                <td>${item.company_name || '-'}</td>
+                <td class="price-cell"><strong>${formatCurrency(item.price)}</strong></td>
+                <td class="${changeClass}">${item.change >= 0 ? '+' : ''}${item.change.toFixed(2)} ₽</td>
+                <td class="${changeClass}">${item.change_percent >= 0 ? '+' : ''}${item.change_percent.toFixed(2)}%</td>
+            </tr>
+        `;
+    });
+    
+    html += '</tbody></table>';
     
     contentContainer.innerHTML = html;
 }
@@ -893,7 +1215,7 @@ function formatDate(dateString) {
 /**
  * Обновление фильтра тикеров
  */
-async function updateTickerFilter() {
+async function updateHistoryTickerFilter() {
     const tickerFilter = document.getElementById('history-ticker-filter');
     if (!tickerFilter) return;
     
@@ -969,18 +1291,43 @@ async function logPricesNow() {
     }
 }
 
+/**
+ * Сброс фильтров истории цен
+ */
+function resetHistoryFilters() {
+    const tickerFilter = document.getElementById('history-ticker-filter');
+    const dateFromFilter = document.getElementById('history-date-from');
+    const dateToFilter = document.getElementById('history-date-to');
+    
+    if (tickerFilter) tickerFilter.value = '';
+    if (dateFromFilter) dateFromFilter.value = '';
+    if (dateToFilter) dateToFilter.value = '';
+    
+    loadPriceHistory();
+}
+
 // Добавляем обработчики событий для фильтров истории
 document.addEventListener('DOMContentLoaded', function() {
     const tickerFilter = document.getElementById('history-ticker-filter');
-    const daysFilter = document.getElementById('history-days-filter');
+    const dateFromFilter = document.getElementById('history-date-from');
+    const dateToFilter = document.getElementById('history-date-to');
+    const resetFiltersBtn = document.getElementById('history-reset-filters');
     const manualLogBtn = document.getElementById('manual-log-btn');
     
     if (tickerFilter) {
         tickerFilter.addEventListener('change', loadPriceHistory);
     }
     
-    if (daysFilter) {
-        daysFilter.addEventListener('change', loadPriceHistory);
+    if (dateFromFilter) {
+        dateFromFilter.addEventListener('change', loadPriceHistory);
+    }
+    
+    if (dateToFilter) {
+        dateToFilter.addEventListener('change', loadPriceHistory);
+    }
+    
+    if (resetFiltersBtn) {
+        resetFiltersBtn.addEventListener('click', resetHistoryFilters);
     }
     
     if (manualLogBtn) {
@@ -1611,27 +1958,52 @@ function renderCategories(items) {
     items.forEach(item => {
         const row = document.createElement('tr');
         
-        // Создаем select с категориями
-        let categorySelect = `<select class="category-select" id="cat-select-${item.ticker}" data-ticker="${item.ticker}">`;
-        categorySelect += `<option value="">Не выбрано</option>`;
+        // Создаем ячейку с select и индикатором сохранения
+        const categoryCell = document.createElement('td');
+        categoryCell.style.position = 'relative';
         
+        // Создаем select с категориями
+        const select = document.createElement('select');
+        select.className = 'category-select';
+        select.id = `cat-select-${item.ticker}`;
+        select.dataset.ticker = item.ticker;
+        
+        // Добавляем опцию "Не выбрано"
+        const emptyOption = document.createElement('option');
+        emptyOption.value = '';
+        emptyOption.textContent = 'Не выбрано';
+        select.appendChild(emptyOption);
+        
+        // Добавляем остальные категории
         CATEGORIES.forEach(cat => {
-            const selected = item.category === cat ? 'selected' : '';
-            categorySelect += `<option value="${cat}" ${selected}>${cat}</option>`;
+            const option = document.createElement('option');
+            option.value = cat;
+            option.textContent = cat;
+            if (item.category === cat) {
+                option.selected = true;
+            }
+            select.appendChild(option);
         });
         
-        categorySelect += '</select>';
+        // Добавляем обработчик изменения
+        select.addEventListener('change', function() {
+            updateCategoryForTicker(item.ticker);
+        });
+        
+        // Создаем индикатор сохранения
+        const saveIndicator = document.createElement('span');
+        saveIndicator.id = `save-indicator-${item.ticker}`;
+        saveIndicator.className = 'save-indicator';
+        saveIndicator.style.marginLeft = '10px';
+        
+        categoryCell.appendChild(select);
+        categoryCell.appendChild(saveIndicator);
         
         row.innerHTML = `
             <td><strong>${item.ticker}</strong></td>
             <td>${item.company_name || '-'}</td>
-            <td>${categorySelect}</td>
-            <td>
-                <button class="category-save-btn" onclick="updateCategoryForTicker('${item.ticker}')" title="Сохранить">
-                    💾 Сохранить
-                </button>
-            </td>
         `;
+        row.appendChild(categoryCell);
         
         tbody.appendChild(row);
     });
@@ -1642,9 +2014,20 @@ function renderCategories(items) {
  */
 async function updateCategoryForTicker(ticker) {
     const selectEl = document.getElementById(`cat-select-${ticker}`);
+    const indicatorEl = document.getElementById(`save-indicator-${ticker}`);
+    
     if (!selectEl) return;
     
     const category = selectEl.value;
+    
+    // Показываем индикатор загрузки
+    if (indicatorEl) {
+        indicatorEl.textContent = '⏳';
+        indicatorEl.style.color = '#3498db';
+    }
+    
+    // Блокируем select на время сохранения
+    selectEl.disabled = true;
     
     try {
         const response = await fetch('/api/update-category', {
@@ -1661,16 +2044,91 @@ async function updateCategoryForTicker(ticker) {
         const data = await response.json();
         
         if (data.success) {
-            alert(`✅ Категория для ${ticker} успешно обновлена!`);
-            // Перезагружаем портфель, если он открыт
-            if (document.getElementById('btn-table-view').classList.contains('active')) {
-                loadPortfolio();
+            // Показываем галочку успеха
+            if (indicatorEl) {
+                indicatorEl.textContent = '✓';
+                indicatorEl.style.color = '#27ae60';
+                indicatorEl.style.fontWeight = 'bold';
+                indicatorEl.style.fontSize = '1.2em';
             }
+            
+            // Обновляем обе вкладки одновременно (портфель и диаграмму)
+            await updateAllCategoryViews();
+            
+            // Убираем индикатор через 2 секунды
+            setTimeout(() => {
+                if (indicatorEl) {
+                    indicatorEl.textContent = '';
+                }
+            }, 2000);
         } else {
-            alert('Ошибка: ' + data.error);
+            // Показываем ошибку
+            if (indicatorEl) {
+                indicatorEl.textContent = '✗';
+                indicatorEl.style.color = '#e74c3c';
+                indicatorEl.style.fontWeight = 'bold';
+                indicatorEl.style.fontSize = '1.2em';
+            }
+            console.error('Ошибка обновления категории:', data.error);
+            
+            // Убираем индикатор ошибки через 3 секунды
+            setTimeout(() => {
+                if (indicatorEl) {
+                    indicatorEl.textContent = '';
+                }
+            }, 3000);
         }
     } catch (error) {
         console.error('Ошибка обновления категории:', error);
-        alert('Ошибка при обновлении категории');
+        
+        // Показываем ошибку
+        if (indicatorEl) {
+            indicatorEl.textContent = '⚠';
+            indicatorEl.style.color = '#f39c12';
+            indicatorEl.style.fontWeight = 'bold';
+            indicatorEl.style.fontSize = '1.2em';
+        }
+        
+        // Убираем индикатор через 3 секунды
+        setTimeout(() => {
+            if (indicatorEl) {
+                indicatorEl.textContent = '';
+            }
+        }, 3000);
+    } finally {
+        // Разблокируем select
+        selectEl.disabled = false;
     }
 }
+
+// Закрытие модальных окон при клике вне их
+window.onclick = function(event) {
+    const buyModal = document.getElementById('buy-modal');
+    const sellModal = document.getElementById('sell-modal');
+    const editTransactionModal = document.getElementById('edit-transaction-modal');
+    
+    if (event.target === buyModal) {
+        closeBuyModal();
+    } else if (event.target === sellModal) {
+        closeSellModal();
+    } else if (event.target === editTransactionModal) {
+        closeEditTransactionModal();
+    }
+}
+
+// Закрытие модальных окон при нажатии ESC
+document.addEventListener('keydown', function(event) {
+    if (event.key === 'Escape') {
+        const buyModal = document.getElementById('buy-modal');
+        const sellModal = document.getElementById('sell-modal');
+        const editTransactionModal = document.getElementById('edit-transaction-modal');
+        
+        if (buyModal && buyModal.style.display === 'flex') {
+            closeBuyModal();
+        } else if (sellModal && sellModal.style.display === 'flex') {
+            closeSellModal();
+        } else if (editTransactionModal && editTransactionModal.style.display === 'flex') {
+            closeEditTransactionModal();
+        }
+    }
+});

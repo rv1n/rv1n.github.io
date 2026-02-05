@@ -659,7 +659,7 @@ header h1 {
     font-size: 1em;
     background-color: white;
     cursor: pointer;
-    transition: border-color 0.3s;
+    transition: all 0.3s;
     width: 100%;
     max-width: 300px;
 }
@@ -671,26 +671,19 @@ header h1 {
     box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
 }
 
-.category-save-btn {
-    background: linear-gradient(135deg, #27ae60 0%, #229954 100%);
-    color: white;
-    border: none;
-    padding: 8px 16px;
-    border-radius: 5px;
-    cursor: pointer;
-    font-size: 0.95em;
-    transition: transform 0.2s, box-shadow 0.2s;
-}
-
-.category-save-btn:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 5px 15px rgba(39, 174, 96, 0.3);
-}
-
-.category-save-btn:disabled {
-    background: #95a5a6;
+.category-select:disabled {
+    background-color: #f5f5f5;
     cursor: not-allowed;
-    transform: none;
+    opacity: 0.6;
+}
+
+.save-indicator {
+    display: inline-block;
+    margin-left: 10px;
+    font-size: 1.2em;
+    font-weight: bold;
+    transition: all 0.3s;
+    min-width: 20px;
 }
 
 .ticker-company-cell {
@@ -743,12 +736,18 @@ header h1 {
 }
 
 /* Переключатель представлений */
-.view-switcher {
+.view-controls {
     display: flex;
-    gap: 10px;
+    justify-content: space-between;
+    align-items: center;
     margin-bottom: 20px;
     border-bottom: 2px solid #e0e0e0;
     padding-bottom: 10px;
+}
+
+.view-switcher {
+    display: flex;
+    gap: 10px;
 }
 
 .view-btn {
@@ -954,11 +953,55 @@ header h1 {
     transform: scale(1.1);
 }
 
-.btn-sell {
+.btn-buy {
     background: linear-gradient(135deg, #27ae60 0%, #229954 100%);
-    color: white;
-    padding: 8px 12px;
-    font-size: 1.3em;
+    color: transparent;
+    padding: 0;
+    font-size: 0;
+    min-width: auto;
+    width: 45px;
+    height: 45px;
+    white-space: nowrap;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    cursor: pointer;
+    border: none;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(39, 174, 96, 0.3);
+    position: relative;
+    overflow: hidden;
+}
+
+.btn-buy::before {
+    content: '';
+    position: absolute;
+    width: 20px;
+    height: 20px;
+    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>');
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+}
+
+.btn-buy:hover {
+    background: linear-gradient(135deg, #229954 0%, #1e8449 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(39, 174, 96, 0.4);
+}
+
+.btn-buy:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 6px rgba(39, 174, 96, 0.3);
+}
+
+.btn-sell {
+    background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+    color: transparent;
+    padding: 0;
+    font-size: 0;
     min-width: auto;
     width: 40px;
     height: 40px;
@@ -967,15 +1010,35 @@ header h1 {
     display: flex;
     align-items: center;
     justify-content: center;
-    border-radius: 6px;
+    border-radius: 8px;
     cursor: pointer;
     border: none;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(231, 76, 60, 0.3);
+    position: relative;
+    overflow: hidden;
+}
+
+.btn-sell::before {
+    content: '';
+    position: absolute;
+    width: 18px;
+    height: 18px;
+    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>');
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
 }
 
 .btn-sell:hover {
-    background: linear-gradient(135deg, #229954 0%, #1e8449 100%);
-    transform: scale(1.1);
-    box-shadow: 0 5px 15px rgba(39, 174, 96, 0.3);
+    background: linear-gradient(135deg, #c0392b 0%, #a93226 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(231, 76, 60, 0.4);
+}
+
+.btn-sell:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 6px rgba(231, 76, 60, 0.3);
 }
 
 /* Таблица портфеля */
@@ -1167,13 +1230,23 @@ header h1 {
         text-align: left;
     }
     
+    .view-controls {
+        flex-direction: column;
+        gap: 10px;
+    }
+    
     .view-switcher {
         flex-direction: column;
+        width: 100%;
     }
     
     .view-btn {
         width: 100%;
         text-align: center;
+    }
+    
+    .btn-buy {
+        align-self: stretch;
     }
     
     .form-row {
@@ -1206,4 +1279,119 @@ header h1 {
     50% {
         opacity: 0.5;
     }
+}
+
+/* Переключатель типа диаграммы */
+.chart-type-toggle {
+    display: flex;
+    gap: 10px;
+    background: #f8f9fa;
+    padding: 5px;
+    border-radius: 8px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+.chart-toggle-btn {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: #7f8c8d;
+    font-size: 0.95em;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s;
+    white-space: nowrap;
+}
+
+.chart-toggle-btn:hover {
+    background: #e9ecef;
+    color: #2c3e50;
+}
+
+.chart-toggle-btn.active {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+}
+
+/* Круговая диаграмма категорий */
+.categories-pie-chart-container {
+    background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+    border-radius: 12px;
+    padding: 25px;
+    margin-bottom: 30px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+}
+
+.categories-pie-chart-container h4 {
+    color: #2c3e50;
+    font-size: 1.3em;
+    margin: 0 0 20px 0;
+}
+
+.categories-pie-chart {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 40px;
+    flex-wrap: wrap;
+}
+
+.pie-chart-svg {
+    filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.15));
+}
+
+.pie-chart-legend {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    max-width: 300px;
+}
+
+.pie-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 12px;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.08);
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.pie-legend-item:hover {
+    transform: translateX(5px);
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
+}
+
+.pie-legend-color {
+    width: 20px;
+    height: 20px;
+    border-radius: 4px;
+    flex-shrink: 0;
+}
+
+.pie-legend-details {
+    flex: 1;
+    min-width: 0;
+}
+
+.pie-legend-name {
+    font-weight: 600;
+    color: #2c3e50;
+    font-size: 0.95em;
+    margin-bottom: 2px;
+}
+
+.pie-legend-value {
+    color: #7f8c8d;
+    font-size: 0.85em;
+}
+
+.pie-legend-percentage {
+    font-weight: 600;
+    color: #667eea;
+    font-size: 0.95em;
+    white-space: nowrap;
 }

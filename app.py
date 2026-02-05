@@ -83,27 +83,33 @@ def get_portfolio():
                 # Если транзакций нет, используем цену из портфеля
                 calculated_avg_price = item.average_buy_price
             
-            # Получаем последнюю цену из истории для расчета изменения
-            last_history_entry = db_session.query(PriceHistory).filter(
+            # Получаем последние две цены из истории для расчета изменения
+            last_two_entries = db_session.query(PriceHistory).filter(
                 PriceHistory.ticker == item.ticker
-            ).order_by(PriceHistory.logged_at.desc()).first()
+            ).order_by(PriceHistory.logged_at.desc()).limit(2).all()
             
-            # Рассчитываем изменение: последняя залогированная цена - цена покупки
-            if last_history_entry and calculated_avg_price > 0:
-                last_logged_price = last_history_entry.price
-                price_change = last_logged_price - calculated_avg_price
-                price_change_percent = (price_change / calculated_avg_price * 100) if calculated_avg_price > 0 else 0
+            # Рассчитываем изменение: разница между последними двумя записями в истории цен
+            if len(last_two_entries) >= 2:
+                latest_price = last_two_entries[0].price
+                previous_price = last_two_entries[1].price
+                price_change = latest_price - previous_price
+                price_change_percent = (price_change / previous_price * 100) if previous_price > 0 else 0
+            elif len(last_two_entries) == 1:
+                # Если есть только одна запись, изменение = 0
+                latest_price = last_two_entries[0].price
+                price_change = 0
+                price_change_percent = 0
             else:
                 # Если истории нет, изменение = 0
-                last_logged_price = calculated_avg_price  # используем цену покупки как базу
+                latest_price = calculated_avg_price
                 price_change = 0
                 price_change_percent = 0
             
-            # Расчеты прибыли/убытка (используем ту же логику - относительно последней залогированной цены)
-            total_logged_value = item.quantity * last_logged_price
+            # Расчеты прибыли/убытка относительно ТЕКУЩЕЙ цены (с MOEX API)
+            total_current_value = item.quantity * current_price
             total_buy_cost = item.quantity * calculated_avg_price
-            profit_loss = total_logged_value - total_buy_cost
-            profit_loss_percent = price_change_percent  # то же самое, что и изменение в процентах
+            profit_loss = total_current_value - total_buy_cost
+            profit_loss_percent = ((current_price - calculated_avg_price) / calculated_avg_price * 100) if calculated_avg_price > 0 else 0
             
             result.append({
                 'id': item.id,
@@ -115,7 +121,7 @@ def get_portfolio():
                 'current_price': current_price,
                 'price_change': price_change,
                 'price_change_percent': price_change_percent,
-                'total_cost': total_logged_value,  # стоимость по последней залогированной цене
+                'total_cost': total_current_value,  # стоимость по текущей цене
                 'total_buy_cost': total_buy_cost,
                 'profit_loss': profit_loss,
                 'profit_loss_percent': profit_loss_percent,
@@ -644,24 +650,39 @@ def get_price_history():
     
     Query параметры:
     - ticker: тикер акции (опционально, если не указан - все тикеры)
-    - days: количество дней истории (по умолчанию 30)
+    - days: количество дней истории (по умолчанию 30, если не указаны даты)
+    - date_from: дата начала (формат: YYYY-MM-DD)
+    - date_to: дата окончания (формат: YYYY-MM-DD)
     """
     try:
         ticker = request.args.get('ticker')
-        days = request.args.get('days', 30, type=int)
+        days = request.args.get('days', type=int)
+        date_from = request.args.get('date_from')
+        date_to = request.args.get('date_to')
+        
+        # Определяем параметры фильтрации
+        filter_params = {}
+        if date_from:
+            filter_params['date_from'] = date_from
+        if date_to:
+            filter_params['date_to'] = date_to
+        if not date_from and not date_to and days:
+            filter_params['days'] = days
+        elif not date_from and not date_to:
+            filter_params['days'] = 30  # По умолчанию 30 дней
         
         if ticker:
             # История для конкретного тикера
-            history = price_logger.get_price_history(ticker=ticker, days=days)
+            history = price_logger.get_price_history(ticker=ticker, **filter_params)
         else:
             # История для всех тикеров, сгруппированная по датам
-            history = price_logger.get_price_history_grouped(days=days)
+            history = price_logger.get_price_history_grouped(**filter_params)
         
         return jsonify({
             'success': True,
             'history': history,
             'ticker': ticker,
-            'days': days
+            'filters': filter_params
         })
         
     except Exception as e:
