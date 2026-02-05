@@ -653,12 +653,14 @@ def get_price_history():
     - days: количество дней истории (по умолчанию 30, если не указаны даты)
     - date_from: дата начала (формат: YYYY-MM-DD)
     - date_to: дата окончания (формат: YYYY-MM-DD)
+    - limit: максимальное количество записей (опционально)
     """
     try:
         ticker = request.args.get('ticker')
         days = request.args.get('days', type=int)
         date_from = request.args.get('date_from')
         date_to = request.args.get('date_to')
+        limit = request.args.get('limit', type=int)
         
         # Определяем параметры фильтрации
         filter_params = {}
@@ -670,6 +672,9 @@ def get_price_history():
             filter_params['days'] = days
         elif not date_from and not date_to:
             filter_params['days'] = 30  # По умолчанию 30 дней
+        
+        if limit:
+            filter_params['limit'] = limit
         
         if ticker:
             # История для конкретного тикера

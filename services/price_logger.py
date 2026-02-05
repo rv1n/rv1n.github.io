@@ -98,7 +98,7 @@ class PriceLogger:
             print(f"[{datetime.now(self.moscow_tz)}] Ошибка при логировании цен: {e}")
             db_session.rollback()
     
-    def get_price_history(self, ticker=None, days=None, date_from=None, date_to=None):
+    def get_price_history(self, ticker=None, days=None, date_from=None, date_to=None, limit=None):
         """
         Получить историю цен
         
@@ -107,6 +107,7 @@ class PriceLogger:
             days: Количество дней истории (если не указаны date_from/date_to)
             date_from: Дата начала (формат: YYYY-MM-DD)
             date_to: Дата окончания (формат: YYYY-MM-DD)
+            limit: Максимальное количество записей (опционально)
             
         Returns:
             Список записей истории цен
@@ -137,6 +138,10 @@ class PriceLogger:
             
             # Сортируем по дате (от новых к старым)
             query = query.order_by(PriceHistory.logged_at.desc())
+            
+            # Применяем limit, если указан
+            if limit:
+                query = query.limit(limit)
             
             results = query.all()
             

@@ -1,15 +1,18 @@
 /**
  * Главный JavaScript файл для управления портфелем акций MOEX
- * Обновление данных только по кнопке "Обновить"
+ * Полное обновление - по кнопке "Обновить"
+ * Колонка "Изменение" обновляется после записи цен (вручную или в 0:00)
  */
 
-// Автообновление отключено - только ручное обновление
+// Обновление колонки "Изменение" после записи цен
 let previousPrices = {}; // Хранение предыдущих цен для отслеживания изменений
 let tickerValidationTimeout = null; // Таймаут для валидации тикера
 let lastValidatedTicker = ''; // Последний валидированный тикер
 let categoriesChanged = false; // Флаг изменения категорий
 let currentPortfolioData = null; // Текущие данные портфеля
 let currentChartType = localStorage.getItem('chartType') || 'pie'; // Текущий тип диаграммы (pie/bar)
+let lastPriceLogCheck = null; // Последняя проверка записи цен
+let priceLogCheckInterval = null; // Интервал проверки новых записей цен
 
 /**
  * Инициализация приложения при загрузке страницы
@@ -17,7 +20,7 @@ let currentChartType = localStorage.getItem('chartType') || 'pie'; // Текущ
 document.addEventListener('DOMContentLoaded', function() {
     loadPortfolio();
     setupEventListeners();
-    // Автообновление отключено - только ручное обновление кнопкой
+    startPriceLogMonitoring(); // Запускаем мониторинг новых записей цен
 });
 
 /**
@@ -125,6 +128,61 @@ async function loadPortfolio(silent = false) {
         if (!silent) {
             showError('Ошибка соединения с сервером');
         }
+    }
+}
+
+/**
+ * Запуск мониторинга новых записей цен
+ * Проверяет каждые 60 секунд, были ли записаны новые цены (например, в 0:00)
+ */
+function startPriceLogMonitoring() {
+    // Останавливаем предыдущий интервал, если он есть
+    if (priceLogCheckInterval) {
+        clearInterval(priceLogCheckInterval);
+    }
+    
+    // Проверяем каждые 60 секунд
+    priceLogCheckInterval = setInterval(() => {
+        checkForNewPriceLogs();
+    }, 60000); // 60 секунд
+    
+    console.log('Мониторинг новых записей цен запущен (каждые 60 сек)');
+}
+
+/**
+ * Проверка наличия новых записей цен
+ */
+async function checkForNewPriceLogs() {
+    try {
+        const response = await fetch('/api/price-history?limit=1');
+        if (!response.ok) return;
+        
+        const data = await response.json();
+        
+        if (data.history && data.history.length > 0) {
+            const latestLog = data.history[0];
+            const latestTimestamp = new Date(latestLog.timestamp).getTime();
+            
+            // Если это первая проверка, просто сохраняем timestamp
+            if (lastPriceLogCheck === null) {
+                lastPriceLogCheck = latestTimestamp;
+                return;
+            }
+            
+            // Если есть новая запись - обновляем портфель
+            if (latestTimestamp > lastPriceLogCheck) {
+                console.log('Обнаружена новая запись цен, обновляем портфель');
+                lastPriceLogCheck = latestTimestamp;
+                
+                // Обновляем портфель, если находимся на вкладке "Мой портфель"
+                const tableView = document.getElementById('table-view');
+                if (tableView && tableView.style.display !== 'none') {
+                    loadPortfolio();
+                }
+            }
+        }
+    } catch (error) {
+        console.error('Ошибка проверки новых записей цен:', error);
     }
 }
 
@@ -1267,9 +1325,10 @@ async function logPricesNow() {
         
         if (data.success) {
             btn.textContent = '✅ Готово!';
-            // Перезагружаем историю
+            // Перезагружаем историю и портфель (колонка "Изменение")
             setTimeout(() => {
                 loadPriceHistory();
+                loadPortfolio(); // Обновляем портфель для актуализации колонки "Изменение"
                 btn.textContent = originalText;
                 btn.disabled = false;
             }, 1000);

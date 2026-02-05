@@ -1315,6 +1315,19 @@ header h1 {
     box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
 }
 
+/* Анимация изменения цены */
+@keyframes price-flash {
+    0% {
+        background-color: rgba(52, 152, 219, 0.3);
+    }
+    50% {
+        background-color: rgba(52, 152, 219, 0.6);
+    }
+    100% {
+        background-color: transparent;
+    }
+}
+
 /* Круговая диаграмма категорий */
 .categories-pie-chart-container {
     background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
