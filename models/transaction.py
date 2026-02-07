@@ -1,8 +1,9 @@
 """
-Модель для хранения истории покупок/продаж акций
+Модель для хранения истории покупок/продаж инструментов
 """
 from sqlalchemy import Column, Integer, String, Float, DateTime, Enum
 from models.database import Base
+from models.portfolio import InstrumentType
 from datetime import datetime
 import enum
 
@@ -15,7 +16,7 @@ class TransactionType(enum.Enum):
 
 class Transaction(Base):
     """
-    Модель для хранения истории покупок и продаж акций
+    Модель для хранения истории покупок и продаж инструментов
     
     Содержит всю информацию о совершённых операциях
     """
@@ -29,6 +30,7 @@ class Transaction(Base):
     price = Column(Float, nullable=False)
     quantity = Column(Float, nullable=False)
     total = Column(Float, nullable=False)  # Сумма = цена * количество
+    instrument_type = Column(Enum(InstrumentType), nullable=False, default=InstrumentType.STOCK)  # Тип инструмента
     notes = Column(String(500))  # Дополнительные заметки
     
     def __repr__(self):
@@ -45,5 +47,6 @@ class Transaction(Base):
             'price': self.price,
             'quantity': self.quantity,
             'total': self.total,
+            'instrument_type': self.instrument_type.value if self.instrument_type else 'Акция',
             'notes': self.notes
         }

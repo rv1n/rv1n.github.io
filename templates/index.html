@@ -17,6 +17,20 @@
                 <button id="refresh-btn" class="btn btn-refresh" onclick="manualRefresh()" title="Обновить данные">
                     🔄 Обновить
                 </button>
+                <!-- Кнопка «сэндвич» с меню -->
+                <div class="menu-wrapper">
+                    <button id="menu-toggle" class="btn btn-menu" type="button" onclick="toggleMainMenu()" title="Дополнительные разделы">
+                        ☰
+                    </button>
+                    <div id="main-menu" class="dropdown-menu">
+                        <button type="button" class="dropdown-item" onclick="switchView('history'); closeMainMenu();">
+                            📜 История цен
+                        </button>
+                        <button type="button" class="dropdown-item" onclick="switchView('categories'); closeMainMenu();">
+                            🏷️ Категории и виды
+                        </button>
+                    </div>
+                </div>
             </div>
         </header>
 
@@ -47,12 +61,6 @@
                     <button id="btn-chart-view" class="view-btn" onclick="switchView('chart')">
                         📈 Распределение по категориям
                     </button>
-                    <button id="btn-history-view" class="view-btn" onclick="switchView('history')">
-                        📜 История цен
-                    </button>
-                    <button id="btn-categories-view" class="view-btn" onclick="switchView('categories')">
-                        🏷️ Категории
-                    </button>
                 </div>
                 <button id="buy-btn" class="btn btn-buy" onclick="openBuyModal()" title="Купить акции"></button>
             </div>
@@ -62,17 +70,24 @@
             
             <!-- Представление таблицы портфеля -->
             <div id="table-view" class="portfolio-view active">
+                <!-- Фильтры портфеля -->
+                <div class="history-controls" style="margin-bottom: 15px;">
+                    <select id="portfolio-type-filter" class="history-filter">
+                        <option value="">Все типы</option>
+                        <option value="Акция">Акции</option>
+                        <option value="Облигация">Облигации</option>
+                    </select>
+                </div>
+                
                 <table class="portfolio-table" id="portfolio-table" style="display: none;">
                     <thead>
                         <tr>
-                            <th>Тикер</th>
-                            <th>Компания</th>
-                            <th>Категория</th>
-                            <th>Количество</th>
-                            <th>Цена сейчас</th>
-                            <th>Изменение</th>
+                            <th>Актив</th>
                             <th>Цена покупки</th>
-                            <th>Общая стоимость</th>
+                            <th>Количество</th>
+                            <th>Сумма актива</th>
+                            <th>Текущая цена</th>
+                            <th>Изменение</th>
                             <th>P/L ₽</th>
                             <th>P/L %</th>
                             <th>Действия</th>
@@ -115,6 +130,37 @@
                         </div>
                     </div>
                 </div>
+                
+                <!-- Диаграмма распределения по видам активов -->
+                <div class="category-chart-container" style="margin-top: 40px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                        <h3 style="margin: 0;">Распределение портфеля по видам активов</h3>
+                        
+                        <!-- Переключатель типа диаграммы -->
+                        <div class="chart-type-toggle">
+                            <button id="asset-type-chart-toggle-pie" class="chart-toggle-btn active" onclick="switchAssetTypeChartType('pie')">
+                                🥧 Круговая
+                            </button>
+                            <button id="asset-type-chart-toggle-bar" class="chart-toggle-btn" onclick="switchAssetTypeChartType('bar')">
+                                📊 Столбчатая
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Круговая диаграмма -->
+                    <div id="asset-type-pie-chart-container" class="categories-pie-chart-container" style="display: block;">
+                        <div id="asset-type-pie-chart" class="categories-pie-chart">
+                            <!-- Диаграмма загружается через JavaScript -->
+                        </div>
+                    </div>
+                    
+                    <!-- Столбчатая диаграмма -->
+                    <div id="asset-type-chart-container" style="display: none;">
+                        <div id="asset-type-chart" class="category-chart">
+                            <!-- Диаграмма загружается через JavaScript -->
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <!-- Представление истории цен -->
@@ -141,8 +187,15 @@
             <div id="categories-view" class="portfolio-view" style="display: none;">
                 <div class="categories-container">
                     <div class="categories-header">
-                        <h3>Управление категориями</h3>
-                        <p class="categories-description">Назначьте категорию для каждого тикера в вашем портфеле</p>
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <h3>Управление категориями и видами</h3>
+                                <p class="categories-description">Назначьте категорию и вид актива для каждого тикера в вашем портфеле</p>
+                            </div>
+                            <button id="manage-categories-btn" class="btn btn-secondary" style="margin-left: 20px;">
+                                ⚙️ Управление категориями и видами
+                            </button>
+                        </div>
                     </div>
                     
                     <!-- Таблица категорий -->
@@ -153,6 +206,7 @@
                                     <th>Тикер</th>
                                     <th>Компания</th>
                                     <th>Категория</th>
+                                    <th>Вид актива</th>
                                 </tr>
                             </thead>
                             <tbody id="categories-tbody">
@@ -252,7 +306,7 @@
                 </div>
                 <div class="form-group">
                     <label for="edit-average_buy_price">Цена покупки *</label>
-                    <input type="number" id="edit-average_buy_price" name="average_buy_price" required min="0.01" step="0.01">
+                    <input type="number" id="edit-average_buy_price" name="average_buy_price" required min="0.00001" step="0.00001">
                 </div>
                 <div class="form-group">
                     <button type="submit" class="btn btn-primary">Сохранить</button>
@@ -273,6 +327,13 @@
                     <input type="datetime-local" id="trans-add-date" name="date" required>
                 </div>
                 <div class="form-group">
+                    <label for="trans-add-instrument-type">Тип инструмента *</label>
+                    <select id="trans-add-instrument-type" name="instrument_type" required>
+                        <option value="STOCK">Акция</option>
+                        <option value="BOND">Облигация</option>
+                    </select>
+                </div>
+                <div class="form-group">
                     <label for="trans-add-ticker">Тикер *</label>
                     <input type="text" id="trans-add-ticker" name="ticker" required>
                 </div>
@@ -290,7 +351,7 @@
                 </div>
                 <div class="form-group">
                     <label for="trans-add-price">Цена *</label>
-                    <input type="number" id="trans-add-price" name="price" required min="0.01" step="0.01">
+                    <input type="number" id="trans-add-price" name="price" required min="0.00001" step="0.00001">
                 </div>
                 <div class="form-group">
                     <label for="trans-add-quantity">Количество *</label>
@@ -340,7 +401,7 @@
                 </div>
                 <div class="form-group">
                     <label for="trans-edit-price">Цена *</label>
-                    <input type="number" id="trans-edit-price" name="price" required min="0.01" step="0.01">
+                    <input type="number" id="trans-edit-price" name="price" required min="0.00001" step="0.00001">
                 </div>
                 <div class="form-group">
                     <label for="trans-edit-quantity">Количество *</label>
@@ -366,8 +427,15 @@
     <div id="buy-modal" class="modal" style="display: none;">
         <div class="modal-content">
             <span class="close" onclick="closeBuyModal()">&times;</span>
-            <h2>➕ Купить акции</h2>
+            <h2>➕ Купить инструмент</h2>
             <form id="buy-form">
+                <div class="form-group">
+                    <label for="buy-instrument-type">Тип инструмента *</label>
+                    <select id="buy-instrument-type" name="instrument_type" required>
+                        <option value="STOCK">Акция</option>
+                        <option value="BOND">Облигация</option>
+                    </select>
+                </div>
                 <div class="form-group">
                     <label for="buy-ticker">Тикер *</label>
                     <div class="ticker-input-container">
@@ -386,7 +454,7 @@
                 </div>
                 <div class="form-group">
                     <label for="buy-price">Цена покупки *</label>
-                    <input type="number" id="buy-price" name="price" required min="0.01" step="0.01">
+                    <input type="number" id="buy-price" name="price" required min="0.00001" step="0.00001">
                 </div>
                 <div class="form-group">
                     <label for="buy-total">Сумма покупки</label>
@@ -427,7 +495,7 @@
                 </div>
                 <div class="form-group">
                     <label for="sell-price">Цена продажи *</label>
-                    <input type="number" id="sell-price" name="price" required min="0.01" step="0.01" placeholder="0.00">
+                    <input type="number" id="sell-price" name="price" required min="0.00001" step="0.00001" placeholder="0.00000">
                 </div>
                 <div class="form-group">
                     <label for="sell-total">Сумма продажи</label>
@@ -436,6 +504,114 @@
                 <div class="modal-buttons">
                     <button type="submit" class="btn btn-primary">Продать</button>
                     <button type="button" class="btn btn-secondary" onclick="closeSellModal()">Отмена</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Модальное окно для управления категориями -->
+    <div id="manage-categories-modal" class="modal" style="display: none;">
+        <div class="modal-content manage-categories-content" style="max-width: 800px;">
+            <span class="close" onclick="closeManageCategoriesModal()">&times;</span>
+            <h2>⚙️ Управление категориями и видами</h2>
+            
+            <!-- Вкладки для переключения между категориями и видами -->
+            <div style="display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 2px solid #ecf0f1;">
+                <button id="tab-categories" class="tab-button active" onclick="switchManageTab('categories')" style="padding: 10px 20px; border: none; background: none; cursor: pointer; border-bottom: 2px solid #667eea; margin-bottom: -2px;">
+                    Категории
+                </button>
+                <button id="tab-asset-types" class="tab-button" onclick="switchManageTab('asset-types')" style="padding: 10px 20px; border: none; background: none; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px;">
+                    Виды активов
+                </button>
+            </div>
+            
+            <!-- Контейнер для категорий -->
+            <div id="categories-tab-content">
+                <div style="margin-bottom: 20px;">
+                    <button id="add-category-btn" class="btn btn-primary" style="width: 100%; margin-bottom: 15px;" title="Добавить категорию">
+                        ➕
+                    </button>
+                </div>
+                <div id="categories-list-container">
+                    <table class="categories-table" style="width: 100%;">
+                        <thead>
+                            <tr>
+                                <th>Название</th>
+                                <th>Действия</th>
+                            </tr>
+                        </thead>
+                        <tbody id="manage-categories-tbody">
+                            <!-- Категории загружаются через JavaScript -->
+                        </tbody>
+                    </table>
+                    <div id="no-categories-manage" class="no-data-message" style="display: none;">
+                        <p>📁 Категории не найдены</p>
+                        <p>Нажмите "➕ Добавить категорию" для создания первой категории</p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Контейнер для видов активов -->
+            <div id="asset-types-tab-content" style="display: none;">
+                <div style="margin-bottom: 20px;">
+                    <button id="add-asset-type-btn" class="btn btn-primary" style="width: 100%; margin-bottom: 15px;" title="Добавить вид актива">
+                        ➕
+                    </button>
+                </div>
+                <div id="asset-types-list-container">
+                    <table class="categories-table" style="width: 100%;">
+                        <thead>
+                            <tr>
+                                <th>Название</th>
+                                <th>Действия</th>
+                            </tr>
+                        </thead>
+                        <tbody id="manage-asset-types-tbody">
+                            <!-- Виды активов загружаются через JavaScript -->
+                        </tbody>
+                    </table>
+                    <div id="no-asset-types-manage" class="no-data-message" style="display: none;">
+                        <p>📁 Виды активов не найдены</p>
+                        <p>Нажмите "➕ Добавить вид актива" для создания первого вида</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно для добавления/редактирования категории -->
+    <div id="category-edit-modal" class="modal" style="display: none;">
+        <div class="modal-content" style="max-width: 400px;">
+            <span class="close" onclick="closeCategoryEditModal()">&times;</span>
+            <h2 id="category-edit-title">➕ Добавить категорию</h2>
+            <form id="category-edit-form">
+                <input type="hidden" id="category-edit-id">
+                <div class="form-group">
+                    <label for="category-edit-name">Название категории *</label>
+                    <input type="text" id="category-edit-name" name="name" required maxlength="100">
+                </div>
+                <div class="modal-buttons">
+                    <button type="submit" class="btn btn-primary">Сохранить</button>
+                    <button type="button" class="btn btn-secondary" onclick="closeCategoryEditModal()">Отмена</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Модальное окно для добавления/редактирования вида актива -->
+    <div id="asset-type-edit-modal" class="modal" style="display: none;">
+        <div class="modal-content" style="max-width: 400px;">
+            <span class="close" onclick="closeAssetTypeEditModal()">&times;</span>
+            <h2 id="asset-type-edit-title">➕ Добавить вид актива</h2>
+            <form id="asset-type-edit-form">
+                <input type="hidden" id="asset-type-edit-id">
+                <div class="form-group">
+                    <label for="asset-type-edit-name">Название вида актива *</label>
+                    <input type="text" id="asset-type-edit-name" name="name" required maxlength="100">
+                </div>
+                <div class="modal-buttons">
+                    <button type="submit" class="btn btn-primary">Сохранить</button>
+                    <button type="button" class="btn btn-secondary" onclick="closeAssetTypeEditModal()">Отмена</button>
                 </div>
             </form>
         </div>

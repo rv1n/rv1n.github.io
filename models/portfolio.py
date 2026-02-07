@@ -1,9 +1,16 @@
 """
 Модель портфеля для хранения информации об активах
 """
-from sqlalchemy import Column, Integer, String, Float, DateTime
+from sqlalchemy import Column, Integer, String, Float, DateTime, Enum
 from datetime import datetime
 from models.database import Base
+import enum
+
+
+class InstrumentType(enum.Enum):
+    """Типы финансовых инструментов"""
+    STOCK = "Акция"
+    BOND = "Облигация"
 
 
 class Portfolio(Base):
@@ -12,11 +19,13 @@ class Portfolio(Base):
     
     Attributes:
         id: Уникальный идентификатор
-        ticker: Тикер акции (например, SBER, GAZP)
-        company_name: Название компании
-        quantity: Количество акций
+        ticker: Тикер инструмента (например, SBER, GAZP, SU26238RMFS4)
+        company_name: Название компании/эмитента
+        quantity: Количество инструментов
         average_buy_price: Средняя цена покупки
         category: Категория (сектор экономики)
+        asset_type: Вид актива
+        instrument_type: Тип инструмента (акция/облигация)
         date_added: Дата добавления в портфель
     """
     __tablename__ = 'portfolio'
@@ -27,6 +36,8 @@ class Portfolio(Base):
     quantity = Column(Float, nullable=False)
     average_buy_price = Column(Float, nullable=False)
     category = Column(String(100), nullable=True)  # Категория (сектор)
+    asset_type = Column(String(100), nullable=True)  # Вид актива
+    instrument_type = Column(Enum(InstrumentType), nullable=False, default=InstrumentType.STOCK)  # Тип инструмента
     date_added = Column(DateTime, default=datetime.now)
     
     def __repr__(self):

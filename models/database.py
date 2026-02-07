@@ -23,4 +23,6 @@ def init_db():
     from models.portfolio import Portfolio
     from models.price_history import PriceHistory
     from models.transaction import Transaction
+    from models.category import Category
+    from models.asset_type import AssetType
     Base.metadata.create_all(bind=engine)

@@ -8,16 +8,34 @@
 let previousPrices = {}; // Хранение предыдущих цен для отслеживания изменений
 let tickerValidationTimeout = null; // Таймаут для валидации тикера
 let lastValidatedTicker = ''; // Последний валидированный тикер
+let isMainMenuOpen = false;   // Состояние выпадающего меню в шапке
+
+function toggleMainMenu() {
+    const menu = document.getElementById('main-menu');
+    if (!menu) return;
+    isMainMenuOpen = !isMainMenuOpen;
+    menu.classList.toggle('open', isMainMenuOpen);
+}
+
+function closeMainMenu() {
+    const menu = document.getElementById('main-menu');
+    if (!menu) return;
+    isMainMenuOpen = false;
+    menu.classList.remove('open');
+}
 let categoriesChanged = false; // Флаг изменения категорий
 let currentPortfolioData = null; // Текущие данные портфеля
 let currentChartType = localStorage.getItem('chartType') || 'pie'; // Текущий тип диаграммы (pie/bar)
+let currentAssetTypeChartType = localStorage.getItem('assetTypeChartType') || 'pie'; // Текущий тип диаграммы видов активов (pie/bar)
 let lastPriceLogCheck = null; // Последняя проверка записи цен
 let priceLogCheckInterval = null; // Интервал проверки новых записей цен
 
 /**
  * Инициализация приложения при загрузке страницы
  */
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', async function() {
+    await loadCategoriesList(); // Загружаем список категорий из API
+    await loadAssetTypesList(); // Загружаем список видов активов из API
     loadPortfolio();
     setupEventListeners();
     startPriceLogMonitoring(); // Запускаем мониторинг новых записей цен
@@ -221,9 +239,24 @@ function displayPortfolio(portfolio, summary) {
     const tbody = document.getElementById('portfolio-tbody');
     tbody.innerHTML = '';
     
-    if (portfolio.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="11" style="text-align: center; padding: 40px; color: #7f8c8d;">Портфель пуст. Добавьте первую позицию.</td></tr>';
-        previousPrices = {}; // Очищаем сохраненные цены
+    // Получаем выбранный фильтр типа инструмента
+    const typeFilter = document.getElementById('portfolio-type-filter');
+    const selectedType = typeFilter ? typeFilter.value : '';
+    
+    // Фильтруем портфель по типу инструмента
+    let filteredPortfolio = portfolio;
+    if (selectedType) {
+        filteredPortfolio = portfolio.filter(item => item.instrument_type === selectedType);
+    }
+    
+    if (filteredPortfolio.length === 0) {
+        const message = selectedType ? 
+            `Нет инструментов типа "${selectedType}"` : 
+            'Портфель пуст. Добавьте первую позицию.';
+        tbody.innerHTML = `<tr><td colspan="9" style="text-align: center; padding: 40px; color: #7f8c8d;">${message}</td></tr>`;
+        if (portfolio.length === 0) {
+            previousPrices = {}; // Очищаем сохраненные цены только если портфель действительно пуст
+        }
         return;
     }
     
@@ -235,7 +268,7 @@ function displayPortfolio(portfolio, summary) {
     // Получаем общую стоимость портфеля для расчета процентов
     const totalPortfolioValue = summary.total_value || 0;
     
-    portfolio.forEach(item => {
+    filteredPortfolio.forEach(item => {
         const row = createPortfolioRow(item, totalPortfolioValue);
         tbody.appendChild(row);
     });
@@ -279,26 +312,52 @@ function createPortfolioRow(item, totalPortfolioValue = 0) {
     const pnlPercentClass = item.profit_loss_percent >= 0 ? 'profit' : 'loss';
     const changeClass = item.price_change >= 0 ? 'profit' : 'loss';
     
-    // Рассчитываем процент от общего портфеля
-    const totalValue = item.quantity * item.current_price;
+    // Определяем, является ли инструмент облигацией
+    const isBond = item.instrument_type === 'Облигация';
+    const bondNominal = 1000; // Номинал большинства облигаций MOEX
+
+    // Эффективная цена в рублях:
+    // Для акций: как есть
+    // Для облигаций: цена на MOEX указывается в % от номинала, поэтому переводим в рубли
+    const effectivePrice = isBond
+        ? (item.current_price * bondNominal) / 100
+        : item.current_price;
+
+    // Рассчитываем процент от общего портфеля, используя цену в рублях
+    const totalValue = item.quantity * effectivePrice;
     const portfolioPercent = totalPortfolioValue > 0 ? (totalValue / totalPortfolioValue * 100).toFixed(2) : 0;
     
+    // Разметка для колонки "Цена сейчас"
+    // Для акций отображаем только цену в рублях
+    // Для облигаций – в рублях и в процентах (как в колонке "Общая стоимость")
+    const priceCellHtml = isBond
+        ? `
+            <div style="display: flex; flex-direction: column; align-items: flex-start;">
+                <strong>${formatCurrentPrice(effectivePrice)}</strong>
+                <span style="font-size: 0.85em; color: #7f8c8d;">${item.current_price.toFixed(2)}%</span>
+            </div>
+        `
+        : `<strong>${formatCurrentPrice(effectivePrice)}</strong>`;
+    
     row.innerHTML = `
-        <td><strong>${item.ticker}</strong></td>
-        <td>${item.company_name || item.ticker}</td>
-        <td><span class="category-badge">${item.category || '-'}</span></td>
-        <td>${formatNumber(item.quantity)}</td>
-        <td><strong>${formatCurrency(item.current_price)}</strong></td>
-        <td class="${changeClass}">
-            ${item.price_change >= 0 ? '+' : ''}${formatCurrency(item.price_change)} 
-            (${item.price_change_percent >= 0 ? '+' : ''}${item.price_change_percent.toFixed(2)}%)
+        <td>
+            <div class="ticker-company-cell">
+                <span class="ticker-company-name">${item.company_name || item.ticker}</span>
+                <span class="ticker-company-ticker">${item.ticker}</span>
+            </div>
         </td>
         <td>${formatCurrency(item.average_buy_price)}</td>
+        <td>${formatNumber(item.quantity)}</td>
         <td>
             <div style="display: flex; flex-direction: column; align-items: flex-start;">
                 <strong>${formatCurrency(totalValue)}</strong>
                 <span style="font-size: 0.85em; color: #7f8c8d;">${portfolioPercent}%</span>
             </div>
+        </td>
+        <td>${priceCellHtml}</td>
+        <td class="${changeClass}">
+            ${item.price_change >= 0 ? '+' : ''}${formatCurrency(item.price_change)} 
+            (${item.price_change_percent >= 0 ? '+' : ''}${item.price_change_percent.toFixed(2)}%)
         </td>
         <td class="${pnlClass}">
             ${item.profit_loss >= 0 ? '+' : ''}${formatCurrency(item.profit_loss)}
@@ -434,6 +493,7 @@ async function validateBuyTicker(ticker) {
     const statusEl = document.getElementById('buy-ticker-status');
     const hintEl = document.getElementById('buy-ticker-hint');
     const companyNameInput = document.getElementById('buy-company-name');
+    const instrumentTypeSelect = document.getElementById('buy-instrument-type');
     
     if (!statusEl || !hintEl || !companyNameInput) {
         console.error('Не найдены необходимые элементы формы покупки');
@@ -441,7 +501,8 @@ async function validateBuyTicker(ticker) {
     }
     
     try {
-        const response = await fetch(`/api/validate-ticker/${ticker}`);
+        const instrumentType = instrumentTypeSelect ? instrumentTypeSelect.value : 'STOCK';
+        const response = await fetch(`/api/validate-ticker/${ticker}?instrument_type=${instrumentType}`);
         const data = await response.json();
         
         if (data.success && data.exists) {
@@ -558,6 +619,7 @@ async function handleBuy(e) {
     const quantity = parseFloat(document.getElementById('buy-quantity').value);
     const price = parseFloat(document.getElementById('buy-price').value);
     const companyName = document.getElementById('buy-company-name').value.trim();
+    const instrumentType = document.getElementById('buy-instrument-type').value;
     
     if (!ticker || quantity <= 0 || price <= 0) {
         alert('Заполните все обязательные поля корректно');
@@ -572,6 +634,7 @@ async function handleBuy(e) {
             operation_type: 'Покупка',
             price: price,
             quantity: quantity,
+            instrument_type: instrumentType,
             notes: 'Покупка через модальное окно'
         };
         
@@ -595,7 +658,8 @@ async function handleBuy(e) {
             ticker: ticker,
             company_name: companyName,
             quantity: quantity,
-            average_buy_price: price
+            average_buy_price: price,
+            instrument_type: instrumentType
         };
         
         const response = await fetch('/api/portfolio', {
@@ -617,9 +681,9 @@ async function handleBuy(e) {
             
             // Показываем сообщение в зависимости от того, была ли позиция обновлена
             if (data.updated) {
-                alert(`✅ Покупка успешно оформлена!\n\nТикер: ${ticker}\nКуплено: ${quantity} шт. по ${price} ₽\n\nНовое количество в портфеле: ${data.new_quantity.toFixed(2)}\nСредняя цена: ${data.new_average_price.toFixed(2)} ₽`);
+                alert(`✅ Покупка успешно оформлена!\n\nТикер: ${ticker}\nКуплено: ${quantity} шт. по ${parseFloat(price).toFixed(5)} ₽\n\nНовое количество в портфеле: ${data.new_quantity.toFixed(2)}\nСредняя цена: ${parseFloat(data.new_average_price).toFixed(5)} ₽`);
             } else {
-                alert(`✅ Покупка успешно оформлена!\n\nТикер: ${ticker}\nКуплено: ${quantity} шт. по ${price} ₽\nСумма: ${(quantity * price).toFixed(2)} ₽`);
+                alert(`✅ Покупка успешно оформлена!\n\nТикер: ${ticker}\nКуплено: ${quantity} шт. по ${parseFloat(price).toFixed(5)} ₽\nСумма: ${(quantity * price).toFixed(2)} ₽`);
             }
         } else {
             alert('Ошибка при обновлении портфеля: ' + data.error);
@@ -753,6 +817,21 @@ function showError(message) {
  */
 function formatCurrency(value) {
     if (value === null || value === undefined) {
+        return '0.00000 ₽';
+    }
+    return new Intl.NumberFormat('ru-RU', {
+        style: 'currency',
+        currency: 'RUB',
+        minimumFractionDigits: 5,
+        maximumFractionDigits: 5
+    }).format(value);
+}
+
+/**
+ * Форматирование текущей цены (2 знака после запятой)
+ */
+function formatCurrentPrice(value) {
+    if (value === null || value === undefined) {
         return '0.00 ₽';
     }
     return new Intl.NumberFormat('ru-RU', {
@@ -797,11 +876,11 @@ function switchView(viewType) {
         historyView.style.display = 'none';
         transactionsView.style.display = 'none';
         categoriesView.style.display = 'none';
-        btnTable.classList.add('active');
-        btnChart.classList.remove('active');
-        btnHistory.classList.remove('active');
-        btnTransactions.classList.remove('active');
-        btnCategories.classList.remove('active');
+        if (btnTable) btnTable.classList.add('active');
+        if (btnChart) btnChart.classList.remove('active');
+        if (btnHistory) btnHistory.classList.remove('active');
+        if (btnTransactions) btnTransactions.classList.remove('active');
+        if (btnCategories) btnCategories.classList.remove('active');
         
         // Обновляем обе вкладки, если категории были изменены
         if (categoriesChanged) {
@@ -813,11 +892,11 @@ function switchView(viewType) {
         historyView.style.display = 'none';
         transactionsView.style.display = 'none';
         categoriesView.style.display = 'none';
-        btnTable.classList.remove('active');
-        btnChart.classList.add('active');
-        btnHistory.classList.remove('active');
-        btnTransactions.classList.remove('active');
-        btnCategories.classList.remove('active');
+        if (btnTable) btnTable.classList.remove('active');
+        if (btnChart) btnChart.classList.add('active');
+        if (btnHistory) btnHistory.classList.remove('active');
+        if (btnTransactions) btnTransactions.classList.remove('active');
+        if (btnCategories) btnCategories.classList.remove('active');
         
         // Обновляем обе вкладки, если категории были изменены
         if (categoriesChanged) {
@@ -835,11 +914,11 @@ function switchView(viewType) {
         historyView.style.display = 'block';
         transactionsView.style.display = 'none';
         categoriesView.style.display = 'none';
-        btnTable.classList.remove('active');
-        btnChart.classList.remove('active');
-        btnHistory.classList.add('active');
-        btnTransactions.classList.remove('active');
-        btnCategories.classList.remove('active');
+        if (btnTable) btnTable.classList.remove('active');
+        if (btnChart) btnChart.classList.remove('active');
+        if (btnHistory) btnHistory.classList.add('active');
+        if (btnTransactions) btnTransactions.classList.remove('active');
+        if (btnCategories) btnCategories.classList.remove('active');
         // Загружаем историю цен при переключении
         loadPriceHistory();
     } else if (viewType === 'transactions') {
@@ -848,11 +927,11 @@ function switchView(viewType) {
         historyView.style.display = 'none';
         transactionsView.style.display = 'block';
         categoriesView.style.display = 'none';
-        btnTable.classList.remove('active');
-        btnChart.classList.remove('active');
-        btnHistory.classList.remove('active');
-        btnTransactions.classList.add('active');
-        btnCategories.classList.remove('active');
+        if (btnTable) btnTable.classList.remove('active');
+        if (btnChart) btnChart.classList.remove('active');
+        if (btnHistory) btnHistory.classList.remove('active');
+        if (btnTransactions) btnTransactions.classList.add('active');
+        if (btnCategories) btnCategories.classList.remove('active');
         // Загружаем транзакции при переключении
         loadTransactions();
     } else if (viewType === 'categories') {
@@ -861,13 +940,16 @@ function switchView(viewType) {
         historyView.style.display = 'none';
         transactionsView.style.display = 'none';
         categoriesView.style.display = 'block';
-        btnTable.classList.remove('active');
-        btnChart.classList.remove('active');
-        btnHistory.classList.remove('active');
-        btnTransactions.classList.remove('active');
-        btnCategories.classList.add('active');
+        if (btnTable) btnTable.classList.remove('active');
+        if (btnChart) btnChart.classList.remove('active');
+        if (btnHistory) btnHistory.classList.remove('active');
+        if (btnTransactions) btnTransactions.classList.remove('active');
+        if (btnCategories) btnCategories.classList.add('active');
         // Загружаем категории при переключении
-        loadCategories();
+        // Сначала загружаем список категорий, затем данные портфеля
+        loadCategoriesList().then(() => {
+            loadCategories();
+        });
     }
 }
 
@@ -908,11 +990,11 @@ function updateCategoryChart(portfolio) {
             percentage: totalValue > 0 ? (value / totalValue * 100) : 0
         }));
     
-    // Цвета для категорий
+    // Цвета для категорий (строгая официальная палитра)
     const colors = [
-        '#667eea', '#764ba2', '#f093fb', '#4facfe',
-        '#43e97b', '#fa709a', '#fee140', '#30cfd0',
-        '#a8edea', '#fbc2eb'
+        '#1e3a5f', '#2c5282', '#4a5568', '#2d3748',
+        '#22543d', '#1a3d2e', '#718096', '#4a5568',
+        '#2c3e50', '#34495e'
     ];
     
     // Создание HTML для диаграммы
@@ -946,6 +1028,9 @@ function updateCategoryChart(portfolio) {
     
     // Применяем текущий выбор типа диаграммы
     applyChartTypeSelection();
+    
+    // Обновляем диаграмму видов активов
+    updateAssetTypeChart(portfolio);
 }
 
 /**
@@ -984,6 +1069,249 @@ function applyChartTypeSelection() {
         if (pieBtn) pieBtn.classList.remove('active');
         if (barBtn) barBtn.classList.add('active');
     }
+}
+
+/**
+ * Обновление диаграммы распределения по видам активов
+ */
+function updateAssetTypeChart(portfolio) {
+    const chartContainer = document.getElementById('asset-type-chart');
+    
+    if (!chartContainer || portfolio.length === 0) {
+        if (chartContainer) {
+            chartContainer.innerHTML = '<p style="text-align: center; color: #7f8c8d; padding: 40px;">Нет данных для отображения</p>';
+        }
+        return;
+    }
+    
+    // Подсчет стоимости по видам активов
+    const assetTypeData = {};
+    let totalValue = 0;
+    
+    portfolio.forEach(item => {
+        const assetType = item.asset_type || 'Без вида';
+        const value = item.total_cost || 0;
+        
+        if (!assetTypeData[assetType]) {
+            assetTypeData[assetType] = 0;
+        }
+        assetTypeData[assetType] += value;
+        totalValue += value;
+    });
+    
+    // Сортировка видов активов по стоимости (по убыванию)
+    const sortedAssetTypes = Object.entries(assetTypeData)
+        .sort((a, b) => b[1] - a[1])
+        .map(([assetType, value]) => ({
+            assetType,
+            value,
+            percentage: totalValue > 0 ? (value / totalValue * 100) : 0
+        }));
+    
+    // Цвета для видов активов (строгая официальная палитра)
+    const colors = [
+        '#1e3a5f', '#2c5282', '#4a5568', '#2d3748',
+        '#22543d', '#1a3d2e', '#718096', '#4a5568',
+        '#2c3e50', '#34495e'
+    ];
+    
+    // Создание HTML для диаграммы
+    let chartHTML = '<div class="category-list">';
+    
+    sortedAssetTypes.forEach((item, index) => {
+        const color = colors[index % colors.length];
+        chartHTML += `
+            <div class="category-item">
+                <div class="category-info">
+                    <div class="category-color" style="background: ${color};"></div>
+                    <div class="category-details">
+                        <div class="category-name">${item.assetType}</div>
+                        <div class="category-value">${formatCurrency(item.value)}</div>
+                    </div>
+                </div>
+                <div class="category-bar-container">
+                    <div class="category-bar" style="width: ${item.percentage}%; background: ${color};"></div>
+                </div>
+                <div class="category-percentage">${item.percentage.toFixed(2)}%</div>
+            </div>
+        `;
+    });
+    
+    chartHTML += '</div>';
+    
+    chartContainer.innerHTML = chartHTML;
+    
+    // Отрисовываем круговую диаграмму для раздела распределения по видам активов
+    renderAssetTypesPieChart(portfolio, 'asset-type-pie-chart', 'asset-type-pie-chart-container');
+    
+    // Применяем текущий выбор типа диаграммы
+    applyAssetTypeChartTypeSelection();
+}
+
+/**
+ * Переключение типа диаграммы видов активов
+ */
+function switchAssetTypeChartType(type) {
+    currentAssetTypeChartType = type;
+    localStorage.setItem('assetTypeChartType', type);
+    
+    applyAssetTypeChartTypeSelection();
+}
+
+/**
+ * Применение выбора типа диаграммы видов активов
+ */
+function applyAssetTypeChartTypeSelection() {
+    const pieContainer = document.getElementById('asset-type-pie-chart-container');
+    const barContainer = document.getElementById('asset-type-chart-container');
+    const pieBtn = document.getElementById('asset-type-chart-toggle-pie');
+    const barBtn = document.getElementById('asset-type-chart-toggle-bar');
+    
+    if (!pieContainer || !barContainer) return;
+    
+    if (currentAssetTypeChartType === 'pie') {
+        // Показываем круговую диаграмму
+        pieContainer.style.display = 'block';
+        barContainer.style.display = 'none';
+        
+        if (pieBtn) pieBtn.classList.add('active');
+        if (barBtn) barBtn.classList.remove('active');
+    } else {
+        // Показываем столбчатую диаграмму
+        pieContainer.style.display = 'none';
+        barContainer.style.display = 'block';
+        
+        if (pieBtn) pieBtn.classList.remove('active');
+        if (barBtn) barBtn.classList.add('active');
+    }
+}
+
+/**
+ * Отрисовка круговой диаграммы видов активов
+ */
+function renderAssetTypesPieChart(portfolio, containerId = 'asset-type-pie-chart', wrapperContainerId = 'asset-type-pie-chart-container') {
+    const chartContainer = document.getElementById(containerId);
+    const chartContainerWrapper = document.getElementById(wrapperContainerId);
+    
+    if (!chartContainer || !portfolio || portfolio.length === 0) {
+        if (chartContainerWrapper) {
+            chartContainerWrapper.style.display = 'none';
+        }
+        return;
+    }
+    
+    // Подсчет стоимости по видам активов
+    const assetTypeData = {};
+    let totalValue = 0;
+    
+    portfolio.forEach(item => {
+        const assetType = item.asset_type || 'Без вида';
+        const value = item.quantity * item.current_price || 0;
+        
+        if (!assetTypeData[assetType]) {
+            assetTypeData[assetType] = 0;
+        }
+        assetTypeData[assetType] += value;
+        totalValue += value;
+    });
+    
+    // Фильтруем пустые виды и сортируем
+    const sortedAssetTypes = Object.entries(assetTypeData)
+        .filter(([_, value]) => value > 0)
+        .sort((a, b) => b[1] - a[1])
+        .map(([assetType, value]) => ({
+            assetType,
+            value,
+            percentage: totalValue > 0 ? (value / totalValue * 100) : 0
+        }));
+    
+    if (sortedAssetTypes.length === 0) {
+        chartContainerWrapper.style.display = 'none';
+        return;
+    }
+    
+    chartContainerWrapper.style.display = 'block';
+    
+    // Цвета для видов активов (строгая официальная палитра)
+    const colors = [
+        '#1e3a5f', '#2c5282', '#4a5568', '#2d3748',
+        '#22543d', '#1a3d2e', '#718096', '#4a5568',
+        '#2c3e50', '#34495e'
+    ];
+    
+    // Создание SVG круговой диаграммы
+    const size = 300;
+    const center = size / 2;
+    const radius = size / 2 - 20;
+    
+    let currentAngle = -90; // Начинаем сверху
+    let svgPaths = '';
+    
+    // Специальная обработка для одного вида (100%)
+    if (sortedAssetTypes.length === 1) {
+        const color = colors[0];
+        // Рисуем полный круг через элемент circle
+        svgPaths = `<circle cx="${center}" cy="${center}" r="${radius}" fill="${color}" stroke="white" stroke-width="2" class="pie-slice" data-asset-type="${sortedAssetTypes[0].assetType}"/>`;
+    } else {
+        sortedAssetTypes.forEach((item, index) => {
+            const angle = (item.percentage / 100) * 360;
+            const endAngle = currentAngle + angle;
+            
+            // Преобразование углов в радианы
+            const startRad = (currentAngle * Math.PI) / 180;
+            const endRad = (endAngle * Math.PI) / 180;
+            
+            // Вычисление координат дуги
+            const x1 = center + radius * Math.cos(startRad);
+            const y1 = center + radius * Math.sin(startRad);
+            const x2 = center + radius * Math.cos(endRad);
+            const y2 = center + radius * Math.sin(endRad);
+            
+            // Флаг большой дуги (если сектор больше 180 градусов)
+            const largeArcFlag = angle > 180 ? 1 : 0;
+            
+            const color = colors[index % colors.length];
+            
+            // Создание пути для сектора
+            const pathD = [
+                `M ${center} ${center}`,  // Перемещение в центр
+                `L ${x1} ${y1}`,          // Линия к началу дуги
+                `A ${radius} ${radius} 0 ${largeArcFlag} 1 ${x2} ${y2}`, // Дуга
+                'Z'                        // Закрытие пути
+            ].join(' ');
+            
+            svgPaths += `<path d="${pathD}" fill="${color}" stroke="white" stroke-width="2" class="pie-slice" data-asset-type="${item.assetType}"/>`;
+            
+            currentAngle = endAngle;
+        });
+    }
+    
+    // Создание легенды
+    let legendHTML = '<div class="pie-legend">';
+    sortedAssetTypes.forEach((item, index) => {
+        const color = colors[index % colors.length];
+        legendHTML += `
+            <div class="pie-legend-item">
+                <div class="pie-legend-color" style="background: ${color};"></div>
+                <div class="pie-legend-info">
+                    <div class="pie-legend-name">${item.assetType}</div>
+                    <div class="pie-legend-value">${formatCurrency(item.value)}</div>
+                </div>
+                <div class="pie-legend-percentage">${item.percentage.toFixed(1)}%</div>
+            </div>
+        `;
+    });
+    legendHTML += '</div>';
+    
+    // Объединение SVG и легенды
+    chartContainer.innerHTML = `
+        <div style="display: flex; gap: 30px; align-items: center; justify-content: center; flex-wrap: wrap;">
+            <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" style="flex-shrink: 0;">
+                ${svgPaths}
+            </svg>
+            ${legendHTML}
+        </div>
+    `;
 }
 
 /**
@@ -1035,11 +1363,11 @@ function renderCategoriesPieChart(portfolio, containerId = 'categories-pie-chart
     
     chartContainerWrapper.style.display = 'block';
     
-    // Цвета для категорий
+    // Цвета для категорий (строгая официальная палитра)
     const colors = [
-        '#667eea', '#764ba2', '#f093fb', '#4facfe',
-        '#43e97b', '#fa709a', '#fee140', '#30cfd0',
-        '#a8edea', '#fbc2eb'
+        '#1e3a5f', '#2c5282', '#4a5568', '#2d3748',
+        '#22543d', '#1a3d2e', '#718096', '#4a5568',
+        '#2c3e50', '#34495e'
     ];
     
     // Создание SVG круговой диаграммы
@@ -1485,6 +1813,29 @@ document.addEventListener('DOMContentLoaded', function() {
         now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
         transAddDate.value = now.toISOString().slice(0, 16);
     }
+    
+    // Обработчик изменения типа инструмента для повторной валидации тикера
+    const buyInstrumentType = document.getElementById('buy-instrument-type');
+    if (buyInstrumentType) {
+        buyInstrumentType.addEventListener('change', function() {
+            const ticker = document.getElementById('buy-ticker').value.trim().toUpperCase();
+            if (ticker) {
+                lastValidatedTicker = ''; // Сбрасываем валидацию
+                validateBuyTicker(ticker);
+            }
+        });
+    }
+    
+    // Обработчик фильтра по типу инструмента в портфеле
+    const portfolioTypeFilter = document.getElementById('portfolio-type-filter');
+    if (portfolioTypeFilter) {
+        portfolioTypeFilter.addEventListener('change', function() {
+            // Перерисовываем портфель с учетом фильтра
+            if (currentPortfolioData) {
+                displayPortfolio(currentPortfolioData.portfolio, currentPortfolioData.summary);
+            }
+        });
+    }
 });
 
 /**
@@ -1668,6 +2019,7 @@ async function handleAddTransaction(event) {
         operation_type: document.getElementById('trans-add-type').value,
         price: parseFloat(document.getElementById('trans-add-price').value),
         quantity: parseFloat(document.getElementById('trans-add-quantity').value),
+        instrument_type: document.getElementById('trans-add-instrument-type').value,
         notes: document.getElementById('trans-add-notes').value
     };
     
@@ -1833,7 +2185,7 @@ function openSellModal(portfolioId, ticker, companyName, availableQuantity, curr
     document.getElementById('sell-available-display').value = `${availableQuantity} шт.`;
     
     // Устанавливаем текущую цену как цену продажи по умолчанию
-    document.getElementById('sell-price').value = currentPrice.toFixed(2);
+    document.getElementById('sell-price').value = currentPrice.toFixed(5);
     
     // Устанавливаем максимальное количество для продажи
     const quantityInput = document.getElementById('sell-quantity');
@@ -1883,7 +2235,7 @@ async function handleSell(e) {
         return;
     }
     
-    if (!confirm(`Продать ${quantity} акций ${ticker} по ${price} ₽?\n\nСумма продажи: ${(quantity * price).toFixed(2)} ₽`)) {
+    if (!confirm(`Продать ${quantity} акций ${ticker} по ${parseFloat(price).toFixed(5)} ₽?\n\nСумма продажи: ${(quantity * price).toFixed(2)} ₽`)) {
         return;
     }
     
@@ -1954,10 +2306,11 @@ async function handleSell(e) {
         
         // Показываем сообщение об успехе
         const totalSum = (quantity * price).toFixed(2);
+        const formattedPrice = parseFloat(price).toFixed(5);
         if (remainingQuantity <= 0.001) {
-            alert(`✅ Продажа успешно оформлена!\n\nТикер: ${ticker}\nПродано: ${quantity} шт. по ${price} ₽\nСумма: ${totalSum} ₽\n\n⚠️ Позиция полностью закрыта и удалена из портфеля`);
+            alert(`✅ Продажа успешно оформлена!\n\nТикер: ${ticker}\nПродано: ${quantity} шт. по ${formattedPrice} ₽\nСумма: ${totalSum} ₽\n\n⚠️ Позиция полностью закрыта и удалена из портфеля`);
         } else {
-            alert(`✅ Продажа успешно оформлена!\n\nТикер: ${ticker}\nПродано: ${quantity} шт. по ${price} ₽\nСумма: ${totalSum} ₽\n\nОсталось в портфеле: ${remainingQuantity.toFixed(2)} шт.`);
+            alert(`✅ Продажа успешно оформлена!\n\nТикер: ${ticker}\nПродано: ${quantity} шт. по ${formattedPrice} ₽\nСумма: ${totalSum} ₽\n\nОсталось в портфеле: ${remainingQuantity.toFixed(2)} шт.`);
         }
         
     } catch (error) {
@@ -1972,22 +2325,11 @@ async function handleSell(e) {
  * ==========================================
  */
 
-// Список доступных категорий
-const CATEGORIES = [
-    'Нефть и газ',
-    'Электроэнергетика',
-    'Телекоммуникации',
-    'Металлы и добыча',
-    'Финансовый сектор',
-    'Потребительский сектор',
-    'Химия и нефтехимия',
-    'Информационные технологии (IT)',
-    'Строительные компании и недвижимость',
-    'Транспорт'
-];
+// Список доступных категорий (загружается из API при инициализации)
+let ASSET_TYPES = []; // Список видов активов (загружается из API)
 
 /**
- * Загрузка категорий
+ * Загрузка категорий (данных портфеля для таблицы категорий)
  */
 async function loadCategories() {
     const tbody = document.getElementById('categories-tbody');
@@ -1995,6 +2337,14 @@ async function loadCategories() {
     const table = document.getElementById('categories-table');
     
     if (!tbody) return;
+    
+    // Убеждаемся, что список категорий и видов активов загружены
+    if (CATEGORIES.length === 0) {
+        await loadCategoriesList();
+    }
+    if (ASSET_TYPES.length === 0) {
+        await loadAssetTypesList();
+    }
     
     try {
         const response = await fetch('/api/portfolio');
@@ -2079,14 +2429,134 @@ function renderCategories(items) {
         categoryCell.appendChild(select);
         categoryCell.appendChild(saveIndicator);
         
+        // Создаем ячейку с select для вида актива
+        const assetTypeCell = document.createElement('td');
+        assetTypeCell.style.position = 'relative';
+        
+        // Создаем select с видами активов
+        const assetTypeSelect = document.createElement('select');
+        assetTypeSelect.className = 'asset-type-select';
+        assetTypeSelect.id = `asset-type-select-${item.ticker}`;
+        assetTypeSelect.dataset.ticker = item.ticker;
+        
+        // Добавляем опцию "Не выбрано"
+        const emptyAssetTypeOption = document.createElement('option');
+        emptyAssetTypeOption.value = '';
+        emptyAssetTypeOption.textContent = 'Не выбрано';
+        assetTypeSelect.appendChild(emptyAssetTypeOption);
+        
+        // Добавляем остальные виды активов
+        ASSET_TYPES.forEach(at => {
+            const option = document.createElement('option');
+            option.value = at;
+            option.textContent = at;
+            if (item.asset_type === at) {
+                option.selected = true;
+            }
+            assetTypeSelect.appendChild(option);
+        });
+        
+        // Добавляем обработчик изменения
+        assetTypeSelect.addEventListener('change', function() {
+            updateAssetTypeForTicker(item.ticker);
+        });
+        
+        // Создаем индикатор сохранения
+        const assetTypeSaveIndicator = document.createElement('span');
+        assetTypeSaveIndicator.id = `asset-type-save-indicator-${item.ticker}`;
+        assetTypeSaveIndicator.className = 'save-indicator';
+        assetTypeSaveIndicator.style.marginLeft = '10px';
+        
+        assetTypeCell.appendChild(assetTypeSelect);
+        assetTypeCell.appendChild(assetTypeSaveIndicator);
+        
         row.innerHTML = `
             <td><strong>${item.ticker}</strong></td>
             <td>${item.company_name || '-'}</td>
         `;
         row.appendChild(categoryCell);
+        row.appendChild(assetTypeCell);
         
         tbody.appendChild(row);
     });
+}
+
+/**
+ * Обновление вида актива для тикера
+ */
+async function updateAssetTypeForTicker(ticker) {
+    const selectEl = document.getElementById(`asset-type-select-${ticker}`);
+    const indicatorEl = document.getElementById(`asset-type-save-indicator-${ticker}`);
+    
+    if (!selectEl) return;
+    
+    const assetType = selectEl.value;
+    
+    // Показываем индикатор загрузки
+    if (indicatorEl) {
+        indicatorEl.textContent = '⏳';
+        indicatorEl.style.color = '#3498db';
+    }
+    
+    // Блокируем select на время сохранения
+    selectEl.disabled = true;
+    
+    try {
+        const response = await fetch('/api/portfolio', {
+            method: 'GET'
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+            const portfolioItem = data.portfolio.find(item => item.ticker === ticker);
+            if (portfolioItem) {
+                const updateResponse = await fetch(`/api/portfolio/${portfolioItem.id}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        asset_type: assetType
+                    })
+                });
+                
+                const updateData = await updateResponse.json();
+                
+                if (updateData.success) {
+                    // Показываем индикатор успеха
+                    if (indicatorEl) {
+                        indicatorEl.textContent = '✓';
+                        indicatorEl.style.color = '#27ae60';
+                        setTimeout(() => {
+                            indicatorEl.textContent = '';
+                        }, 2000);
+                    }
+                } else {
+                    // Показываем индикатор ошибки
+                    if (indicatorEl) {
+                        indicatorEl.textContent = '✗';
+                        indicatorEl.style.color = '#e74c3c';
+                        setTimeout(() => {
+                            indicatorEl.textContent = '';
+                        }, 2000);
+                    }
+                    alert('Ошибка обновления вида актива: ' + updateData.error);
+                }
+            }
+        }
+    } catch (error) {
+        console.error('Ошибка обновления вида актива:', error);
+        if (indicatorEl) {
+            indicatorEl.textContent = '✗';
+            indicatorEl.style.color = '#e74c3c';
+            setTimeout(() => {
+                indicatorEl.textContent = '';
+            }, 2000);
+        }
+        alert('Ошибка соединения с сервером');
+    } finally {
+        selectEl.disabled = false;
+    }
 }
 
 /**
@@ -2202,6 +2672,8 @@ document.addEventListener('keydown', function(event) {
         const buyModal = document.getElementById('buy-modal');
         const sellModal = document.getElementById('sell-modal');
         const editTransactionModal = document.getElementById('edit-transaction-modal');
+        const manageCategoriesModal = document.getElementById('manage-categories-modal');
+        const categoryEditModal = document.getElementById('category-edit-modal');
         
         if (buyModal && buyModal.style.display === 'flex') {
             closeBuyModal();
@@ -2209,6 +2681,608 @@ document.addEventListener('keydown', function(event) {
             closeSellModal();
         } else if (editTransactionModal && editTransactionModal.style.display === 'flex') {
             closeEditTransactionModal();
+        } else if (categoryEditModal && categoryEditModal.style.display === 'flex') {
+            closeCategoryEditModal();
+        } else if (manageCategoriesModal && manageCategoriesModal.style.display === 'flex') {
+            closeManageCategoriesModal();
         }
+    }
+});
+
+// ==================== УПРАВЛЕНИЕ КАТЕГОРИЯМИ ====================
+
+/**
+ * Загрузка списка категорий из API
+ */
+async function loadCategoriesList() {
+    try {
+        const response = await fetch('/api/categories');
+        const data = await response.json();
+        
+        if (data.success) {
+            CATEGORIES = data.categories.map(cat => cat.name);
+            updateCategorySelects(); // Обновляем все селекты категорий
+            return data.categories;
+        } else {
+            console.error('Ошибка загрузки категорий:', data.error);
+            return [];
+        }
+    } catch (error) {
+        console.error('Ошибка загрузки категорий:', error);
+        return [];
+    }
+}
+
+/**
+ * Обновление всех селектов категорий на странице
+ */
+function updateCategorySelects() {
+    // Обновляем селект в модальном окне редактирования
+    const editCategorySelect = document.getElementById('edit-category');
+    if (editCategorySelect) {
+        const currentValue = editCategorySelect.value;
+        editCategorySelect.innerHTML = '<option value="">Не выбрано</option>';
+        CATEGORIES.forEach(cat => {
+            const option = document.createElement('option');
+            option.value = cat;
+            option.textContent = cat;
+            if (cat === currentValue) {
+                option.selected = true;
+            }
+            editCategorySelect.appendChild(option);
+        });
+    }
+    
+    // Обновляем селекты в таблице категорий
+    const categorySelects = document.querySelectorAll('.category-select');
+    categorySelects.forEach(select => {
+        const currentValue = select.value;
+        const ticker = select.dataset.ticker;
+        select.innerHTML = '<option value="">Не выбрано</option>';
+        CATEGORIES.forEach(cat => {
+            const option = document.createElement('option');
+            option.value = cat;
+            option.textContent = cat;
+            if (cat === currentValue) {
+                option.selected = true;
+            }
+            select.appendChild(option);
+        });
+        select.dataset.ticker = ticker; // Восстанавливаем ticker
+    });
+}
+
+/**
+ * Открытие модального окна управления категориями
+ */
+async function openManageCategoriesModal() {
+    const modal = document.getElementById('manage-categories-modal');
+    if (!modal) return;
+    
+    modal.style.display = 'flex';
+    await loadManageCategories();
+}
+
+/**
+ * Закрытие модального окна управления категориями
+ */
+function closeManageCategoriesModal() {
+    const modal = document.getElementById('manage-categories-modal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+}
+
+/**
+ * Загрузка списка категорий в модальное окно
+ */
+async function loadManageCategories() {
+    try {
+        const response = await fetch('/api/categories');
+        const data = await response.json();
+        
+        const tbody = document.getElementById('manage-categories-tbody');
+        const noDataMessage = document.getElementById('no-categories-manage');
+        
+        if (!tbody) return;
+        
+        tbody.innerHTML = '';
+        
+        if (data.success && data.categories.length > 0) {
+            if (noDataMessage) noDataMessage.style.display = 'none';
+            
+            data.categories.forEach(category => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${category.name}</td>
+                    <td style="white-space: nowrap;">
+                        <button class="btn btn-edit" onclick="editCategory(${category.id}, '${category.name.replace(/'/g, "\\'")}')" title="Редактировать" style="margin-right: 5px;">
+                            ✏️
+                        </button>
+                        <button class="btn btn-danger" onclick="deleteCategory(${category.id}, '${category.name.replace(/'/g, "\\'")}')" title="Удалить">
+                            🗑️
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        } else {
+            if (noDataMessage) noDataMessage.style.display = 'block';
+        }
+    } catch (error) {
+        console.error('Ошибка загрузки категорий:', error);
+        alert('Ошибка загрузки категорий: ' + error.message);
+    }
+}
+
+/**
+ * Открытие модального окна для добавления/редактирования категории
+ */
+function openCategoryEditModal(categoryId = null, categoryName = '') {
+    const modal = document.getElementById('category-edit-modal');
+    const title = document.getElementById('category-edit-title');
+    const form = document.getElementById('category-edit-form');
+    const idInput = document.getElementById('category-edit-id');
+    const nameInput = document.getElementById('category-edit-name');
+    
+    if (!modal || !title || !form || !idInput || !nameInput) return;
+    
+    if (categoryId) {
+        title.textContent = '✏️ Редактировать категорию';
+        idInput.value = categoryId;
+        nameInput.value = categoryName;
+    } else {
+        title.textContent = '➕ Добавить категорию';
+        idInput.value = '';
+        nameInput.value = '';
+    }
+    
+    modal.style.display = 'flex';
+    nameInput.focus();
+}
+
+/**
+ * Закрытие модального окна редактирования категории
+ */
+function closeCategoryEditModal() {
+    const modal = document.getElementById('category-edit-modal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+}
+
+/**
+ * Редактирование категории
+ */
+function editCategory(categoryId, categoryName) {
+    openCategoryEditModal(categoryId, categoryName);
+}
+
+/**
+ * Удаление категории
+ */
+async function deleteCategory(categoryId, categoryName) {
+    if (!confirm(`Вы уверены, что хотите удалить категорию "${categoryName}"?\n\nВсе позиции портфеля с этой категорией будут обновлены (категория будет удалена).`)) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/categories/${categoryId}`, {
+            method: 'DELETE'
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            alert(`✅ ${data.message}`);
+            await loadManageCategories();
+            await loadCategoriesList(); // Обновляем список категорий (внутри вызывается updateCategorySelects)
+            // Обновляем селекты категорий в таблице
+            if (document.getElementById('categories-tbody')) {
+                const items = Array.from(document.querySelectorAll('#categories-tbody tr')).map(row => {
+                    const ticker = row.querySelector('.category-select')?.dataset.ticker;
+                    const category = row.querySelector('.category-select')?.value || '';
+                    return { ticker, category };
+                });
+                renderCategories(items);
+            }
+        } else {
+            alert('Ошибка удаления категории: ' + data.error);
+        }
+    } catch (error) {
+        console.error('Ошибка удаления категории:', error);
+        alert('Ошибка удаления категории: ' + error.message);
+    }
+}
+
+/**
+ * Обработка формы добавления/редактирования категории
+ */
+document.addEventListener('DOMContentLoaded', function() {
+    const categoryEditForm = document.getElementById('category-edit-form');
+    if (categoryEditForm) {
+        categoryEditForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const idInput = document.getElementById('category-edit-id');
+            const nameInput = document.getElementById('category-edit-name');
+            
+            if (!idInput || !nameInput) return;
+            
+            const categoryId = idInput.value;
+            const categoryName = nameInput.value.trim();
+            
+            if (!categoryName) {
+                alert('Название категории не может быть пустым');
+                return;
+            }
+            
+            try {
+                let response;
+                if (categoryId) {
+                    // Редактирование
+                    response = await fetch(`/api/categories/${categoryId}`, {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ name: categoryName })
+                    });
+                } else {
+                    // Добавление
+                    response = await fetch('/api/categories', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ name: categoryName })
+                    });
+                }
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    alert(`✅ ${data.message}`);
+                    closeCategoryEditModal();
+                    await loadManageCategories();
+                    await loadCategoriesList(); // Обновляем список категорий
+                    // Обновляем селекты категорий в таблице
+                    if (document.getElementById('categories-tbody')) {
+                        const items = Array.from(document.querySelectorAll('#categories-tbody tr')).map(row => {
+                            const ticker = row.querySelector('.category-select')?.dataset.ticker;
+                            const category = row.querySelector('.category-select')?.value || '';
+                            return { ticker, category };
+                        });
+                        renderCategories(items);
+                    }
+                } else {
+                    alert('Ошибка: ' + data.error);
+                }
+            } catch (error) {
+                console.error('Ошибка сохранения категории:', error);
+                alert('Ошибка сохранения категории: ' + error.message);
+            }
+        });
+    }
+    
+    // Кнопка "Управление категориями"
+    const manageCategoriesBtn = document.getElementById('manage-categories-btn');
+    if (manageCategoriesBtn) {
+        manageCategoriesBtn.addEventListener('click', openManageCategoriesModal);
+    }
+    
+    // Кнопка "Добавить категорию"
+    const addCategoryBtn = document.getElementById('add-category-btn');
+    if (addCategoryBtn) {
+        addCategoryBtn.addEventListener('click', function() {
+            openCategoryEditModal();
+        });
+    }
+    
+    // Закрытие модальных окон при клике вне их
+    const manageCategoriesModal = document.getElementById('manage-categories-modal');
+    const categoryEditModal = document.getElementById('category-edit-modal');
+    
+    if (manageCategoriesModal) {
+        manageCategoriesModal.addEventListener('click', function(e) {
+            if (e.target === manageCategoriesModal) {
+                closeManageCategoriesModal();
+            }
+        });
+    }
+    
+    if (categoryEditModal) {
+        categoryEditModal.addEventListener('click', function(e) {
+            if (e.target === categoryEditModal) {
+                closeCategoryEditModal();
+            }
+        });
+    }
+    
+    // Загружаем список категорий при инициализации
+    loadCategoriesList();
+    
+    // Загружаем список видов активов при инициализации
+    loadAssetTypesList();
+    
+    // Кнопка "Добавить вид актива"
+    const addAssetTypeBtn = document.getElementById('add-asset-type-btn');
+    if (addAssetTypeBtn) {
+        addAssetTypeBtn.addEventListener('click', function() {
+            openAssetTypeEditModal();
+        });
+    }
+});
+
+// ==================== ФУНКЦИИ ДЛЯ РАБОТЫ С ВИДАМИ АКТИВОВ ====================
+
+/**
+ * Загрузка списка видов активов из API
+ */
+async function loadAssetTypesList() {
+    try {
+        const response = await fetch('/api/asset-types');
+        const data = await response.json();
+        
+        if (data.success) {
+            ASSET_TYPES = data.asset_types.map(at => at.name);
+            updateAssetTypeSelects(); // Обновляем все селекты видов активов
+            return data.asset_types;
+        } else {
+            console.error('Ошибка загрузки видов активов:', data.error);
+            return [];
+        }
+    } catch (error) {
+        console.error('Ошибка загрузки видов активов:', error);
+        return [];
+    }
+}
+
+/**
+ * Обновление всех селектов видов активов на странице
+ */
+function updateAssetTypeSelects() {
+    // Обновляем селекты в таблице категорий
+    const assetTypeSelects = document.querySelectorAll('.asset-type-select');
+    assetTypeSelects.forEach(select => {
+        const currentValue = select.value;
+        const ticker = select.dataset.ticker;
+        select.innerHTML = '<option value="">Не выбрано</option>';
+        ASSET_TYPES.forEach(at => {
+            const option = document.createElement('option');
+            option.value = at;
+            option.textContent = at;
+            if (at === currentValue) {
+                option.selected = true;
+            }
+            select.appendChild(option);
+        });
+        select.dataset.ticker = ticker; // Восстанавливаем ticker
+    });
+}
+
+/**
+ * Переключение вкладок в модальном окне управления
+ */
+function switchManageTab(tab) {
+    const categoriesTab = document.getElementById('tab-categories');
+    const assetTypesTab = document.getElementById('tab-asset-types');
+    const categoriesContent = document.getElementById('categories-tab-content');
+    const assetTypesContent = document.getElementById('asset-types-tab-content');
+    
+    if (tab === 'categories') {
+        if (categoriesTab) categoriesTab.classList.add('active');
+        if (assetTypesTab) assetTypesTab.classList.remove('active');
+        if (categoriesContent) categoriesContent.style.display = 'block';
+        if (assetTypesContent) assetTypesContent.style.display = 'none';
+    } else if (tab === 'asset-types') {
+        if (categoriesTab) categoriesTab.classList.remove('active');
+        if (assetTypesTab) assetTypesTab.classList.add('active');
+        if (categoriesContent) categoriesContent.style.display = 'none';
+        if (assetTypesContent) assetTypesContent.style.display = 'block';
+        loadManageAssetTypes();
+    }
+}
+
+/**
+ * Загрузка списка видов активов в модальное окно
+ */
+async function loadManageAssetTypes() {
+    try {
+        const response = await fetch('/api/asset-types');
+        const data = await response.json();
+        
+        const tbody = document.getElementById('manage-asset-types-tbody');
+        const noDataMessage = document.getElementById('no-asset-types-manage');
+        
+        if (!tbody) return;
+        
+        tbody.innerHTML = '';
+        
+        if (data.success && data.asset_types.length > 0) {
+            if (noDataMessage) noDataMessage.style.display = 'none';
+            
+            data.asset_types.forEach(assetType => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${assetType.name}</td>
+                    <td style="white-space: nowrap;">
+                        <button class="btn btn-edit" onclick="editAssetType(${assetType.id}, '${assetType.name.replace(/'/g, "\\'")}')" title="Редактировать" style="margin-right: 5px;">
+                            ✏️
+                        </button>
+                        <button class="btn btn-danger" onclick="deleteAssetType(${assetType.id}, '${assetType.name.replace(/'/g, "\\'")}')" title="Удалить">
+                            🗑️
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        } else {
+            if (noDataMessage) noDataMessage.style.display = 'block';
+        }
+    } catch (error) {
+        console.error('Ошибка загрузки видов активов:', error);
+        alert('Ошибка загрузки видов активов: ' + error.message);
+    }
+}
+
+/**
+ * Открытие модального окна для добавления/редактирования вида актива
+ */
+function openAssetTypeEditModal(assetTypeId = null, assetTypeName = '') {
+    const modal = document.getElementById('asset-type-edit-modal');
+    const title = document.getElementById('asset-type-edit-title');
+    const form = document.getElementById('asset-type-edit-form');
+    const idInput = document.getElementById('asset-type-edit-id');
+    const nameInput = document.getElementById('asset-type-edit-name');
+    
+    if (!modal || !title || !form || !idInput || !nameInput) return;
+    
+    if (assetTypeId) {
+        title.textContent = '✏️ Редактировать вид актива';
+        idInput.value = assetTypeId;
+        nameInput.value = assetTypeName;
+    } else {
+        title.textContent = '➕ Добавить вид актива';
+        idInput.value = '';
+        nameInput.value = '';
+    }
+    
+    modal.style.display = 'flex';
+    nameInput.focus();
+}
+
+/**
+ * Закрытие модального окна редактирования вида актива
+ */
+function closeAssetTypeEditModal() {
+    const modal = document.getElementById('asset-type-edit-modal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+}
+
+/**
+ * Редактирование вида актива
+ */
+function editAssetType(assetTypeId, assetTypeName) {
+    openAssetTypeEditModal(assetTypeId, assetTypeName);
+}
+
+/**
+ * Удаление вида актива
+ */
+async function deleteAssetType(assetTypeId, assetTypeName) {
+    if (!confirm(`Вы уверены, что хотите удалить вид актива "${assetTypeName}"?\n\nВсе позиции портфеля с этим видом актива будут обновлены (вид актива будет удален).`)) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/asset-types/${assetTypeId}`, {
+            method: 'DELETE'
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            alert(`✅ ${data.message}`);
+            await loadManageAssetTypes();
+            await loadAssetTypesList(); // Обновляем список видов активов
+            // Обновляем селекты видов активов в таблице
+            if (document.getElementById('categories-tbody')) {
+                const items = Array.from(document.querySelectorAll('#categories-tbody tr')).map(row => {
+                    const ticker = row.querySelector('.category-select')?.dataset.ticker;
+                    const category = row.querySelector('.category-select')?.value || '';
+                    const assetType = row.querySelector('.asset-type-select')?.value || '';
+                    return { ticker, category, asset_type: assetType };
+                });
+                renderCategories(items);
+            }
+        } else {
+            alert('Ошибка удаления вида актива: ' + data.error);
+        }
+    } catch (error) {
+        console.error('Ошибка удаления вида актива:', error);
+        alert('Ошибка удаления вида актива: ' + error.message);
+    }
+}
+
+// Обработка формы добавления/редактирования вида актива
+document.addEventListener('DOMContentLoaded', function() {
+    const assetTypeEditForm = document.getElementById('asset-type-edit-form');
+    if (assetTypeEditForm) {
+        assetTypeEditForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const idInput = document.getElementById('asset-type-edit-id');
+            const nameInput = document.getElementById('asset-type-edit-name');
+            
+            if (!idInput || !nameInput) return;
+            
+            const assetTypeId = idInput.value;
+            const assetTypeName = nameInput.value.trim();
+            
+            if (!assetTypeName) {
+                alert('Название вида актива не может быть пустым');
+                return;
+            }
+            
+            try {
+                let response;
+                if (assetTypeId) {
+                    // Редактирование
+                    response = await fetch(`/api/asset-types/${assetTypeId}`, {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ name: assetTypeName })
+                    });
+                } else {
+                    // Добавление
+                    response = await fetch('/api/asset-types', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ name: assetTypeName })
+                    });
+                }
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    alert(`✅ ${data.message}`);
+                    closeAssetTypeEditModal();
+                    await loadManageAssetTypes();
+                    await loadAssetTypesList(); // Обновляем список видов активов
+                    // Обновляем селекты видов активов в таблице
+                    if (document.getElementById('categories-tbody')) {
+                        const items = Array.from(document.querySelectorAll('#categories-tbody tr')).map(row => {
+                            const ticker = row.querySelector('.category-select')?.dataset.ticker;
+                            const category = row.querySelector('.category-select')?.value || '';
+                            const assetType = row.querySelector('.asset-type-select')?.value || '';
+                            return { ticker, category, asset_type: assetType };
+                        });
+                        renderCategories(items);
+                    }
+                } else {
+                    alert('Ошибка: ' + data.error);
+                }
+            } catch (error) {
+                console.error('Ошибка сохранения вида актива:', error);
+                alert('Ошибка сохранения вида актива: ' + error.message);
+            }
+        });
+    }
+    
+    // Закрытие модального окна редактирования вида актива при клике вне его
+    const assetTypeEditModal = document.getElementById('asset-type-edit-modal');
+    if (assetTypeEditModal) {
+        assetTypeEditModal.addEventListener('click', function(e) {
+            if (e.target === assetTypeEditModal) {
+                closeAssetTypeEditModal();
+            }
+        });
     }
 });

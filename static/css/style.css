@@ -7,19 +7,22 @@
 
 body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: #ffffff;
     min-height: 100vh;
-    padding: 20px;
+    padding: 0;
     color: #333;
 }
 
 .container {
-    max-width: 1400px;
-    margin: 0 auto;
+    width: 100%;
+    max-width: 100%;
+    margin: 0;
     background: white;
-    border-radius: 12px;
-    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
-    padding: 30px;
+    border-radius: 0;
+    box-shadow: none;
+    padding: 20px 24px;
+    box-sizing: border-box;
+    min-height: 100vh;
 }
 
 header {
@@ -39,7 +42,7 @@ header h1 {
 .header-controls {
     display: flex;
     align-items: center;
-    gap: 15px;
+    gap: 12px;
 }
 
 .last-update {
@@ -58,13 +61,13 @@ header h1 {
 }
 
 #next-update-timer {
-    color: #3498db;
+    color: #1e3a5f;
     font-weight: bold;
     font-family: 'Courier New', monospace;
 }
 
 .btn-refresh {
-    background: #3498db;
+    background: #1e3a5f;
     color: white;
     padding: 8px 16px;
     font-size: 0.9em;
@@ -74,9 +77,9 @@ header h1 {
 }
 
 .btn-refresh:hover {
-    background: #2980b9;
+    background: #2c5282;
     transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(52, 152, 219, 0.3);
+    box-shadow: 0 4px 12px rgba(30, 58, 95, 0.3);
 }
 
 .btn-refresh:disabled {
@@ -84,6 +87,62 @@ header h1 {
     cursor: not-allowed;
     transform: none;
     box-shadow: none;
+}
+
+/* Кнопка меню (сэндвич) и выпадающее меню */
+.menu-wrapper {
+    position: relative;
+}
+
+.btn-menu {
+    background: transparent;
+    border: none;
+    padding: 8px 10px;
+    font-size: 1.4em;
+    cursor: pointer;
+    color: #34495e;
+    border-radius: 6px;
+    transition: background 0.2s, transform 0.1s;
+}
+
+.btn-menu:hover {
+    background: #f0f2f5;
+    transform: translateY(-1px);
+}
+
+.dropdown-menu {
+    position: absolute;
+    right: 0;
+    top: 110%;
+    background: #ffffff;
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+    padding: 8px 0;
+    min-width: 220px;
+    display: none;
+    z-index: 1000;
+}
+
+.dropdown-menu.open {
+    display: block;
+}
+
+.dropdown-item {
+    width: 100%;
+    padding: 8px 16px;
+    background: transparent;
+    border: none;
+    text-align: left;
+    font-size: 0.95em;
+    color: #2c3e50;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.2s, color 0.2s;
+}
+
+.dropdown-item:hover {
+    background: #f5f7fa;
+    color: #1a252f;
 }
 
 /* Сводка портфеля */
@@ -95,7 +154,7 @@ header h1 {
 }
 
 .summary-card {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: #1e3a5f;
     color: white;
     padding: 25px;
     border-radius: 10px;
@@ -175,8 +234,8 @@ header h1 {
 .form-group input:focus,
 .form-group select:focus {
     outline: none;
-    border-color: #667eea;
-    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    border-color: #1e3a5f;
+    box-shadow: 0 0 0 3px rgba(30, 58, 95, 0.1);
 }
 
 /* Контейнер для ввода тикера с индикатором */
@@ -210,22 +269,22 @@ header h1 {
 }
 
 .ticker-status.valid {
-    color: #27ae60;
+    color: #22543d;
     animation: checkmark 0.3s ease;
 }
 
 .ticker-status.invalid {
-    color: #e74c3c;
+    color: #7f1d1d;
     animation: shake 0.3s ease;
 }
 
 .ticker-status.validating {
-    color: #3498db;
+    color: #1e3a5f;
     animation: spin 1s linear infinite;
 }
 
 .ticker-status.warning {
-    color: #f39c12;
+    color: #92400e;
 }
 
 /* Подсказка для тикера */
@@ -239,15 +298,15 @@ header h1 {
 }
 
 .ticker-hint.success {
-    color: #27ae60;
+    color: #22543d;
 }
 
 .ticker-hint.error {
-    color: #e74c3c;
+    color: #7f1d1d;
 }
 
 .ticker-hint.warning {
-    color: #f39c12;
+    color: #92400e;
 }
 
 /* Анимации */
@@ -297,12 +356,12 @@ header h1 {
 
 .history-filter:focus {
     outline: none;
-    border-color: #667eea;
-    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    border-color: #1e3a5f;
+    box-shadow: 0 0 0 3px rgba(30, 58, 95, 0.1);
 }
 
 .btn-secondary {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: #1e3a5f;
     color: white;
     border: none;
     padding: 10px 20px;
@@ -314,7 +373,7 @@ header h1 {
 
 .btn-secondary:hover {
     transform: translateY(-2px);
-    box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3);
+    box-shadow: 0 5px 15px rgba(30, 58, 95, 0.3);
 }
 
 .btn-secondary:active {
@@ -338,7 +397,7 @@ header h1 {
     color: #2c3e50;
     margin-bottom: 15px;
     padding-bottom: 10px;
-    border-bottom: 2px solid #667eea;
+    border-bottom: 2px solid #1e3a5f;
 }
 
 .history-items {
@@ -351,7 +410,7 @@ header h1 {
     background: #f8f9fa;
     padding: 15px;
     border-radius: 8px;
-    border-left: 4px solid #667eea;
+    border-left: 4px solid #1e3a5f;
     transition: transform 0.2s, box-shadow 0.2s;
 }
 
@@ -387,7 +446,7 @@ header h1 {
 .history-price {
     font-size: 1.3em;
     font-weight: 600;
-    color: #27ae60;
+    color: #22543d;
     margin-bottom: 5px;
 }
 
@@ -398,11 +457,11 @@ header h1 {
 }
 
 .history-change.positive {
-    color: #27ae60;
+    color: #22543d;
 }
 
 .history-change.negative {
-    color: #e74c3c;
+    color: #7f1d1d;
 }
 
 .history-volume {
@@ -430,7 +489,7 @@ header h1 {
 }
 
 .history-table th {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: #1e3a5f;
     color: white;
     padding: 12px;
     text-align: left;
@@ -448,7 +507,7 @@ header h1 {
 
 .history-table .price-cell {
     font-weight: 600;
-    color: #27ae60;
+    color: #22543d;
 }
 
 /* История транзакций (покупки/продажи) */
@@ -510,7 +569,7 @@ header h1 {
 }
 
 .transactions-table th {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: #1e3a5f;
     color: white;
     padding: 15px 10px;
     text-align: left;
@@ -532,7 +591,7 @@ header h1 {
     display: inline-block;
     padding: 5px 12px;
     border-radius: 20px;
-    background: linear-gradient(135deg, #27ae60 0%, #2ecc71 100%);
+    background: #22543d;
     color: white;
     font-weight: 600;
     font-size: 0.9em;
@@ -542,7 +601,7 @@ header h1 {
     display: inline-block;
     padding: 5px 12px;
     border-radius: 20px;
-    background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+    background: #7f1d1d;
     color: white;
     font-weight: 600;
     font-size: 0.9em;
@@ -587,8 +646,8 @@ header h1 {
 
 .modal textarea:focus {
     outline: none;
-    border-color: #667eea;
-    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    border-color: #1e3a5f;
+    box-shadow: 0 0 0 3px rgba(30, 58, 95, 0.1);
 }
 
 .modal input[type="datetime-local"] {
@@ -633,8 +692,14 @@ header h1 {
     min-width: 700px;
 }
 
+/* Таблица в модальном окне управления категориями */
+.manage-categories-content .categories-table {
+    min-width: auto;
+    font-size: 0.95em;
+}
+
 .categories-table th {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: #1e3a5f;
     color: white;
     padding: 15px 10px;
     text-align: left;
@@ -642,10 +707,30 @@ header h1 {
     white-space: nowrap;
 }
 
+.manage-categories-content .categories-table th {
+    padding: 10px 8px;
+}
+
 .categories-table td {
     padding: 15px 10px;
     border-bottom: 1px solid #ecf0f1;
     vertical-align: middle;
+}
+
+.manage-categories-content .categories-table td {
+    padding: 10px 8px;
+}
+
+.categories-table td:last-child {
+    white-space: nowrap;
+    text-align: right;
+}
+
+.categories-table td:last-child .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: 5px;
 }
 
 .categories-table tbody tr:hover {
@@ -667,8 +752,8 @@ header h1 {
 .category-select:hover,
 .category-select:focus {
     outline: none;
-    border-color: #667eea;
-    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    border-color: #1e3a5f;
+    box-shadow: 0 0 0 3px rgba(30, 58, 95, 0.1);
 }
 
 .category-select:disabled {
@@ -769,7 +854,7 @@ header h1 {
 }
 
 .view-btn.active {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: #1e3a5f;
     color: white;
 }
 
@@ -900,27 +985,27 @@ header h1 {
 }
 
 .btn-primary {
-    background: #667eea;
+    background: #1e3a5f;
     color: white;
 }
 
 .btn-primary:hover {
-    background: #5568d3;
+    background: #2c5282;
     transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+    box-shadow: 0 4px 12px rgba(30, 58, 95, 0.3);
 }
 
 .btn-secondary {
-    background: #95a5a6;
+    background: #4a5568;
     color: white;
 }
 
 .btn-secondary:hover {
-    background: #7f8c8d;
+    background: #2d3748;
 }
 
 .btn-danger {
-    background: #e74c3c;
+    background: #7f1d1d;
     color: white;
     padding: 8px 12px;
     font-size: 1.2em;
@@ -937,12 +1022,12 @@ header h1 {
 }
 
 .btn-danger:hover {
-    background: #c0392b;
+    background: #991b1b;
     transform: scale(1.1);
 }
 
 .btn-edit {
-    background: #3498db;
+    background: #1e3a5f;
     color: white;
     padding: 8px 12px;
     font-size: 1.2em;
@@ -959,12 +1044,12 @@ header h1 {
 }
 
 .btn-edit:hover {
-    background: #2980b9;
+    background: #2c5282;
     transform: scale(1.1);
 }
 
 .btn-buy {
-    background: linear-gradient(135deg, #27ae60 0%, #229954 100%);
+    background: #22543d;
     color: transparent;
     padding: 0;
     font-size: 0;
@@ -980,7 +1065,7 @@ header h1 {
     cursor: pointer;
     border: none;
     transition: all 0.3s ease;
-    box-shadow: 0 2px 8px rgba(39, 174, 96, 0.3);
+    box-shadow: 0 2px 8px rgba(34, 84, 61, 0.3);
     position: relative;
     overflow: hidden;
 }
@@ -998,18 +1083,18 @@ header h1 {
 }
 
 .btn-buy:hover {
-    background: linear-gradient(135deg, #229954 0%, #1e8449 100%);
+    background: #1a3d2e;
     transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(39, 174, 96, 0.4);
+    box-shadow: 0 4px 12px rgba(34, 84, 61, 0.4);
 }
 
 .btn-buy:active {
     transform: translateY(0);
-    box-shadow: 0 2px 6px rgba(39, 174, 96, 0.3);
+    box-shadow: 0 2px 6px rgba(34, 84, 61, 0.3);
 }
 
 .btn-sell {
-    background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+    background: #7f1d1d;
     color: transparent;
     padding: 0;
     font-size: 0;
@@ -1025,7 +1110,7 @@ header h1 {
     cursor: pointer;
     border: none;
     transition: all 0.3s ease;
-    box-shadow: 0 2px 8px rgba(231, 76, 60, 0.3);
+    box-shadow: 0 2px 8px rgba(127, 29, 29, 0.3);
     position: relative;
     overflow: hidden;
 }
@@ -1043,14 +1128,14 @@ header h1 {
 }
 
 .btn-sell:hover {
-    background: linear-gradient(135deg, #c0392b 0%, #a93226 100%);
+    background: #991b1b;
     transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(231, 76, 60, 0.4);
+    box-shadow: 0 4px 12px rgba(127, 29, 29, 0.4);
 }
 
 .btn-sell:active {
     transform: translateY(0);
-    box-shadow: 0 2px 6px rgba(231, 76, 60, 0.3);
+    box-shadow: 0 2px 6px rgba(127, 29, 29, 0.3);
 }
 
 /* Таблица портфеля */
@@ -1078,7 +1163,7 @@ header h1 {
     padding: 15px;
     border-radius: 5px;
     margin-bottom: 20px;
-    border-left: 4px solid #e74c3c;
+    border-left: 4px solid #7f1d1d;
 }
 
 .portfolio-table {
@@ -1092,7 +1177,7 @@ header h1 {
 }
 
 .portfolio-table thead {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: #1e3a5f;
     color: white;
 }
 
@@ -1138,12 +1223,12 @@ header h1 {
 
 /* Цветовая индикация прибыли/убытка */
 .profit {
-    color: #27ae60;
+    color: #22543d;
     font-weight: bold;
 }
 
 .loss {
-    color: #e74c3c;
+    color: #7f1d1d;
     font-weight: bold;
 }
 
@@ -1175,6 +1260,47 @@ header h1 {
     overflow-y: auto;
     position: relative;
     box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+}
+
+/* Модальное окно управления категориями - без прокрутки */
+.manage-categories-content {
+    max-width: 800px;
+    max-height: none;
+    overflow-y: visible;
+    height: auto;
+    padding: 20px;
+}
+
+.manage-categories-content h2 {
+    margin-bottom: 15px;
+    font-size: 1.3em;
+}
+
+.manage-categories-content #categories-list-container {
+    margin-top: 10px;
+}
+
+/* Вкладки в модальном окне управления */
+.tab-button {
+    padding: 10px 20px;
+    border: none;
+    background: none;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    font-size: 1em;
+    color: #7f8c8d;
+    transition: all 0.3s;
+}
+
+.tab-button:hover {
+    color: #2c3e50;
+}
+
+.tab-button.active {
+    color: #1e3a5f;
+    border-bottom-color: #1e3a5f;
+    font-weight: 600;
 }
 
 .close {
@@ -1322,18 +1448,18 @@ header h1 {
 }
 
 .chart-toggle-btn.active {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: #1e3a5f;
     color: white;
-    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+    box-shadow: 0 2px 8px rgba(30, 58, 95, 0.3);
 }
 
 /* Анимация изменения цены */
 @keyframes price-flash {
     0% {
-        background-color: rgba(52, 152, 219, 0.3);
+        background-color: rgba(30, 58, 95, 0.3);
     }
     50% {
-        background-color: rgba(52, 152, 219, 0.6);
+        background-color: rgba(30, 58, 95, 0.6);
     }
     100% {
         background-color: transparent;
@@ -1342,7 +1468,7 @@ header h1 {
 
 /* Круговая диаграмма категорий */
 .categories-pie-chart-container {
-    background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+    background: #f7fafc;
     border-radius: 12px;
     padding: 25px;
     margin-bottom: 30px;
@@ -1422,7 +1548,7 @@ header h1 {
 
 .pie-legend-percentage {
     font-weight: 600;
-    color: #667eea;
+    color: #1e3a5f;
     font-size: 0.95em;
     white-space: nowrap;
 }

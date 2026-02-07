@@ -3,9 +3,11 @@
 """
 from flask import Flask, render_template, jsonify, request
 from models.database import init_db, db_session
-from models.portfolio import Portfolio
+from models.portfolio import Portfolio, InstrumentType
 from models.price_history import PriceHistory
 from models.transaction import Transaction, TransactionType
+from models.category import Category
+from models.asset_type import AssetType
 from services.moex_service import MOEXService
 from services.price_logger import PriceLogger
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -19,6 +21,33 @@ app.config['SECRET_KEY'] = 'your-secret-key-here'
 
 # Инициализация БД
 init_db()
+
+# Инициализация категорий при первом запуске
+def init_categories():
+    """Инициализация категорий при первом запуске"""
+    from models.category import Category
+    default_categories = [
+        'Нефть и газ',
+        'Электроэнергетика',
+        'Телекоммуникации',
+        'Металлы и добыча',
+        'Финансовый сектор',
+        'Потребительский сектор',
+        'Химия и нефтехимия',
+        'Информационные технологии (IT)',
+        'Строительные компании и недвижимость',
+        'Транспорт'
+    ]
+    
+    for cat_name in default_categories:
+        existing = db_session.query(Category).filter_by(name=cat_name).first()
+        if not existing:
+            new_category = Category(name=cat_name)
+            db_session.add(new_category)
+    
+    db_session.commit()
+
+init_categories()
 
 # Инициализация сервисов
 moex_service = MOEXService()
@@ -58,14 +87,18 @@ def get_portfolio():
         result = []
         
         for item in portfolio_items:
+            # Определяем тип инструмента
+            instrument_type = item.instrument_type.name if hasattr(item, 'instrument_type') and item.instrument_type else 'STOCK'
+            
             # Получаем актуальную цену с MOEX
-            current_price_data = moex_service.get_current_price(item.ticker)
+            current_price_data = moex_service.get_current_price(item.ticker, instrument_type)
             
             if current_price_data:
                 current_price = current_price_data.get('price', 0)
                 last_update = current_price_data.get('last_update', '')
             else:
-                current_price = 0
+                # Если цена не получена, используем среднюю цену покупки как fallback
+                current_price = item.average_buy_price if hasattr(item, 'average_buy_price') else 0
                 last_update = ''
             
             # Вычисляем среднюю цену покупки из истории транзакций
@@ -116,6 +149,8 @@ def get_portfolio():
                 'ticker': item.ticker,
                 'company_name': item.company_name,
                 'category': item.category if hasattr(item, 'category') else None,
+                'asset_type': item.asset_type if hasattr(item, 'asset_type') else None,
+                'instrument_type': item.instrument_type.value if hasattr(item, 'instrument_type') and item.instrument_type else 'Акция',
                 'quantity': item.quantity,
                 'average_buy_price': calculated_avg_price,
                 'current_price': current_price,
@@ -163,8 +198,16 @@ def add_portfolio_item():
         ticker = data.get('ticker', '').upper().strip()
         company_name = data.get('company_name', '').strip()
         category = data.get('category', '').strip()
+        asset_type = data.get('asset_type', '').strip()
+        instrument_type_str = data.get('instrument_type', 'STOCK')
         quantity = float(data.get('quantity', 0))
         buy_price = float(data.get('average_buy_price', 0))
+        
+        # Преобразуем тип инструмента в enum
+        try:
+            instrument_type = InstrumentType[instrument_type_str] if instrument_type_str in ['STOCK', 'BOND'] else InstrumentType.STOCK
+        except (KeyError, AttributeError):
+            instrument_type = InstrumentType.STOCK
         
         if not ticker or quantity <= 0 or buy_price <= 0:
             return jsonify({
@@ -189,6 +232,8 @@ def add_portfolio_item():
                 existing.company_name = company_name
             if category:
                 existing.category = category
+            if asset_type:
+                existing.asset_type = asset_type
             
             db_session.commit()
             
@@ -205,6 +250,8 @@ def add_portfolio_item():
                 ticker=ticker,
                 company_name=company_name or ticker,
                 category=category or None,
+                asset_type=asset_type or None,
+                instrument_type=instrument_type,
                 quantity=quantity,
                 average_buy_price=buy_price
             )
@@ -247,6 +294,8 @@ def update_portfolio_item(item_id):
             item.company_name = data['company_name'].strip()
         if 'category' in data:
             item.category = data['category'].strip() if data['category'] else None
+        if 'asset_type' in data:
+            item.asset_type = data['asset_type'].strip() if data['asset_type'] else None
         
         db_session.commit()
         
@@ -367,9 +416,11 @@ def update_category():
 def validate_ticker(ticker):
     """
     Проверить существование тикера на MOEX
+    Поддерживает параметр instrument_type (STOCK или BOND)
     """
     try:
         ticker = ticker.upper().strip()
+        instrument_type = request.args.get('instrument_type', 'STOCK')
         
         if not ticker:
             return jsonify({
@@ -378,8 +429,8 @@ def validate_ticker(ticker):
             }), 400
         
         # Пытаемся получить информацию о тикере
-        quote_data = moex_service.get_current_price(ticker)
-        security_info = moex_service.get_security_info(ticker)
+        quote_data = moex_service.get_current_price(ticker, instrument_type)
+        security_info = moex_service.get_security_info(ticker, instrument_type)
         
         if quote_data or security_info:
             # Тикер существует
@@ -392,7 +443,8 @@ def validate_ticker(ticker):
                 'ticker': ticker,
                 'exists': True,
                 'company_name': company_name,
-                'current_price': quote_data.get('price') if quote_data else None
+                'current_price': quote_data.get('price') if quote_data else None,
+                'instrument_type': instrument_type
             })
         else:
             # Тикер не найден
@@ -516,6 +568,13 @@ def add_transaction():
         quantity = float(data['quantity'])
         total = price * quantity
         
+        # Определение типа инструмента
+        instrument_type_str = data.get('instrument_type', 'STOCK')
+        try:
+            instrument_type = InstrumentType[instrument_type_str] if instrument_type_str in ['STOCK', 'BOND'] else InstrumentType.STOCK
+        except (KeyError, AttributeError):
+            instrument_type = InstrumentType.STOCK
+        
         # Создание новой транзакции
         transaction = Transaction(
             date=transaction_date,
@@ -525,6 +584,7 @@ def add_transaction():
             price=price,
             quantity=quantity,
             total=total,
+            instrument_type=instrument_type,
             notes=data.get('notes', '')
         )
         
@@ -729,6 +789,294 @@ def close_db():
     # Останавливаем планировщик
     if scheduler.running:
         scheduler.shutdown()
+
+
+@app.route('/api/categories', methods=['GET'])
+def get_categories():
+    """
+    Получить список всех категорий
+    """
+    try:
+        categories = db_session.query(Category).order_by(Category.name).all()
+        return jsonify({
+            'success': True,
+            'categories': [cat.to_dict() for cat in categories]
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/categories', methods=['POST'])
+def create_category():
+    """
+    Создать новую категорию
+    """
+    try:
+        data = request.json
+        name = data.get('name', '').strip()
+        
+        if not name:
+            return jsonify({
+                'success': False,
+                'error': 'Название категории не может быть пустым'
+            }), 400
+        
+        # Проверяем, не существует ли уже такая категория
+        existing = db_session.query(Category).filter_by(name=name).first()
+        if existing:
+            return jsonify({
+                'success': False,
+                'error': 'Категория с таким названием уже существует'
+            }), 400
+        
+        new_category = Category(name=name)
+        db_session.add(new_category)
+        db_session.commit()
+        
+        return jsonify({
+            'success': True,
+            'category': new_category.to_dict(),
+            'message': f'Категория "{name}" успешно создана'
+        })
+    except Exception as e:
+        db_session.rollback()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/categories/<int:category_id>', methods=['PUT'])
+def update_category_item(category_id):
+    """
+    Обновить категорию
+    """
+    try:
+        category = db_session.query(Category).filter_by(id=category_id).first()
+        if not category:
+            return jsonify({
+                'success': False,
+                'error': 'Категория не найдена'
+            }), 404
+        
+        data = request.json
+        new_name = data.get('name', '').strip()
+        
+        if not new_name:
+            return jsonify({
+                'success': False,
+                'error': 'Название категории не может быть пустым'
+            }), 400
+        
+        # Проверяем, не существует ли уже категория с таким названием
+        existing = db_session.query(Category).filter_by(name=new_name).filter(Category.id != category_id).first()
+        if existing:
+            return jsonify({
+                'success': False,
+                'error': 'Категория с таким названием уже существует'
+            }), 400
+        
+        old_name = category.name
+        category.name = new_name
+        db_session.commit()
+        
+        # Обновляем все позиции портфеля, которые использовали старую категорию
+        db_session.query(Portfolio).filter_by(category=old_name).update({'category': new_name})
+        db_session.commit()
+        
+        return jsonify({
+            'success': True,
+            'category': category.to_dict(),
+            'message': f'Категория успешно обновлена'
+        })
+    except Exception as e:
+        db_session.rollback()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/categories/<int:category_id>', methods=['DELETE'])
+def delete_category(category_id):
+    """
+    Удалить категорию
+    """
+    try:
+        category = db_session.query(Category).filter_by(id=category_id).first()
+        if not category:
+            return jsonify({
+                'success': False,
+                'error': 'Категория не найдена'
+            }), 404
+        
+        category_name = category.name
+        
+        # Удаляем категорию из всех позиций портфеля
+        db_session.query(Portfolio).filter_by(category=category_name).update({'category': None})
+        
+        # Удаляем саму категорию
+        db_session.delete(category)
+        db_session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': f'Категория "{category_name}" успешно удалена'
+        })
+    except Exception as e:
+        db_session.rollback()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+# ==================== API ДЛЯ ВИДОВ АКТИВОВ ====================
+
+@app.route('/api/asset-types', methods=['GET'])
+def get_asset_types():
+    """
+    Получить список всех видов активов
+    """
+    try:
+        asset_types = db_session.query(AssetType).order_by(AssetType.name).all()
+        return jsonify({
+            'success': True,
+            'asset_types': [at.to_dict() for at in asset_types]
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/asset-types', methods=['POST'])
+def create_asset_type():
+    """
+    Создать новый вид актива
+    """
+    try:
+        data = request.json
+        name = data.get('name', '').strip()
+        
+        if not name:
+            return jsonify({
+                'success': False,
+                'error': 'Название вида актива не может быть пустым'
+            }), 400
+        
+        # Проверяем, не существует ли уже такой вид актива
+        existing = db_session.query(AssetType).filter_by(name=name).first()
+        if existing:
+            return jsonify({
+                'success': False,
+                'error': 'Вид актива с таким названием уже существует'
+            }), 400
+        
+        new_asset_type = AssetType(name=name)
+        db_session.add(new_asset_type)
+        db_session.commit()
+        
+        return jsonify({
+            'success': True,
+            'asset_type': new_asset_type.to_dict(),
+            'message': f'Вид актива "{name}" успешно создан'
+        })
+    except Exception as e:
+        db_session.rollback()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/asset-types/<int:asset_type_id>', methods=['PUT'])
+def update_asset_type_item(asset_type_id):
+    """
+    Обновить вид актива
+    """
+    try:
+        asset_type = db_session.query(AssetType).filter_by(id=asset_type_id).first()
+        if not asset_type:
+            return jsonify({
+                'success': False,
+                'error': 'Вид актива не найден'
+            }), 404
+        
+        data = request.json
+        new_name = data.get('name', '').strip()
+        
+        if not new_name:
+            return jsonify({
+                'success': False,
+                'error': 'Название вида актива не может быть пустым'
+            }), 400
+        
+        # Проверяем, не существует ли уже вид актива с таким названием
+        existing = db_session.query(AssetType).filter_by(name=new_name).filter(AssetType.id != asset_type_id).first()
+        if existing:
+            return jsonify({
+                'success': False,
+                'error': 'Вид актива с таким названием уже существует'
+            }), 400
+        
+        old_name = asset_type.name
+        asset_type.name = new_name
+        db_session.commit()
+        
+        # Обновляем все позиции портфеля, которые использовали старый вид актива
+        db_session.query(Portfolio).filter_by(asset_type=old_name).update({'asset_type': new_name})
+        db_session.commit()
+        
+        return jsonify({
+            'success': True,
+            'asset_type': asset_type.to_dict(),
+            'message': f'Вид актива успешно обновлен'
+        })
+    except Exception as e:
+        db_session.rollback()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/asset-types/<int:asset_type_id>', methods=['DELETE'])
+def delete_asset_type(asset_type_id):
+    """
+    Удалить вид актива
+    """
+    try:
+        asset_type = db_session.query(AssetType).filter_by(id=asset_type_id).first()
+        if not asset_type:
+            return jsonify({
+                'success': False,
+                'error': 'Вид актива не найден'
+            }), 404
+        
+        asset_type_name = asset_type.name
+        
+        # Удаляем вид актива из всех позиций портфеля
+        db_session.query(Portfolio).filter_by(asset_type=asset_type_name).update({'asset_type': None})
+        
+        # Удаляем сам вид актива
+        db_session.delete(asset_type)
+        db_session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': f'Вид актива "{asset_type_name}" успешно удален'
+        })
+    except Exception as e:
+        db_session.rollback()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
 
 
 atexit.register(close_db)

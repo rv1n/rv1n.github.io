@@ -71,14 +71,16 @@ class MOEXService:
             print(f"Неожиданная ошибка при запросе к MOEX: {e}")
             return None
     
-    def get_current_price(self, ticker: str) -> Optional[Dict]:
+    def get_current_price(self, ticker: str, instrument_type: str = 'STOCK') -> Optional[Dict]:
         """
         Получить текущую цену и данные по тикеру
         
-        Использует endpoint: /iss/engines/stock/markets/shares/securities/{ticker}
+        Использует endpoint: /iss/engines/stock/markets/shares/securities/{ticker} для акций
+        или /iss/engines/stock/markets/bonds/securities/{ticker} для облигаций
         
         Args:
-            ticker: Тикер акции (например, SBER, GAZP)
+            ticker: Тикер инструмента (например, SBER, GAZP для акций или SU26238RMFS4 для облигаций)
+            instrument_type: Тип инструмента ('STOCK' или 'BOND')
             
         Returns:
             Словарь с данными:
@@ -94,13 +96,14 @@ class MOEXService:
         ticker = ticker.upper().strip()
         
         # Проверяем кэш
-        cached_data = self._get_from_cache(ticker)
+        cache_key = f"{ticker}_{instrument_type}"
+        cached_data = self._get_from_cache(cache_key)
         if cached_data:
             return cached_data
         
-        # Формируем URL для запроса
-        # Используем endpoint для получения информации о ценных бумагах
-        url = f"{self.BASE_URL}/engines/stock/markets/shares/securities/{ticker}.json"
+        # Формируем URL для запроса в зависимости от типа инструмента
+        market = 'bonds' if instrument_type == 'BOND' else 'shares'
+        url = f"{self.BASE_URL}/engines/stock/markets/{market}/securities/{ticker}.json"
         
         # Параметры запроса: получаем данные о последней сделке
         params = {
@@ -109,6 +112,10 @@ class MOEXService:
             'securities.columns': 'SECID,LAST,OPEN,CHANGE,LASTTOPREVPRICE,VALTODAY',
             'marketdata.columns': 'LAST,OPEN,CHANGE,LASTTOPREVPRICE,VALTODAY'
         }
+        
+        # Для облигаций добавляем запрос marketdata_yields (содержит цену в процентах)
+        if instrument_type == 'BOND':
+            params['marketdata_yields.columns'] = 'SECID,PRICE,WAPRICE'
         
         data = self._make_request(url, params)
         
@@ -126,6 +133,7 @@ class MOEXService:
             data_dict = data[1]
             securities_table = data_dict.get('securities', [])
             marketdata_table = data_dict.get('marketdata', [])
+            marketdata_yields_table = data_dict.get('marketdata_yields', [])
             
             # Парсим marketdata (более актуальные данные)
             # Берем последний элемент массива, так как он содержит актуальные данные
@@ -136,6 +144,19 @@ class MOEXService:
                     if isinstance(item, dict) and item.get('LAST') is not None:
                         marketdata_dict = item
                         break
+            
+            # Для облигаций проверяем marketdata_yields, если LAST пустой
+            if instrument_type == 'BOND' and (not marketdata_dict.get('LAST') or marketdata_dict.get('LAST') == ''):
+                if marketdata_yields_table and isinstance(marketdata_yields_table, list):
+                    # Берем последний элемент с данными
+                    for item in reversed(marketdata_yields_table):
+                        if isinstance(item, dict):
+                            # Используем PRICE или WAPRICE из marketdata_yields
+                            price = item.get('PRICE') or item.get('WAPRICE')
+                            if price is not None:
+                                # Создаем словарь с ценой для дальнейшей обработки
+                                marketdata_dict = {'LAST': price}
+                                break
             
             # Парсим securities (резервные данные)
             securities_dict = {}
@@ -201,7 +222,7 @@ class MOEXService:
             }
             
             # Сохраняем в кэш
-            self._save_to_cache(ticker, result)
+            self._save_to_cache(cache_key, result)
             
             return result
             
@@ -211,12 +232,13 @@ class MOEXService:
             traceback.print_exc()
             return None
     
-    def get_security_info(self, ticker: str) -> Optional[Dict]:
+    def get_security_info(self, ticker: str, instrument_type: str = 'STOCK') -> Optional[Dict]:
         """
         Получить общую информацию о ценной бумаге
         
         Args:
-            ticker: Тикер акции
+            ticker: Тикер инструмента
+            instrument_type: Тип инструмента ('STOCK' или 'BOND')
             
         Returns:
             Словарь с информацией о бумаге или None

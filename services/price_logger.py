@@ -34,19 +34,26 @@ class PriceLogger:
                 print(f"[{datetime.now(self.moscow_tz)}] Портфель пуст, нечего логировать")
                 return
             
-            # Собираем уникальные тикеры
+            # Собираем уникальные тикеры с типами инструментов
             unique_tickers = {}
             for item in portfolio_items:
                 if item.ticker not in unique_tickers:
-                    unique_tickers[item.ticker] = item.company_name
+                    instrument_type = item.instrument_type.name if hasattr(item, 'instrument_type') and item.instrument_type else 'STOCK'
+                    unique_tickers[item.ticker] = {
+                        'company_name': item.company_name,
+                        'instrument_type': instrument_type
+                    }
             
             logged_count = 0
             
             # Логируем цену для каждого уникального тикера
-            for ticker, company_name in unique_tickers.items():
+            for ticker, ticker_info in unique_tickers.items():
                 try:
+                    company_name = ticker_info['company_name']
+                    instrument_type = ticker_info['instrument_type']
+                    
                     # Получаем текущую цену с MOEX
-                    quote_data = self.moex_service.get_current_price(ticker)
+                    quote_data = self.moex_service.get_current_price(ticker, instrument_type)
                     
                     if not quote_data:
                         print(f"[{datetime.now(self.moscow_tz)}] Не удалось получить данные для {ticker}")
@@ -70,6 +77,9 @@ class PriceLogger:
                         price_change_percent = 0
                     
                     # Создаем запись в истории
+                    from models.portfolio import InstrumentType
+                    instrument_type_enum = InstrumentType[instrument_type] if instrument_type in ['STOCK', 'BOND'] else InstrumentType.STOCK
+                    
                     price_log = PriceHistory(
                         ticker=ticker,
                         company_name=company_name,
@@ -77,6 +87,7 @@ class PriceLogger:
                         change=round(price_change, 2),
                         change_percent=round(price_change_percent, 2),
                         volume=quote_data.get('volume', 0),
+                        instrument_type=instrument_type_enum,
                         logged_at=datetime.now(self.moscow_tz)
                     )
                     
