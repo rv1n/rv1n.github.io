@@ -82,9 +82,10 @@
                 <table class="portfolio-table" id="portfolio-table" style="display: none;">
                     <thead>
                         <tr>
-                            <th>Актив</th>
+                            <th>Название актива</th>
                             <th>Цена покупки</th>
                             <th>Количество</th>
+                            <th>Сумма инвестиций</th>
                             <th>Сумма актива</th>
                             <th>Текущая цена</th>
                             <th>Изменение</th>
@@ -429,13 +430,6 @@
             <span class="close" onclick="closeBuyModal()">&times;</span>
             <h2>➕ Купить инструмент</h2>
             <form id="buy-form">
-                <div class="form-group">
-                    <label for="buy-instrument-type">Тип инструмента *</label>
-                    <select id="buy-instrument-type" name="instrument_type" required>
-                        <option value="STOCK">Акция</option>
-                        <option value="BOND">Облигация</option>
-                    </select>
-                </div>
                 <div class="form-group">
                     <label for="buy-ticker">Тикер *</label>
                     <div class="ticker-input-container">

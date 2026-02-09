@@ -14,9 +14,9 @@ body {
 }
 
 .container {
-    width: 100%;
-    max-width: 100%;
-    margin: 0;
+    width: 70%;
+    max-width: 70%;
+    margin: 0 auto;
     background: white;
     border-radius: 0;
     box-shadow: none;
@@ -694,8 +694,10 @@ header h1 {
 
 /* Таблица в модальном окне управления категориями */
 .manage-categories-content .categories-table {
+    width: auto;
     min-width: auto;
     font-size: 0.95em;
+    margin: 0 auto;
 }
 
 .categories-table th {
@@ -726,6 +728,12 @@ header h1 {
     text-align: right;
 }
 
+/* Выравнивание столбца с видами активов по левому краю */
+.categories-table th:nth-child(4),
+.categories-table td:nth-child(4) {
+    text-align: left;
+}
+
 .categories-table td:last-child .btn {
     display: inline-flex;
     align-items: center;
@@ -737,7 +745,8 @@ header h1 {
     background: #f8f9fa;
 }
 
-.category-select {
+.category-select,
+.asset-type-select {
     padding: 8px 12px;
     border: 1px solid #ddd;
     border-radius: 5px;
@@ -750,13 +759,16 @@ header h1 {
 }
 
 .category-select:hover,
-.category-select:focus {
+.category-select:focus,
+.asset-type-select:hover,
+.asset-type-select:focus {
     outline: none;
     border-color: #1e3a5f;
     box-shadow: 0 0 0 3px rgba(30, 58, 95, 0.1);
 }
 
-.category-select:disabled {
+.category-select:disabled,
+.asset-type-select:disabled {
     background-color: #f5f5f5;
     cursor: not-allowed;
     opacity: 0.6;

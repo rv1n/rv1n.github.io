@@ -126,11 +126,14 @@ async function loadPortfolio(silent = false) {
         const data = await response.json();
         
         if (data.success) {
-            // Сохраняем данные портфеля для последующего обновления категорий
-            currentPortfolioData = data.portfolio;
+            // Сохраняем данные портфеля и сводки для последующего использования
+            currentPortfolioData = {
+                portfolio: data.portfolio,
+                summary: data.summary
+            };
             
-            // Просто отображаем данные
-            displayPortfolio(data.portfolio, data.summary);
+            // Отображаем данные
+            displayPortfolio(currentPortfolioData.portfolio, currentPortfolioData.summary);
             updateLastUpdateTime();
             if (!silent) {
                 if (loading) loading.style.display = 'none';
@@ -325,7 +328,7 @@ function createPortfolioRow(item, totalPortfolioValue = 0) {
 
     // Рассчитываем процент от общего портфеля, используя цену в рублях
     const totalValue = item.quantity * effectivePrice;
-    const portfolioPercent = totalPortfolioValue > 0 ? (totalValue / totalPortfolioValue * 100).toFixed(2) : 0;
+    const portfolioPercent = totalPortfolioValue > 0 ? (totalValue / totalPortfolioValue * 100) : 0;
     
     // Разметка для колонки "Цена сейчас"
     // Для акций отображаем только цену в рублях
@@ -334,10 +337,12 @@ function createPortfolioRow(item, totalPortfolioValue = 0) {
         ? `
             <div style="display: flex; flex-direction: column; align-items: flex-start;">
                 <strong>${formatCurrentPrice(effectivePrice)}</strong>
-                <span style="font-size: 0.85em; color: #7f8c8d;">${item.current_price.toFixed(2)}%</span>
+                <span style="font-size: 0.85em; color: #7f8c8d;">${formatPercent(item.current_price, 5)}</span>
             </div>
         `
         : `<strong>${formatCurrentPrice(effectivePrice)}</strong>`;
+    
+    const investmentsTotal = item.quantity * item.average_buy_price;
     
     row.innerHTML = `
         <td>
@@ -349,21 +354,24 @@ function createPortfolioRow(item, totalPortfolioValue = 0) {
         <td>${formatCurrency(item.average_buy_price)}</td>
         <td>${formatNumber(item.quantity)}</td>
         <td>
+            <strong>${formatAssetTotal(investmentsTotal)}</strong>
+        </td>
+        <td>
             <div style="display: flex; flex-direction: column; align-items: flex-start;">
-                <strong>${formatCurrency(totalValue)}</strong>
-                <span style="font-size: 0.85em; color: #7f8c8d;">${portfolioPercent}%</span>
+                <strong>${formatAssetTotal(totalValue)}</strong>
+                <span style="font-size: 0.85em; color: #7f8c8d;">${formatPercent(portfolioPercent, 2)}</span>
             </div>
         </td>
         <td>${priceCellHtml}</td>
         <td class="${changeClass}">
             ${item.price_change >= 0 ? '+' : ''}${formatCurrency(item.price_change)} 
-            (${item.price_change_percent >= 0 ? '+' : ''}${item.price_change_percent.toFixed(2)}%)
+            (${item.price_change_percent >= 0 ? '+' : ''}${formatPercent(Math.abs(item.price_change_percent), 2)})
         </td>
         <td class="${pnlClass}">
             ${item.profit_loss >= 0 ? '+' : ''}${formatCurrency(item.profit_loss)}
         </td>
         <td class="${pnlPercentClass}">
-            ${item.profit_loss_percent >= 0 ? '+' : ''}${item.profit_loss_percent.toFixed(2)}%
+            ${item.profit_loss_percent >= 0 ? '+' : ''}${formatPercent(Math.abs(item.profit_loss_percent), 2)}
         </td>
         <td>
             <button class="btn btn-sell" 
@@ -397,8 +405,9 @@ function updateSummary(summary) {
     }
     
     if (totalPnlPercentEl) {
-        totalPnlPercentEl.textContent = `${summary.total_pnl_percent >= 0 ? '+' : ''}${summary.total_pnl_percent.toFixed(2)}%`;
-        totalPnlPercentEl.className = `summary-percent ${summary.total_pnl_percent >= 0 ? 'profit' : 'loss'}`;
+        const pnlPercent = summary.total_pnl_percent || 0;
+        totalPnlPercentEl.textContent = `${pnlPercent >= 0 ? '+' : ''}${formatPercent(Math.abs(pnlPercent), 2)}`;
+        totalPnlPercentEl.className = `summary-percent ${pnlPercent >= 0 ? 'profit' : 'loss'}`;
     }
 }
 
@@ -414,32 +423,46 @@ async function updateAllCategoryViews() {
         
         if (data.success && data.portfolio) {
             // Обновляем сохраненные данные
-            currentPortfolioData = data.portfolio;
+            currentPortfolioData = {
+                portfolio: data.portfolio,
+                summary: data.summary || null
+            };
             
-            // 1. Обновляем столбец категорий в таблице "Мой портфель" (если она существует)
-            const tbody = document.getElementById('portfolio-tbody');
-            if (tbody) {
-                const rows = tbody.getElementsByTagName('tr');
-                
-                data.portfolio.forEach((item, index) => {
-                    if (rows[index]) {
-                        // Находим ячейку категории (3-я колонка, индекс 2)
-                        const categoryCell = rows[index].cells[2];
-                        if (categoryCell) {
-                            categoryCell.innerHTML = `<span class="category-badge">${item.category || '-'}</span>`;
-                        }
-                    }
-                });
-            }
+            // Перерисовываем таблицу портфеля, чтобы гарантировать корректные данные
+            displayPortfolio(currentPortfolioData.portfolio, currentPortfolioData.summary);
             
-            // 2. Обновляем диаграмму "Распределение по категориям"
-            updateCategoryChart(data.portfolio);
+            // Обновляем диаграмму "Распределение по категориям"
+            updateCategoryChart(currentPortfolioData.portfolio);
             
             // Сбрасываем флаг изменений
             categoriesChanged = false;
         }
     } catch (error) {
         console.error('Ошибка обновления категорий:', error);
+    }
+}
+
+/**
+ * Обновление видов активов во всех связанных вкладках
+ * Загружает данные и обновляет диаграмму "Распределение по видам активов"
+ */
+async function updateAllAssetTypeViews() {
+    try {
+        const response = await fetch('/api/portfolio');
+        const data = await response.json();
+        
+        if (data.success && data.portfolio) {
+            // Обновляем сохраненные данные портфеля
+            currentPortfolioData = {
+                portfolio: data.portfolio,
+                summary: data.summary || null
+            };
+            
+            // Обновляем диаграмму распределения по видам активов
+            updateAssetTypeChart(currentPortfolioData.portfolio);
+        }
+    } catch (error) {
+        console.error('Ошибка обновления видов активов:', error);
     }
 }
 
@@ -493,7 +516,6 @@ async function validateBuyTicker(ticker) {
     const statusEl = document.getElementById('buy-ticker-status');
     const hintEl = document.getElementById('buy-ticker-hint');
     const companyNameInput = document.getElementById('buy-company-name');
-    const instrumentTypeSelect = document.getElementById('buy-instrument-type');
     
     if (!statusEl || !hintEl || !companyNameInput) {
         console.error('Не найдены необходимые элементы формы покупки');
@@ -501,8 +523,7 @@ async function validateBuyTicker(ticker) {
     }
     
     try {
-        const instrumentType = instrumentTypeSelect ? instrumentTypeSelect.value : 'STOCK';
-        const response = await fetch(`/api/validate-ticker/${ticker}?instrument_type=${instrumentType}`);
+        const response = await fetch(`/api/validate-ticker/${ticker}?instrument_type=STOCK`);
         const data = await response.json();
         
         if (data.success && data.exists) {
@@ -606,23 +627,23 @@ async function handleBuy(e) {
     
     // Проверяем, что тикер валидирован
     if (ticker !== lastValidatedTicker) {
-        alert('Пожалуйста, дождитесь проверки тикера на Московской бирже');
+        console.warn('Пожалуйста, дождитесь проверки тикера на Московской бирже');
         return;
     }
     
     const statusEl = document.getElementById('buy-ticker-status');
     if (statusEl.classList.contains('invalid')) {
-        alert('Указан несуществующий тикер. Пожалуйста, проверьте правильность написания.');
+        console.warn('Указан несуществующий тикер. Пожалуйста, проверьте правильность написания.');
         return;
     }
     
     const quantity = parseFloat(document.getElementById('buy-quantity').value);
     const price = parseFloat(document.getElementById('buy-price').value);
     const companyName = document.getElementById('buy-company-name').value.trim();
-    const instrumentType = document.getElementById('buy-instrument-type').value;
+    const instrumentType = 'STOCK';
     
     if (!ticker || quantity <= 0 || price <= 0) {
-        alert('Заполните все обязательные поля корректно');
+        console.warn('Заполните все обязательные поля корректно');
         return;
     }
     
@@ -649,7 +670,7 @@ async function handleBuy(e) {
         const transData = await transResponse.json();
         
         if (!transData.success) {
-            alert('Ошибка при создании транзакции: ' + transData.error);
+            console.error('Ошибка при создании транзакции:', transData.error);
             return;
         }
         
@@ -679,18 +700,17 @@ async function handleBuy(e) {
             // Перезагрузка портфеля
             loadPortfolio();
             
-            // Показываем сообщение в зависимости от того, была ли позиция обновлена
+            // Логируем результат в консоль вместо всплывающего окна
             if (data.updated) {
-                alert(`✅ Покупка успешно оформлена!\n\nТикер: ${ticker}\nКуплено: ${quantity} шт. по ${parseFloat(price).toFixed(5)} ₽\n\nНовое количество в портфеле: ${data.new_quantity.toFixed(2)}\nСредняя цена: ${parseFloat(data.new_average_price).toFixed(5)} ₽`);
+                console.log(`Покупка оформлена. Тикер: ${ticker}, куплено: ${quantity} шт. по ${parseFloat(price).toFixed(5)} ₽. Новое количество: ${data.new_quantity.toFixed(2)}, средняя цена: ${parseFloat(data.new_average_price).toFixed(5)} ₽`);
             } else {
-                alert(`✅ Покупка успешно оформлена!\n\nТикер: ${ticker}\nКуплено: ${quantity} шт. по ${parseFloat(price).toFixed(5)} ₽\nСумма: ${(quantity * price).toFixed(2)} ₽`);
+                console.log(`Покупка оформлена. Тикер: ${ticker}, куплено: ${quantity} шт. по ${parseFloat(price).toFixed(5)} ₽, сумма: ${(quantity * price).toFixed(2)} ₽`);
             }
         } else {
-            alert('Ошибка при обновлении портфеля: ' + data.error);
+            console.error('Ошибка при обновлении портфеля:', data.error);
         }
     } catch (error) {
         console.error('Ошибка покупки:', error);
-        alert('Ошибка соединения с сервером');
     }
 }
 
@@ -728,7 +748,7 @@ async function handleEditPosition(e) {
     };
     
     if (formData.quantity <= 0 || formData.average_buy_price <= 0) {
-        alert('Количество и цена должны быть положительными');
+        console.warn('Количество и цена должны быть положительными');
         return;
     }
     
@@ -746,13 +766,12 @@ async function handleEditPosition(e) {
         if (data.success) {
             closeEditModal();
             loadPortfolio();
-            alert('Позиция успешно обновлена!');
+            console.log('Позиция успешно обновлена');
         } else {
-            alert('Ошибка: ' + data.error);
+            console.error('Ошибка обновления позиции:', data.error);
         }
     } catch (error) {
         console.error('Ошибка обновления позиции:', error);
-        alert('Ошибка соединения с сервером');
     }
 }
 
@@ -760,10 +779,6 @@ async function handleEditPosition(e) {
  * Удаление позиции из портфеля
  */
 async function deletePosition(id, ticker) {
-    if (!confirm(`Вы уверены, что хотите удалить позицию ${ticker}?`)) {
-        return;
-    }
-    
     try {
         const response = await fetch(`/api/portfolio/${id}`, {
             method: 'DELETE'
@@ -773,13 +788,12 @@ async function deletePosition(id, ticker) {
         
         if (data.success) {
             loadPortfolio();
-            alert('Позиция успешно удалена!');
+            console.log(`Позиция ${ticker} успешно удалена`);
         } else {
-            alert('Ошибка: ' + data.error);
+            console.error('Ошибка удаления позиции:', data.error);
         }
     } catch (error) {
         console.error('Ошибка удаления позиции:', error);
-        alert('Ошибка соединения с сервером');
     }
 }
 
@@ -813,33 +827,63 @@ function showError(message) {
 }
 
 /**
- * Форматирование валюты
+ * Форматирование валюты (до 5 знаков, без лишних нулей)
  */
 function formatCurrency(value) {
     if (value === null || value === undefined) {
-        return '0.00000 ₽';
+        return '0 ₽';
     }
     return new Intl.NumberFormat('ru-RU', {
         style: 'currency',
         currency: 'RUB',
-        minimumFractionDigits: 5,
+        minimumFractionDigits: 0,
         maximumFractionDigits: 5
     }).format(value);
 }
 
 /**
- * Форматирование текущей цены (2 знака после запятой)
+ * Форматирование суммы актива:
+ * до двух знаков после запятой, без лишних нулей
  */
-function formatCurrentPrice(value) {
+function formatAssetTotal(value) {
     if (value === null || value === undefined) {
-        return '0.00 ₽';
+        return '0 ₽';
     }
     return new Intl.NumberFormat('ru-RU', {
         style: 'currency',
         currency: 'RUB',
-        minimumFractionDigits: 2,
+        minimumFractionDigits: 0,
         maximumFractionDigits: 2
     }).format(value);
+}
+
+/**
+ * Форматирование текущей цены (до 2 знаков, без лишних нулей)
+ */
+function formatCurrentPrice(value) {
+    if (value === null || value === undefined) {
+        return '0 ₽';
+    }
+    return new Intl.NumberFormat('ru-RU', {
+        style: 'currency',
+        currency: 'RUB',
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 2
+    }).format(value);
+}
+
+/**
+ * Форматирование процентов (до decimals знаков, без лишних нулей)
+ */
+function formatPercent(value, decimals = 2) {
+    if (value === null || value === undefined || isNaN(value)) {
+        return '0%';
+    }
+    const formatted = new Intl.NumberFormat('ru-RU', {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: decimals
+    }).format(value);
+    return `${formatted}%`;
 }
 
 /**
@@ -903,7 +947,7 @@ function switchView(viewType) {
             updateAllCategoryViews();
         } else if (currentPortfolioData) {
             // Используем уже загруженные данные
-            updateCategoryChart(currentPortfolioData);
+            updateCategoryChart(currentPortfolioData.portfolio || currentPortfolioData);
         }
         
         // Применяем выбор типа диаграммы
@@ -1014,7 +1058,7 @@ function updateCategoryChart(portfolio) {
                 <div class="category-bar-container">
                     <div class="category-bar" style="width: ${item.percentage}%; background: ${color};"></div>
                 </div>
-                <div class="category-percentage">${item.percentage.toFixed(2)}%</div>
+                <div class="category-percentage">${formatPercent(item.percentage, 2)}</div>
             </div>
         `;
     });
@@ -1132,7 +1176,7 @@ function updateAssetTypeChart(portfolio) {
                 <div class="category-bar-container">
                     <div class="category-bar" style="width: ${item.percentage}%; background: ${color};"></div>
                 </div>
-                <div class="category-percentage">${item.percentage.toFixed(2)}%</div>
+                <div class="category-percentage">${formatPercent(item.percentage, 2)}</div>
             </div>
         `;
     });
@@ -1297,7 +1341,7 @@ function renderAssetTypesPieChart(portfolio, containerId = 'asset-type-pie-chart
                     <div class="pie-legend-name">${item.assetType}</div>
                     <div class="pie-legend-value">${formatCurrency(item.value)}</div>
                 </div>
-                <div class="pie-legend-percentage">${item.percentage.toFixed(1)}%</div>
+                <div class="pie-legend-percentage">${formatPercent(item.percentage, 1)}</div>
             </div>
         `;
     });
@@ -1428,7 +1472,7 @@ function renderCategoriesPieChart(portfolio, containerId = 'categories-pie-chart
                     <div class="pie-legend-name">${item.category}</div>
                     <div class="pie-legend-value">${formatCurrency(item.value)}</div>
                 </div>
-                <div class="pie-legend-percentage">${item.percentage.toFixed(1)}%</div>
+                <div class="pie-legend-percentage">${formatPercent(item.percentage, 1)}</div>
             </div>
         `;
     });
@@ -1685,7 +1729,7 @@ async function logPricesNow() {
             }, 1000);
         } else {
             btn.textContent = '❌ Ошибка';
-            alert('Ошибка: ' + data.error);
+            console.error('Ошибка логирования цен:', data.error);
             setTimeout(() => {
                 btn.textContent = originalText;
                 btn.disabled = false;
@@ -1812,18 +1856,6 @@ document.addEventListener('DOMContentLoaded', function() {
         const now = new Date();
         now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
         transAddDate.value = now.toISOString().slice(0, 16);
-    }
-    
-    // Обработчик изменения типа инструмента для повторной валидации тикера
-    const buyInstrumentType = document.getElementById('buy-instrument-type');
-    if (buyInstrumentType) {
-        buyInstrumentType.addEventListener('change', function() {
-            const ticker = document.getElementById('buy-ticker').value.trim().toUpperCase();
-            if (ticker) {
-                lastValidatedTicker = ''; // Сбрасываем валидацию
-                validateBuyTicker(ticker);
-            }
-        });
     }
     
     // Обработчик фильтра по типу инструмента в портфеле
@@ -2037,13 +2069,12 @@ async function handleAddTransaction(event) {
         if (data.success) {
             closeAddTransactionModal();
             loadTransactions();
-            alert('Транзакция успешно добавлена!');
+            console.log('Транзакция успешно добавлена');
         } else {
-            alert('Ошибка: ' + data.error);
+            console.error('Ошибка добавления транзакции:', data.error);
         }
     } catch (error) {
         console.error('Ошибка добавления транзакции:', error);
-        alert('Не удалось добавить транзакцию');
     }
 }
 
@@ -2124,13 +2155,12 @@ async function handleEditTransaction(event) {
         if (data.success) {
             closeEditTransactionModal();
             loadTransactions();
-            alert('Транзакция успешно обновлена!');
+            console.log('Транзакция успешно обновлена');
         } else {
-            alert('Ошибка: ' + data.error);
+            console.error('Ошибка обновления транзакции:', data.error);
         }
     } catch (error) {
         console.error('Ошибка обновления транзакции:', error);
-        alert('Не удалось обновить транзакцию');
     }
 }
 
@@ -2138,10 +2168,6 @@ async function handleEditTransaction(event) {
  * Удаление транзакции
  */
 async function deleteTransaction(transactionId) {
-    if (!confirm('Вы уверены, что хотите удалить эту транзакцию?')) {
-        return;
-    }
-    
     try {
         const response = await fetch(`/api/transactions/${transactionId}`, {
             method: 'DELETE'
@@ -2151,13 +2177,12 @@ async function deleteTransaction(transactionId) {
         
         if (data.success) {
             loadTransactions();
-            alert('Транзакция успешно удалена!');
+            console.log('Транзакция успешно удалена');
         } else {
-            alert('Ошибка: ' + data.error);
+            console.error('Ошибка удаления транзакции:', data.error);
         }
     } catch (error) {
         console.error('Ошибка удаления транзакции:', error);
-        alert('Не удалось удалить транзакцию');
     }
 }
 
@@ -2226,16 +2251,12 @@ async function handleSell(e) {
     
     // Валидация количества
     if (quantity <= 0) {
-        alert('Количество должно быть больше 0');
+        console.warn('Количество должно быть больше 0');
         return;
     }
     
     if (quantity > availableQuantity) {
-        alert(`Недостаточно акций для продажи!\nДоступно: ${availableQuantity}\nУказано: ${quantity}`);
-        return;
-    }
-    
-    if (!confirm(`Продать ${quantity} акций ${ticker} по ${parseFloat(price).toFixed(5)} ₽?\n\nСумма продажи: ${(quantity * price).toFixed(2)} ₽`)) {
+        console.warn(`Недостаточно акций для продажи. Доступно: ${availableQuantity}, указано: ${quantity}`);
         return;
     }
     
@@ -2261,7 +2282,7 @@ async function handleSell(e) {
         const transData = await transResponse.json();
         
         if (!transData.success) {
-            alert('Ошибка при создании транзакции продажи: ' + transData.error);
+            console.error('Ошибка при создании транзакции продажи:', transData.error);
             return;
         }
         
@@ -2277,7 +2298,7 @@ async function handleSell(e) {
             const deleteData = await deleteResponse.json();
             
             if (!deleteData.success) {
-                alert('Ошибка при удалении позиции: ' + deleteData.error);
+                console.error('Ошибка при удалении позиции:', deleteData.error);
                 return;
             }
         } else {
@@ -2295,7 +2316,7 @@ async function handleSell(e) {
             const updateData = await updateResponse.json();
             
             if (!updateData.success) {
-                alert('Ошибка при обновлении портфеля: ' + updateData.error);
+                console.error('Ошибка при обновлении портфеля:', updateData.error);
                 return;
             }
         }
@@ -2304,18 +2325,17 @@ async function handleSell(e) {
         closeSellModal();
         loadPortfolio();
         
-        // Показываем сообщение об успехе
+        // Логируем результат в консоль
         const totalSum = (quantity * price).toFixed(2);
         const formattedPrice = parseFloat(price).toFixed(5);
         if (remainingQuantity <= 0.001) {
-            alert(`✅ Продажа успешно оформлена!\n\nТикер: ${ticker}\nПродано: ${quantity} шт. по ${formattedPrice} ₽\nСумма: ${totalSum} ₽\n\n⚠️ Позиция полностью закрыта и удалена из портфеля`);
+            console.log(`Продажа оформлена. Тикер: ${ticker}, продано: ${quantity} шт. по ${formattedPrice} ₽, сумма: ${totalSum} ₽. Позиция полностью закрыта.`);
         } else {
-            alert(`✅ Продажа успешно оформлена!\n\nТикер: ${ticker}\nПродано: ${quantity} шт. по ${formattedPrice} ₽\nСумма: ${totalSum} ₽\n\nОсталось в портфеле: ${remainingQuantity.toFixed(2)} шт.`);
+            console.log(`Продажа оформлена. Тикер: ${ticker}, продано: ${quantity} шт. по ${formattedPrice} ₽, сумма: ${totalSum} ₽. Осталось: ${remainingQuantity.toFixed(2)} шт.`);
         }
         
     } catch (error) {
         console.error('Ошибка продажи:', error);
-        alert('Ошибка при выполнении операции продажи');
     }
 }
 
@@ -2531,6 +2551,9 @@ async function updateAssetTypeForTicker(ticker) {
                             indicatorEl.textContent = '';
                         }, 2000);
                     }
+                    
+                    // Обновляем связанные представления для видов активов
+                    await updateAllAssetTypeViews();
                 } else {
                     // Показываем индикатор ошибки
                     if (indicatorEl) {
@@ -2540,7 +2563,7 @@ async function updateAssetTypeForTicker(ticker) {
                             indicatorEl.textContent = '';
                         }, 2000);
                     }
-                    alert('Ошибка обновления вида актива: ' + updateData.error);
+                    console.error('Ошибка обновления вида актива:', updateData.error);
                 }
             }
         }
@@ -2553,7 +2576,7 @@ async function updateAssetTypeForTicker(ticker) {
                 indicatorEl.textContent = '';
             }, 2000);
         }
-        alert('Ошибка соединения с сервером');
+        console.error('Ошибка соединения с сервером при обновлении вида актива');
     } finally {
         selectEl.disabled = false;
     }
@@ -2811,7 +2834,6 @@ async function loadManageCategories() {
         }
     } catch (error) {
         console.error('Ошибка загрузки категорий:', error);
-        alert('Ошибка загрузки категорий: ' + error.message);
     }
 }
 
@@ -2862,10 +2884,7 @@ function editCategory(categoryId, categoryName) {
  * Удаление категории
  */
 async function deleteCategory(categoryId, categoryName) {
-    if (!confirm(`Вы уверены, что хотите удалить категорию "${categoryName}"?\n\nВсе позиции портфеля с этой категорией будут обновлены (категория будет удалена).`)) {
-        return;
-    }
-    
+    // Раньше здесь было подтверждение через confirm, теперь удаляем без дополнительного запроса
     try {
         const response = await fetch(`/api/categories/${categoryId}`, {
             method: 'DELETE'
@@ -2874,7 +2893,7 @@ async function deleteCategory(categoryId, categoryName) {
         const data = await response.json();
         
         if (data.success) {
-            alert(`✅ ${data.message}`);
+            console.log(data.message);
             await loadManageCategories();
             await loadCategoriesList(); // Обновляем список категорий (внутри вызывается updateCategorySelects)
             // Обновляем селекты категорий в таблице
@@ -2887,11 +2906,10 @@ async function deleteCategory(categoryId, categoryName) {
                 renderCategories(items);
             }
         } else {
-            alert('Ошибка удаления категории: ' + data.error);
+            console.error('Ошибка удаления категории:', data.error);
         }
     } catch (error) {
         console.error('Ошибка удаления категории:', error);
-        alert('Ошибка удаления категории: ' + error.message);
     }
 }
 
@@ -2913,7 +2931,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const categoryName = nameInput.value.trim();
             
             if (!categoryName) {
-                alert('Название категории не может быть пустым');
+                console.warn('Название категории не может быть пустым');
                 return;
             }
             
@@ -2942,7 +2960,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 const data = await response.json();
                 
                 if (data.success) {
-                    alert(`✅ ${data.message}`);
+                    console.log(data.message);
                     closeCategoryEditModal();
                     await loadManageCategories();
                     await loadCategoriesList(); // Обновляем список категорий
@@ -2956,11 +2974,10 @@ document.addEventListener('DOMContentLoaded', function() {
                         renderCategories(items);
                     }
                 } else {
-                    alert('Ошибка: ' + data.error);
+                    console.error('Ошибка сохранения категории:', data.error);
                 }
             } catch (error) {
                 console.error('Ошибка сохранения категории:', error);
-                alert('Ошибка сохранения категории: ' + error.message);
             }
         });
     }
@@ -3122,7 +3139,6 @@ async function loadManageAssetTypes() {
         }
     } catch (error) {
         console.error('Ошибка загрузки видов активов:', error);
-        alert('Ошибка загрузки видов активов: ' + error.message);
     }
 }
 
@@ -3173,10 +3189,7 @@ function editAssetType(assetTypeId, assetTypeName) {
  * Удаление вида актива
  */
 async function deleteAssetType(assetTypeId, assetTypeName) {
-    if (!confirm(`Вы уверены, что хотите удалить вид актива "${assetTypeName}"?\n\nВсе позиции портфеля с этим видом актива будут обновлены (вид актива будет удален).`)) {
-        return;
-    }
-    
+    // Раньше здесь было подтверждение через confirm, теперь удаляем без дополнительного запроса
     try {
         const response = await fetch(`/api/asset-types/${assetTypeId}`, {
             method: 'DELETE'
@@ -3185,7 +3198,7 @@ async function deleteAssetType(assetTypeId, assetTypeName) {
         const data = await response.json();
         
         if (data.success) {
-            alert(`✅ ${data.message}`);
+            console.log(data.message);
             await loadManageAssetTypes();
             await loadAssetTypesList(); // Обновляем список видов активов
             // Обновляем селекты видов активов в таблице
@@ -3199,11 +3212,10 @@ async function deleteAssetType(assetTypeId, assetTypeName) {
                 renderCategories(items);
             }
         } else {
-            alert('Ошибка удаления вида актива: ' + data.error);
+            console.error('Ошибка удаления вида актива:', data.error);
         }
     } catch (error) {
         console.error('Ошибка удаления вида актива:', error);
-        alert('Ошибка удаления вида актива: ' + error.message);
     }
 }
 
@@ -3223,7 +3235,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const assetTypeName = nameInput.value.trim();
             
             if (!assetTypeName) {
-                alert('Название вида актива не может быть пустым');
+                console.warn('Название вида актива не может быть пустым');
                 return;
             }
             
@@ -3252,7 +3264,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 const data = await response.json();
                 
                 if (data.success) {
-                    alert(`✅ ${data.message}`);
+                    console.log(data.message);
                     closeAssetTypeEditModal();
                     await loadManageAssetTypes();
                     await loadAssetTypesList(); // Обновляем список видов активов
@@ -3267,11 +3279,10 @@ document.addEventListener('DOMContentLoaded', function() {
                         renderCategories(items);
                     }
                 } else {
-                    alert('Ошибка: ' + data.error);
+                    console.error('Ошибка сохранения вида актива:', data.error);
                 }
             } catch (error) {
                 console.error('Ошибка сохранения вида актива:', error);
-                alert('Ошибка сохранения вида актива: ' + error.message);
             }
         });
     }
