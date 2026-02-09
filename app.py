@@ -91,7 +91,19 @@ def get_portfolio():
             instrument_type = item.instrument_type.name if hasattr(item, 'instrument_type') and item.instrument_type else 'STOCK'
             
             # Получаем актуальную цену с MOEX
-            current_price_data = moex_service.get_current_price(item.ticker, instrument_type)
+            # Если для первого типа инструмента данных нет (например, тикер облигации помечен как STOCK),
+            # пробуем альтернативный тип, чтобы гарантировать получение цены
+            current_price_data = None
+            types_to_try = [instrument_type]
+            if instrument_type == 'STOCK':
+                types_to_try.append('BOND')
+            elif instrument_type == 'BOND':
+                types_to_try.append('STOCK')
+            
+            for itype in types_to_try:
+                current_price_data = moex_service.get_current_price(item.ticker, itype)
+                if current_price_data:
+                    break
             
             if current_price_data:
                 current_price = current_price_data.get('price', 0)

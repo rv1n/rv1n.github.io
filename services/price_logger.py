@@ -53,7 +53,21 @@ class PriceLogger:
                     instrument_type = ticker_info['instrument_type']
                     
                     # Получаем текущую цену с MOEX
-                    quote_data = self.moex_service.get_current_price(ticker, instrument_type)
+                    # Если для первого типа инструмента данных нет (например, тикер облигации помечен как STOCK),
+                    # пробуем альтернативный тип, чтобы гарантировать получение цены
+                    quote_data = None
+                    types_to_try = [instrument_type]
+                    if instrument_type == 'STOCK':
+                        types_to_try.append('BOND')
+                    elif instrument_type == 'BOND':
+                        types_to_try.append('STOCK')
+                    
+                    used_instrument_type = instrument_type
+                    for itype in types_to_try:
+                        quote_data = self.moex_service.get_current_price(ticker, itype)
+                        if quote_data:
+                            used_instrument_type = itype
+                            break
                     
                     if not quote_data:
                         print(f"[{datetime.now(self.moscow_tz)}] Не удалось получить данные для {ticker}")
@@ -78,7 +92,7 @@ class PriceLogger:
                     
                     # Создаем запись в истории
                     from models.portfolio import InstrumentType
-                    instrument_type_enum = InstrumentType[instrument_type] if instrument_type in ['STOCK', 'BOND'] else InstrumentType.STOCK
+                    instrument_type_enum = InstrumentType[used_instrument_type] if used_instrument_type in ['STOCK', 'BOND'] else InstrumentType.STOCK
                     
                     price_log = PriceHistory(
                         ticker=ticker,
