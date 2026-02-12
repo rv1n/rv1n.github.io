@@ -6,7 +6,7 @@
 ```bash
 pip install -r requirements.txt
 ```
-
+с
 ### 2. Запустите приложение
 ```bash
 python app.py

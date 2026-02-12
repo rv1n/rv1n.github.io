@@ -256,7 +256,7 @@ function displayPortfolio(portfolio, summary) {
         const message = selectedType ? 
             `Нет инструментов типа "${selectedType}"` : 
             'Портфель пуст. Добавьте первую позицию.';
-        tbody.innerHTML = `<tr><td colspan="9" style="text-align: center; padding: 40px; color: #7f8c8d;">${message}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; padding: 40px; color: #7f8c8d;">${message}</td></tr>`;
         if (portfolio.length === 0) {
             previousPrices = {}; // Очищаем сохраненные цены только если портфель действительно пуст
         }
@@ -312,7 +312,6 @@ function createPortfolioRow(item, totalPortfolioValue = 0) {
     
     // Определение классов для прибыли/убытка
     const pnlClass = item.profit_loss >= 0 ? 'profit' : 'loss';
-    const pnlPercentClass = item.profit_loss_percent >= 0 ? 'profit' : 'loss';
     const changeClass = item.price_change >= 0 ? 'profit' : 'loss';
     
     // Определяем, является ли инструмент облигацией
@@ -330,19 +329,17 @@ function createPortfolioRow(item, totalPortfolioValue = 0) {
     const totalValue = item.quantity * effectivePrice;
     const portfolioPercent = totalPortfolioValue > 0 ? (totalValue / totalPortfolioValue * 100) : 0;
     
-    // Разметка для колонки "Цена сейчас"
-    // Для акций отображаем только цену в рублях
-    // Для облигаций – в рублях и в процентах (как в колонке "Общая стоимость")
-    const priceCellHtml = isBond
-        ? `
-            <div style="display: flex; flex-direction: column; align-items: flex-start;">
-                <strong>${formatCurrentPrice(effectivePrice)}</strong>
-                <span style="font-size: 0.85em; color: #7f8c8d;">${formatPercent(item.current_price, 5)}</span>
-            </div>
-        `
-        : `<strong>${formatCurrentPrice(effectivePrice)}</strong>`;
-    
     const investmentsTotal = item.quantity * item.average_buy_price;
+    const assetTotal = totalValue;
+
+    // Линии для объединённой колонки "Текущая стоимость"
+    const currentPriceLine = isBond
+        ? `${formatCurrentPrice(effectivePrice)} (${formatPercent(item.current_price, 5)})`
+        : `${formatCurrentPrice(effectivePrice)}`;
+    const portfolioPercentLine = formatPercent(portfolioPercent, 2);
+    
+    const pnlValueText = `${item.profit_loss >= 0 ? '+' : ''}${formatCurrency(item.profit_loss)}`;
+    const pnlPercentText = `${item.profit_loss_percent >= 0 ? '+' : ''}${formatPercent(Math.abs(item.profit_loss_percent), 2)}`;
     
     row.innerHTML = `
         <td>
@@ -358,20 +355,20 @@ function createPortfolioRow(item, totalPortfolioValue = 0) {
         </td>
         <td>
             <div style="display: flex; flex-direction: column; align-items: flex-start;">
-                <strong>${formatAssetTotal(totalValue)}</strong>
-                <span style="font-size: 0.85em; color: #7f8c8d;">${formatPercent(portfolioPercent, 2)}</span>
+                <strong>${formatAssetTotal(assetTotal)}</strong>
+                <span style="font-size: 0.85em; color: #2c3e50;">${currentPriceLine}</span>
+                <span style="font-size: 0.85em; color: #7f8c8d;">${portfolioPercentLine}</span>
             </div>
         </td>
-        <td>${priceCellHtml}</td>
         <td class="${changeClass}">
             ${item.price_change >= 0 ? '+' : ''}${formatCurrency(item.price_change)} 
             (${item.price_change_percent >= 0 ? '+' : ''}${formatPercent(Math.abs(item.price_change_percent), 2)})
         </td>
         <td class="${pnlClass}">
-            ${item.profit_loss >= 0 ? '+' : ''}${formatCurrency(item.profit_loss)}
-        </td>
-        <td class="${pnlPercentClass}">
-            ${item.profit_loss_percent >= 0 ? '+' : ''}${formatPercent(Math.abs(item.profit_loss_percent), 2)}
+            <div style="display: flex; flex-direction: column; align-items: flex-start;">
+                <span>${pnlValueText}</span>
+                <span style="font-size: 0.85em; color: #7f8c8d;">${pnlPercentText}</span>
+            </div>
         </td>
         <td>
             <button class="btn btn-sell" 

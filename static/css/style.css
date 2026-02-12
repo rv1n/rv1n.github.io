@@ -1210,15 +1210,15 @@ header h1 {
     white-space: nowrap;
 }
 
-/* Ячейка с действиями - выравнивание кнопок */
+/* Ячейка с действиями - одна кнопка по центру в колонке */
 .portfolio-table td:last-child {
     white-space: nowrap;
     text-align: center;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    flex-wrap: nowrap;
+}
+
+.portfolio-table td:last-child .btn-sell {
+    margin: 0 auto;
+    display: inline-flex;
 }
 
 .portfolio-table tbody tr {
