@@ -242,19 +242,19 @@ function displayPortfolio(portfolio, summary) {
     const tbody = document.getElementById('portfolio-tbody');
     tbody.innerHTML = '';
     
-    // Получаем выбранный фильтр типа инструмента
+    // Получаем выбранный фильтр по виду актива
     const typeFilter = document.getElementById('portfolio-type-filter');
     const selectedType = typeFilter ? typeFilter.value : '';
     
-    // Фильтруем портфель по типу инструмента
+    // Фильтруем портфель по виду актива (asset_type)
     let filteredPortfolio = portfolio;
     if (selectedType) {
-        filteredPortfolio = portfolio.filter(item => item.instrument_type === selectedType);
+        filteredPortfolio = portfolio.filter(item => (item.asset_type || '') === selectedType);
     }
     
     if (filteredPortfolio.length === 0) {
         const message = selectedType ? 
-            `Нет инструментов типа "${selectedType}"` : 
+            `Нет активов вида "${selectedType}"` : 
             'Портфель пуст. Добавьте первую позицию.';
         tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; padding: 40px; color: #7f8c8d;">${message}</td></tr>`;
         if (portfolio.length === 0) {
@@ -3073,6 +3073,22 @@ function updateAssetTypeSelects() {
         });
         select.dataset.ticker = ticker; // Восстанавливаем ticker
     });
+
+    // Обновляем фильтр "Типы" в разделе "Мой портфель" на основе видов активов
+    const portfolioTypeFilter = document.getElementById('portfolio-type-filter');
+    if (portfolioTypeFilter) {
+        const currentValue = portfolioTypeFilter.value;
+        portfolioTypeFilter.innerHTML = '<option value=\"\">Все типы</option>';
+        ASSET_TYPES.forEach(at => {
+            const option = document.createElement('option');
+            option.value = at;
+            option.textContent = at;
+            if (at === currentValue) {
+                option.selected = true;
+            }
+            portfolioTypeFilter.appendChild(option);
+        });
+    }
 }
 
 /**
