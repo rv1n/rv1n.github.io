@@ -154,11 +154,32 @@ header h1 {
 }
 
 .summary-card {
+    display: flex;
+    flex-direction: column;
     background: #1e3a5f;
     color: white;
     padding: 25px;
     border-radius: 10px;
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+}
+
+.summary-card-split {
+    flex-direction: row;
+    gap: 0;
+    padding: 0;
+}
+
+.summary-card-half {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 25px;
+}
+
+.summary-card-divider {
+    width: 1px;
+    background: rgba(255, 255, 255, 0.2);
+    margin: 10px 0;
 }
 
 .summary-label {
@@ -1235,12 +1256,12 @@ header h1 {
 
 /* Цветовая индикация прибыли/убытка */
 .profit {
-    color: #22543d;
+    color: #27ae60;
     font-weight: bold;
 }
 
 .loss {
-    color: #7f1d1d;
+    color: #e74c3c;
     font-weight: bold;
 }
 

@@ -260,6 +260,9 @@ function displayPortfolio(portfolio, summary) {
         if (portfolio.length === 0) {
             previousPrices = {}; // Очищаем сохраненные цены только если портфель действительно пуст
         }
+        // Обновляем сводку нулевыми значениями для отфильтрованного портфеля
+        const emptySummary = calculateSummaryFromPortfolio([]);
+        updateSummary(emptySummary);
         return;
     }
     
@@ -268,8 +271,11 @@ function displayPortfolio(portfolio, summary) {
         previousPrices[item.ticker] = item.current_price;
     });
     
-    // Получаем общую стоимость портфеля для расчета процентов
-    const totalPortfolioValue = summary.total_value || 0;
+    // Пересчитываем сводку на основе отфильтрованного портфеля
+    const filteredSummary = calculateSummaryFromPortfolio(filteredPortfolio);
+    
+    // Получаем общую стоимость отфильтрованного портфеля для расчета процентов
+    const totalPortfolioValue = filteredSummary.total_value || 0;
     
     filteredPortfolio.forEach(item => {
         const row = createPortfolioRow(item, totalPortfolioValue);
@@ -279,8 +285,8 @@ function displayPortfolio(portfolio, summary) {
     // Привязываем обработчики к кнопкам продажи
     attachSellButtonHandlers();
     
-    // Обновление сводки
-    updateSummary(summary);
+    // Обновление сводки на основе отфильтрованных данных
+    updateSummary(filteredSummary);
     
     // Обновление диаграммы категорий
     updateCategoryChart(portfolio);
@@ -385,12 +391,62 @@ function createPortfolioRow(item, totalPortfolioValue = 0) {
 }
 
 /**
+ * Расчет сводки портфеля на основе массива позиций
+ */
+function calculateSummaryFromPortfolio(portfolio) {
+    if (!portfolio || portfolio.length === 0) {
+        return {
+            total_value: 0,
+            total_cost: 0,
+            total_pnl: 0,
+            total_pnl_percent: 0,
+            total_price_change: 0,
+            total_price_change_percent: 0
+        };
+    }
+    
+    // Общие расчеты портфеля
+    const total_portfolio_value = portfolio.reduce((sum, item) => sum + (item.total_cost || 0), 0);
+    const total_portfolio_cost = portfolio.reduce((sum, item) => sum + (item.total_buy_cost || 0), 0);
+    const total_portfolio_pnl = total_portfolio_value - total_portfolio_cost;
+    const total_portfolio_pnl_percent = total_portfolio_cost > 0 
+        ? ((total_portfolio_value - total_portfolio_cost) / total_portfolio_cost * 100) 
+        : 0;
+    
+    // Общее изменение цены за день (сумма изменений стоимости всех позиций)
+    const total_price_change = portfolio.reduce((sum, item) => 
+        sum + ((item.price_change || 0) * (item.quantity || 0)), 0);
+    
+    // Процентное изменение рассчитываем как средневзвешенное по стоимости позиций
+    let total_price_change_percent = 0;
+    const itemsWithChange = portfolio.filter(item => item.price_change != 0);
+    const total_value_for_change = itemsWithChange.reduce((sum, item) => sum + (item.total_cost || 0), 0);
+    
+    if (total_value_for_change > 0) {
+        const weighted_percent = itemsWithChange.reduce((sum, item) => 
+            sum + ((item.price_change_percent || 0) * (item.total_cost || 0)), 0);
+        total_price_change_percent = weighted_percent / total_value_for_change;
+    }
+    
+    return {
+        total_value: total_portfolio_value,
+        total_cost: total_portfolio_cost,
+        total_pnl: total_portfolio_pnl,
+        total_pnl_percent: total_portfolio_pnl_percent,
+        total_price_change: total_price_change,
+        total_price_change_percent: total_price_change_percent
+    };
+}
+
+/**
  * Обновление сводки портфеля
  */
 function updateSummary(summary) {
     const totalValueEl = document.getElementById('total-value');
     const totalPnlEl = document.getElementById('total-pnl');
     const totalPnlPercentEl = document.getElementById('total-pnl-percent');
+    const totalPriceChangeEl = document.getElementById('total-price-change');
+    const totalPriceChangePercentEl = document.getElementById('total-price-change-percent');
     
     if (totalValueEl) {
         totalValueEl.textContent = formatCurrency(summary.total_value);
@@ -405,6 +461,18 @@ function updateSummary(summary) {
         const pnlPercent = summary.total_pnl_percent || 0;
         totalPnlPercentEl.textContent = `${pnlPercent >= 0 ? '+' : ''}${formatPercent(Math.abs(pnlPercent), 2)}`;
         totalPnlPercentEl.className = `summary-percent ${pnlPercent >= 0 ? 'profit' : 'loss'}`;
+    }
+    
+    if (totalPriceChangeEl) {
+        const priceChange = summary.total_price_change || 0;
+        totalPriceChangeEl.textContent = `${priceChange >= 0 ? '+' : ''}${formatCurrency(priceChange)}`;
+        totalPriceChangeEl.className = `summary-value ${priceChange >= 0 ? 'profit' : 'loss'}`;
+    }
+    
+    if (totalPriceChangePercentEl) {
+        const priceChangePercent = summary.total_price_change_percent || 0;
+        totalPriceChangePercentEl.textContent = `${priceChangePercent >= 0 ? '+' : ''}${formatPercent(Math.abs(priceChangePercent), 2)}`;
+        totalPriceChangePercentEl.className = `summary-percent ${priceChangePercent >= 0 ? 'profit' : 'loss'}`;
     }
 }
 
@@ -1031,11 +1099,14 @@ function updateCategoryChart(portfolio) {
             percentage: totalValue > 0 ? (value / totalValue * 100) : 0
         }));
     
-    // Цвета для категорий (строгая официальная палитра)
+    // Яркая расширенная палитра цветов для категорий
     const colors = [
-        '#1e3a5f', '#2c5282', '#4a5568', '#2d3748',
-        '#22543d', '#1a3d2e', '#718096', '#4a5568',
-        '#2c3e50', '#34495e'
+        '#3498db', '#2ecc71', '#e74c3c', '#f39c12', '#9b59b6',
+        '#1abc9c', '#e67e22', '#34495e', '#16a085', '#c0392b',
+        '#d35400', '#8e44ad', '#27ae60', '#2980b9', '#f1c40f',
+        '#e91e63', '#00bcd4', '#4caf50', '#ff9800', '#9c27b0',
+        '#2196f3', '#ff5722', '#009688', '#795548', '#607d8b',
+        '#ffc107', '#ff4081', '#3f51b5', '#00acc1', '#8bc34a'
     ];
     
     // Создание HTML для диаграммы
@@ -1149,11 +1220,14 @@ function updateAssetTypeChart(portfolio) {
             percentage: totalValue > 0 ? (value / totalValue * 100) : 0
         }));
     
-    // Цвета для видов активов (строгая официальная палитра)
+    // Яркая расширенная палитра цветов для видов активов
     const colors = [
-        '#1e3a5f', '#2c5282', '#4a5568', '#2d3748',
-        '#22543d', '#1a3d2e', '#718096', '#4a5568',
-        '#2c3e50', '#34495e'
+        '#3498db', '#2ecc71', '#e74c3c', '#f39c12', '#9b59b6',
+        '#1abc9c', '#e67e22', '#34495e', '#16a085', '#c0392b',
+        '#d35400', '#8e44ad', '#27ae60', '#2980b9', '#f1c40f',
+        '#e91e63', '#00bcd4', '#4caf50', '#ff9800', '#9c27b0',
+        '#2196f3', '#ff5722', '#009688', '#795548', '#607d8b',
+        '#ffc107', '#ff4081', '#3f51b5', '#00acc1', '#8bc34a'
     ];
     
     // Создание HTML для диаграммы
@@ -1273,11 +1347,14 @@ function renderAssetTypesPieChart(portfolio, containerId = 'asset-type-pie-chart
     
     chartContainerWrapper.style.display = 'block';
     
-    // Цвета для видов активов (строгая официальная палитра)
+    // Яркая расширенная палитра цветов для видов активов
     const colors = [
-        '#1e3a5f', '#2c5282', '#4a5568', '#2d3748',
-        '#22543d', '#1a3d2e', '#718096', '#4a5568',
-        '#2c3e50', '#34495e'
+        '#3498db', '#2ecc71', '#e74c3c', '#f39c12', '#9b59b6',
+        '#1abc9c', '#e67e22', '#34495e', '#16a085', '#c0392b',
+        '#d35400', '#8e44ad', '#27ae60', '#2980b9', '#f1c40f',
+        '#e91e63', '#00bcd4', '#4caf50', '#ff9800', '#9c27b0',
+        '#2196f3', '#ff5722', '#009688', '#795548', '#607d8b',
+        '#ffc107', '#ff4081', '#3f51b5', '#00acc1', '#8bc34a'
     ];
     
     // Создание SVG круговой диаграммы
@@ -1404,11 +1481,14 @@ function renderCategoriesPieChart(portfolio, containerId = 'categories-pie-chart
     
     chartContainerWrapper.style.display = 'block';
     
-    // Цвета для категорий (строгая официальная палитра)
+    // Яркая расширенная палитра цветов для категорий
     const colors = [
-        '#1e3a5f', '#2c5282', '#4a5568', '#2d3748',
-        '#22543d', '#1a3d2e', '#718096', '#4a5568',
-        '#2c3e50', '#34495e'
+        '#3498db', '#2ecc71', '#e74c3c', '#f39c12', '#9b59b6',
+        '#1abc9c', '#e67e22', '#34495e', '#16a085', '#c0392b',
+        '#d35400', '#8e44ad', '#27ae60', '#2980b9', '#f1c40f',
+        '#e91e63', '#00bcd4', '#4caf50', '#ff9800', '#9c27b0',
+        '#2196f3', '#ff5722', '#009688', '#795548', '#607d8b',
+        '#ffc107', '#ff4081', '#3f51b5', '#00acc1', '#8bc34a'
     ];
     
     // Создание SVG круговой диаграммы
@@ -2153,6 +2233,12 @@ async function handleEditTransaction(event) {
             closeEditTransactionModal();
             loadTransactions();
             console.log('Транзакция успешно обновлена');
+            
+            // Обновляем портфель, так как редактирование транзакции влияет на количество и среднюю цену
+            const tableView = document.getElementById('table-view');
+            if (tableView && tableView.style.display !== 'none') {
+                await loadPortfolio();
+            }
         } else {
             console.error('Ошибка обновления транзакции:', data.error);
         }
@@ -2175,6 +2261,12 @@ async function deleteTransaction(transactionId) {
         if (data.success) {
             loadTransactions();
             console.log('Транзакция успешно удалена');
+            
+            // Обновляем портфель, так как удаление транзакции влияет на количество и среднюю цену
+            const tableView = document.getElementById('table-view');
+            if (tableView && tableView.style.display !== 'none') {
+                await loadPortfolio();
+            }
         } else {
             console.error('Ошибка удаления транзакции:', data.error);
         }
@@ -2893,15 +2985,8 @@ async function deleteCategory(categoryId, categoryName) {
             console.log(data.message);
             await loadManageCategories();
             await loadCategoriesList(); // Обновляем список категорий (внутри вызывается updateCategorySelects)
-            // Обновляем селекты категорий в таблице
-            if (document.getElementById('categories-tbody')) {
-                const items = Array.from(document.querySelectorAll('#categories-tbody tr')).map(row => {
-                    const ticker = row.querySelector('.category-select')?.dataset.ticker;
-                    const category = row.querySelector('.category-select')?.value || '';
-                    return { ticker, category };
-                });
-                renderCategories(items);
-            }
+            // Перезагружаем данные категорий из API, чтобы сохранить все установленные значения
+            await loadCategories();
         } else {
             console.error('Ошибка удаления категории:', data.error);
         }
@@ -2961,15 +3046,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     closeCategoryEditModal();
                     await loadManageCategories();
                     await loadCategoriesList(); // Обновляем список категорий
-                    // Обновляем селекты категорий в таблице
-                    if (document.getElementById('categories-tbody')) {
-                        const items = Array.from(document.querySelectorAll('#categories-tbody tr')).map(row => {
-                            const ticker = row.querySelector('.category-select')?.dataset.ticker;
-                            const category = row.querySelector('.category-select')?.value || '';
-                            return { ticker, category };
-                        });
-                        renderCategories(items);
-                    }
+                    // Перезагружаем данные категорий из API, чтобы сохранить все установленные значения
+                    await loadCategories();
                 } else {
                     console.error('Ошибка сохранения категории:', data.error);
                 }
@@ -3214,16 +3292,8 @@ async function deleteAssetType(assetTypeId, assetTypeName) {
             console.log(data.message);
             await loadManageAssetTypes();
             await loadAssetTypesList(); // Обновляем список видов активов
-            // Обновляем селекты видов активов в таблице
-            if (document.getElementById('categories-tbody')) {
-                const items = Array.from(document.querySelectorAll('#categories-tbody tr')).map(row => {
-                    const ticker = row.querySelector('.category-select')?.dataset.ticker;
-                    const category = row.querySelector('.category-select')?.value || '';
-                    const assetType = row.querySelector('.asset-type-select')?.value || '';
-                    return { ticker, category, asset_type: assetType };
-                });
-                renderCategories(items);
-            }
+            // Перезагружаем данные категорий из API, чтобы сохранить все установленные значения
+            await loadCategories();
         } else {
             console.error('Ошибка удаления вида актива:', data.error);
         }
@@ -3281,16 +3351,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     closeAssetTypeEditModal();
                     await loadManageAssetTypes();
                     await loadAssetTypesList(); // Обновляем список видов активов
-                    // Обновляем селекты видов активов в таблице
-                    if (document.getElementById('categories-tbody')) {
-                        const items = Array.from(document.querySelectorAll('#categories-tbody tr')).map(row => {
-                            const ticker = row.querySelector('.category-select')?.dataset.ticker;
-                            const category = row.querySelector('.category-select')?.value || '';
-                            const assetType = row.querySelector('.asset-type-select')?.value || '';
-                            return { ticker, category, asset_type: assetType };
-                        });
-                        renderCategories(items);
-                    }
+                    // Перезагружаем данные категорий из API, чтобы сохранить все установленные значения
+                    await loadCategories();
                 } else {
                     console.error('Ошибка сохранения вида актива:', data.error);
                 }

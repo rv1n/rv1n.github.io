@@ -114,18 +114,47 @@ def get_portfolio():
                 last_update = ''
             
             # Вычисляем среднюю цену покупки из истории транзакций
-            buy_transactions = db_session.query(Transaction).filter(
-                Transaction.ticker == item.ticker,
-                Transaction.operation_type == TransactionType.BUY
-            ).all()
+            # Используем ту же логику, что и в recalculate_portfolio_for_ticker
+            # Учитываем только те покупки, которые не были полностью проданы
+            all_transactions = db_session.query(Transaction).filter(
+                Transaction.ticker == item.ticker
+            ).order_by(Transaction.date.asc()).all()
             
-            if buy_transactions:
-                # Взвешенная средняя цена: sum(price * quantity) / sum(quantity)
-                total_cost = sum(t.price * t.quantity for t in buy_transactions)
-                total_quantity = sum(t.quantity for t in buy_transactions)
-                calculated_avg_price = total_cost / total_quantity if total_quantity > 0 else item.average_buy_price
+            # Применяем FIFO для определения релевантных покупок
+            current_quantity = 0
+            relevant_buy_transactions = []  # Кортежи (цена, оставшееся_количество)
+            
+            for trans in all_transactions:
+                if trans.operation_type == TransactionType.BUY:
+                    current_quantity += trans.quantity
+                    if current_quantity - trans.quantity <= 0:
+                        # Позиция была полностью продана, начинаем считать заново
+                        relevant_buy_transactions = []
+                    relevant_buy_transactions.append((trans.price, trans.quantity))
+                elif trans.operation_type == TransactionType.SELL:
+                    sell_quantity = trans.quantity
+                    current_quantity -= sell_quantity
+                    
+                    # Удаляем покупки по FIFO
+                    while sell_quantity > 0 and relevant_buy_transactions:
+                        buy_price, buy_remaining = relevant_buy_transactions[0]
+                        if buy_remaining <= sell_quantity:
+                            sell_quantity -= buy_remaining
+                            relevant_buy_transactions.pop(0)
+                        else:
+                            relevant_buy_transactions[0] = (buy_price, buy_remaining - sell_quantity)
+                            sell_quantity = 0
+                    
+                    if current_quantity < 0:
+                        current_quantity = 0
+            
+            # Рассчитываем среднюю цену из релевантных покупок
+            if relevant_buy_transactions:
+                total_cost = sum(price * quantity for price, quantity in relevant_buy_transactions)
+                total_buy_quantity = sum(quantity for _, quantity in relevant_buy_transactions)
+                calculated_avg_price = total_cost / total_buy_quantity if total_buy_quantity > 0 else item.average_buy_price
             else:
-                # Если транзакций нет, используем цену из портфеля
+                # Если нет релевантных транзакций, используем цену из портфеля
                 calculated_avg_price = item.average_buy_price
             
             # Получаем последние две цены из истории для расчета изменения
@@ -182,6 +211,18 @@ def get_portfolio():
         total_portfolio_pnl = total_portfolio_value - total_portfolio_cost
         total_portfolio_pnl_percent = ((total_portfolio_value - total_portfolio_cost) / total_portfolio_cost * 100) if total_portfolio_cost > 0 else 0
         
+        # Общее изменение цены за день (сумма изменений стоимости всех позиций)
+        # Изменение стоимости позиции = изменение цены * количество
+        total_price_change = sum(item['price_change'] * item['quantity'] for item in result)
+        
+        # Процентное изменение рассчитываем как средневзвешенное по стоимости позиций
+        total_price_change_percent = 0
+        total_value_for_change = sum(item['total_cost'] for item in result if item['price_change'] != 0)
+        if total_value_for_change > 0:
+            # Средневзвешенное процентное изменение (взвешиваем по стоимости позиций)
+            weighted_percent = sum(item['price_change_percent'] * item['total_cost'] for item in result if item['price_change'] != 0)
+            total_price_change_percent = weighted_percent / total_value_for_change if total_value_for_change > 0 else 0
+        
         return jsonify({
             'success': True,
             'portfolio': result,
@@ -189,7 +230,9 @@ def get_portfolio():
                 'total_value': total_portfolio_value,
                 'total_cost': total_portfolio_cost,
                 'total_pnl': total_portfolio_pnl,
-                'total_pnl_percent': total_portfolio_pnl_percent
+                'total_pnl_percent': total_portfolio_pnl_percent,
+                'total_price_change': total_price_change,
+                'total_price_change_percent': total_price_change_percent
             }
         })
     except Exception as e:
@@ -633,6 +676,9 @@ def update_transaction(transaction_id):
         
         data = request.get_json()
         
+        # Сохраняем старый тикер до изменения
+        old_ticker = transaction.ticker
+        
         # Обновление полей
         if 'ticker' in data:
             transaction.ticker = data['ticker'].upper()
@@ -669,12 +715,23 @@ def update_transaction(transaction_id):
         if 'notes' in data:
             transaction.notes = data['notes']
         
+        # Сохраняем новый тикер
+        new_ticker = transaction.ticker
+        
         db_session.commit()
+        
+        # Пересчитываем портфель для нового тикера
+        recalculate_portfolio_for_ticker(new_ticker)
+        
+        # Если тикер изменился, пересчитываем и для старого тикера
+        if old_ticker != new_ticker:
+            recalculate_portfolio_for_ticker(old_ticker)
         
         return jsonify({
             'success': True,
             'message': 'Транзакция успешно обновлена',
-            'transaction': transaction.to_dict()
+            'transaction': transaction.to_dict(),
+            'ticker': ticker
         })
         
     except Exception as e:
@@ -685,10 +742,114 @@ def update_transaction(transaction_id):
         }), 500
 
 
+def recalculate_portfolio_for_ticker(ticker):
+    """
+    Пересчитать портфель для указанного тикера на основе всех транзакций
+    Учитывает только те транзакции покупки, которые не были полностью проданы.
+    Если позиция была полностью продана (количество = 0), при следующей покупке
+    средняя цена считается с нуля от новых транзакций.
+    """
+    try:
+        # Получаем все транзакции для тикера, отсортированные по дате (от старых к новым)
+        all_transactions = db_session.query(Transaction).filter(
+            Transaction.ticker == ticker.upper()
+        ).order_by(Transaction.date.asc()).all()
+        
+        # Находим позицию в портфеле
+        portfolio_item = db_session.query(Portfolio).filter_by(ticker=ticker.upper()).first()
+        
+        # Проходим по транзакциям в хронологическом порядке и отслеживаем количество
+        # Если количество становится 0 или отрицательным, это означает полную продажу
+        # После этого начинаем считать среднюю цену только от новых покупок
+        # Используем FIFO (первая купленная - первая проданная)
+        current_quantity = 0
+        # Храним покупки как кортежи (цена, оставшееся_количество)
+        relevant_buy_transactions = []
+        
+        for trans in all_transactions:
+            if trans.operation_type == TransactionType.BUY:
+                current_quantity += trans.quantity
+                # Если количество было 0 или отрицательным перед этой покупкой,
+                # это означает, что позиция была полностью продана, начинаем считать заново
+                if current_quantity - trans.quantity <= 0:
+                    # Очищаем список покупок, начинаем считать с нуля
+                    relevant_buy_transactions = []
+                # Добавляем покупку с полным количеством
+                relevant_buy_transactions.append((trans.price, trans.quantity))
+            elif trans.operation_type == TransactionType.SELL:
+                sell_quantity = trans.quantity
+                current_quantity -= sell_quantity
+                
+                # Удаляем покупки по FIFO (первая купленная - первая проданная)
+                while sell_quantity > 0 and relevant_buy_transactions:
+                    buy_price, buy_remaining = relevant_buy_transactions[0]
+                    if buy_remaining <= sell_quantity:
+                        # Вся эта покупка была продана
+                        sell_quantity -= buy_remaining
+                        relevant_buy_transactions.pop(0)
+                    else:
+                        # Частично продана - уменьшаем оставшееся количество
+                        relevant_buy_transactions[0] = (buy_price, buy_remaining - sell_quantity)
+                        sell_quantity = 0
+                
+                # Если количество стало отрицательным, это ошибка данных, но обрабатываем
+                if current_quantity < 0:
+                    current_quantity = 0
+        
+        total_quantity = current_quantity
+        
+        if total_quantity <= 0:
+            # Если количество <= 0, удаляем позицию из портфеля
+            if portfolio_item:
+                db_session.delete(portfolio_item)
+                db_session.commit()
+            return True
+        
+        # Рассчитываем среднюю цену покупки только из релевантных транзакций покупки
+        if relevant_buy_transactions:
+            total_cost = sum(price * quantity for price, quantity in relevant_buy_transactions)
+            total_buy_quantity = sum(quantity for _, quantity in relevant_buy_transactions)
+            average_buy_price = total_cost / total_buy_quantity if total_buy_quantity > 0 else 0
+        else:
+            # Если нет релевантных транзакций покупки, но есть позиция, оставляем старую цену
+            # Если позиции нет, не создаем новую (нельзя иметь позицию без покупок)
+            if portfolio_item:
+                average_buy_price = portfolio_item.average_buy_price
+            else:
+                # Нет транзакций покупки и нет позиции - не создаем новую позицию
+                return True
+        
+        # Обновляем или создаем позицию в портфеле
+        if portfolio_item:
+            portfolio_item.quantity = total_quantity
+            portfolio_item.average_buy_price = average_buy_price
+        else:
+            # Если позиции нет, но количество > 0 и есть транзакции покупки, создаем новую
+            # Берем данные из последней транзакции
+            last_transaction = all_transactions[-1] if all_transactions else None
+            if last_transaction and relevant_buy_transactions:
+                new_item = Portfolio(
+                    ticker=ticker.upper(),
+                    company_name=last_transaction.company_name or ticker.upper(),
+                    quantity=total_quantity,
+                    average_buy_price=average_buy_price,
+                    instrument_type=last_transaction.instrument_type
+                )
+                db_session.add(new_item)
+        
+        db_session.commit()
+        return True
+        
+    except Exception as e:
+        db_session.rollback()
+        print(f"Ошибка пересчета портфеля для {ticker}: {str(e)}")
+        return False
+
+
 @app.route('/api/transactions/<int:transaction_id>', methods=['DELETE'])
 def delete_transaction(transaction_id):
     """
-    Удалить транзакцию
+    Удалить транзакцию и пересчитать портфель
     """
     try:
         transaction = db_session.query(Transaction).filter(Transaction.id == transaction_id).first()
@@ -699,12 +860,20 @@ def delete_transaction(transaction_id):
                 'error': 'Транзакция не найдена'
             }), 404
         
+        # Сохраняем тикер для пересчета портфеля
+        ticker = transaction.ticker
+        
+        # Удаляем транзакцию
         db_session.delete(transaction)
         db_session.commit()
         
+        # Пересчитываем портфель для этого тикера
+        recalculate_portfolio_for_ticker(ticker)
+        
         return jsonify({
             'success': True,
-            'message': 'Транзакция успешно удалена'
+            'message': 'Транзакция успешно удалена',
+            'ticker': ticker
         })
         
     except Exception as e:

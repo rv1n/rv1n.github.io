@@ -25,8 +25,11 @@ class PriceLogger:
         Логирование цен для всех уникальных тикеров в портфеле
         
         Вызывается ежедневно в 00:00 МСК планировщиком
+        Защищено от дублирования: проверяет, были ли уже залогированы цены сегодня
         """
         try:
+            from datetime import date, timedelta
+            
             # Получаем все уникальные тикеры из портфеля
             portfolio_items = db_session.query(Portfolio).all()
             
@@ -44,11 +47,38 @@ class PriceLogger:
                         'instrument_type': instrument_type
                     }
             
+            # Проверяем, были ли уже залогированы цены сегодня
+            # Используем начало текущего дня по московскому времени
+            now_moscow = datetime.now(self.moscow_tz)
+            today_start = now_moscow.replace(hour=0, minute=0, second=0, microsecond=0)
+            today_end = today_start + timedelta(days=1)
+            
+            # Проверяем наличие записей за сегодня для всех тикеров
+            existing_logs_today = db_session.query(PriceHistory).filter(
+                PriceHistory.logged_at >= today_start,
+                PriceHistory.logged_at < today_end
+            ).all()
+            
+            # Создаем множество тикеров, для которых уже есть записи сегодня
+            tickers_logged_today = {log.ticker for log in existing_logs_today}
+            
+            # Если для всех тикеров уже есть записи сегодня, пропускаем логирование
+            if tickers_logged_today.issuperset(unique_tickers.keys()):
+                print(f"[{datetime.now(self.moscow_tz)}] Цены уже залогированы сегодня для всех тикеров. Пропускаем дублирование.")
+                return
+            
             logged_count = 0
+            skipped_count = 0
             
             # Логируем цену для каждого уникального тикера
             for ticker, ticker_info in unique_tickers.items():
                 try:
+                    # Пропускаем, если для этого тикера уже есть запись сегодня
+                    if ticker in tickers_logged_today:
+                        skipped_count += 1
+                        print(f"[{datetime.now(self.moscow_tz)}] Пропуск {ticker}: цена уже залогирована сегодня")
+                        continue
+                    
                     company_name = ticker_info['company_name']
                     instrument_type = ticker_info['instrument_type']
                     
@@ -76,8 +106,10 @@ class PriceLogger:
                     current_price = quote_data.get('price', 0)
                     
                     # Получаем последнюю запись из истории для расчета изменения
+                    # Исключаем записи за сегодня, чтобы брать предыдущий день
                     last_history_entry = db_session.query(PriceHistory).filter(
-                        PriceHistory.ticker == ticker
+                        PriceHistory.ticker == ticker,
+                        PriceHistory.logged_at < today_start
                     ).order_by(PriceHistory.logged_at.desc()).first()
                     
                     if last_history_entry and current_price > 0:
@@ -117,7 +149,10 @@ class PriceLogger:
             # Сохраняем все изменения в БД
             db_session.commit()
             
-            print(f"[{datetime.now(self.moscow_tz)}] Успешно залогировано цен: {logged_count}/{len(unique_tickers)}")
+            if skipped_count > 0:
+                print(f"[{datetime.now(self.moscow_tz)}] Успешно залогировано цен: {logged_count}/{len(unique_tickers)} (пропущено дубликатов: {skipped_count})")
+            else:
+                print(f"[{datetime.now(self.moscow_tz)}] Успешно залогировано цен: {logged_count}/{len(unique_tickers)}")
             
         except Exception as e:
             print(f"[{datetime.now(self.moscow_tz)}] Ошибка при логировании цен: {e}")
