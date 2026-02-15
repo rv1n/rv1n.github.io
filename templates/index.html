@@ -17,20 +17,6 @@
                 <button id="refresh-btn" class="btn btn-refresh" onclick="manualRefresh()" title="Обновить данные">
                     🔄 Обновить
                 </button>
-                <!-- Кнопка «сэндвич» с меню -->
-                <div class="menu-wrapper">
-                    <button id="menu-toggle" class="btn btn-menu" type="button" onclick="toggleMainMenu()" title="Дополнительные разделы">
-                        ☰
-                    </button>
-                    <div id="main-menu" class="dropdown-menu">
-                        <button type="button" class="dropdown-item" onclick="switchView('history'); closeMainMenu();">
-                            📜 История цен
-                        </button>
-                        <button type="button" class="dropdown-item" onclick="switchView('categories'); closeMainMenu();">
-                            🏷️ Категории и виды
-                        </button>
-                    </div>
-                </div>
             </div>
         </header>
 
@@ -70,6 +56,20 @@
                         📈 Распределение по категориям
                     </button>
                 </div>
+                <!-- Кнопка «сэндвич» с меню -->
+                <div class="menu-wrapper">
+                    <button id="menu-toggle" class="btn btn-menu" type="button" onclick="toggleMainMenu()" title="Дополнительные разделы">
+                        ☰
+                    </button>
+                    <div id="main-menu" class="dropdown-menu">
+                        <button type="button" class="dropdown-item" onclick="switchView('history'); closeMainMenu();">
+                            📜 История цен
+                        </button>
+                        <button type="button" class="dropdown-item" onclick="switchView('categories'); closeMainMenu();">
+                            🏷️ Категории и виды
+                        </button>
+                    </div>
+                </div>
                 <button id="buy-btn" class="btn btn-buy" onclick="openBuyModal()" title="Купить акции"></button>
             </div>
 
@@ -95,6 +95,7 @@
                             <th>Текущая стоимость</th>
                             <th>Изменение за день</th>
                             <th>Прибыль</th>
+                            <th>График (7 дней)</th>
                             <th>Действия</th>
                         </tr>
                     </thead>

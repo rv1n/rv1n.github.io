@@ -65,9 +65,41 @@ scheduler.add_job(
     replace_existing=True
 )
 
+# Добавляем периодическую проверку каждые 3 часа, если записи за сегодня нет
+def check_and_log_prices():
+    """Проверяет, есть ли записи за сегодня, и если нет - логирует цены"""
+    from datetime import date, timedelta
+    from models.price_history import PriceHistory
+    
+    now_moscow = datetime.now(pytz.timezone('Europe/Moscow'))
+    today_start = now_moscow.replace(hour=0, minute=0, second=0, microsecond=0)
+    today_end = today_start + timedelta(days=1)
+    
+    # Проверяем, есть ли хотя бы одна запись за сегодня
+    has_logs_today = db_session.query(PriceHistory).filter(
+        PriceHistory.logged_at >= today_start,
+        PriceHistory.logged_at < today_end
+    ).first()
+    
+    if not has_logs_today:
+        print(f"[{datetime.now(pytz.timezone('Europe/Moscow'))}] Записей за сегодня нет, выполняем логирование цен...")
+        price_logger.log_all_prices(force=False)
+    else:
+        print(f"[{datetime.now(pytz.timezone('Europe/Moscow'))}] Записи за сегодня уже есть, пропускаем периодическое логирование")
+
+scheduler.add_job(
+    func=check_and_log_prices,
+    trigger=CronTrigger(hour='*/3', minute=0, timezone='Europe/Moscow'),  # Каждые 3 часа
+    id='periodic_price_logging',
+    name='Периодическое логирование цен (каждые 3 часа, если записи нет)',
+    replace_existing=True
+)
+
 # Запускаем планировщик
 scheduler.start()
-print("Планировщик запущен. Логирование цен будет выполняться каждый день в 00:00 МСК")
+print("Планировщик запущен:")
+print("  - Ежедневное логирование цен в 00:00 МСК")
+print("  - Периодическая проверка каждые 3 часа (если записи за сегодня нет)")
 
 
 @app.route('/')
@@ -89,6 +121,11 @@ def get_portfolio():
         for item in portfolio_items:
             # Определяем тип инструмента
             instrument_type = item.instrument_type.name if hasattr(item, 'instrument_type') and item.instrument_type else 'STOCK'
+            
+            # Дополнительная проверка: если тикер облигации (начинается с RU или SU), но тип не определен
+            if instrument_type == 'STOCK' and (item.ticker.startswith('RU') or item.ticker.startswith('SU')) and len(item.ticker) > 10:
+                # Вероятно, это облигация (тикеры облигаций обычно длинные и начинаются с RU или SU)
+                instrument_type = 'BOND'
             
             # Получаем актуальную цену с MOEX
             # Если для первого типа инструмента данных нет (например, тикер облигации помечен как STOCK),
@@ -149,7 +186,10 @@ def get_portfolio():
                         current_quantity = 0
             
             # Рассчитываем среднюю цену из релевантных покупок
+            # ВАЖНО: цены в транзакциях сохраняются как ввел пользователь (в рублях)
+            # НЕ переводим цены из транзакций - они уже в рублях
             if relevant_buy_transactions:
+                # Цены в транзакциях уже в рублях (как ввел пользователь)
                 total_cost = sum(price * quantity for price, quantity in relevant_buy_transactions)
                 total_buy_quantity = sum(quantity for _, quantity in relevant_buy_transactions)
                 calculated_avg_price = total_cost / total_buy_quantity if total_buy_quantity > 0 else item.average_buy_price
@@ -163,11 +203,19 @@ def get_portfolio():
             ).order_by(PriceHistory.logged_at.desc()).limit(2).all()
             
             # Рассчитываем изменение: разница между последними двумя записями в истории цен
+            # Для облигаций цены в истории хранятся в процентах, для акций - в рублях
             if len(last_two_entries) >= 2:
                 latest_price = last_two_entries[0].price
                 previous_price = last_two_entries[1].price
-                price_change = latest_price - previous_price
-                price_change_percent = (price_change / previous_price * 100) if previous_price > 0 else 0
+                # Для облигаций переводим из процентов в рубли
+                if instrument_type == 'BOND':
+                    latest_price_rub = (latest_price * bond_nominal) / 100
+                    previous_price_rub = (previous_price * bond_nominal) / 100
+                    price_change = latest_price_rub - previous_price_rub
+                    price_change_percent = (price_change / previous_price_rub * 100) if previous_price_rub > 0 else 0
+                else:
+                    price_change = latest_price - previous_price
+                    price_change_percent = (price_change / previous_price * 100) if previous_price > 0 else 0
             elif len(last_two_entries) == 1:
                 # Если есть только одна запись, изменение = 0
                 latest_price = last_two_entries[0].price
@@ -180,10 +228,39 @@ def get_portfolio():
                 price_change_percent = 0
             
             # Расчеты прибыли/убытка относительно ТЕКУЩЕЙ цены (с MOEX API)
-            total_current_value = item.quantity * current_price
-            total_buy_cost = item.quantity * calculated_avg_price
+            # Для облигаций цены с MOEX в процентах от номинала (1000 руб), переводим в рубли
+            # calculated_avg_price из транзакций уже в рублях (как ввел пользователь)
+            bond_nominal = 1000
+            if instrument_type == 'BOND':
+                # current_price с MOEX всегда в процентах для облигаций - переводим в рубли
+                current_price_rub = (current_price * bond_nominal) / 100
+                # calculated_avg_price уже в рублях (как ввел пользователь при покупке)
+                avg_price_rub = calculated_avg_price
+            else:
+                current_price_rub = current_price
+                avg_price_rub = calculated_avg_price
+            
+            total_current_value = item.quantity * current_price_rub
+            total_buy_cost = item.quantity * avg_price_rub
             profit_loss = total_current_value - total_buy_cost
-            profit_loss_percent = ((current_price - calculated_avg_price) / calculated_avg_price * 100) if calculated_avg_price > 0 else 0
+            profit_loss_percent = ((current_price_rub - avg_price_rub) / avg_price_rub * 100) if avg_price_rub > 0 else 0
+            
+            # Для облигаций переводим price_change из процентов в рубли
+            if instrument_type == 'BOND':
+                price_change_rub = (price_change * bond_nominal) / 100
+            else:
+                price_change_rub = price_change
+            
+            # Отладка для облигаций
+            if instrument_type == 'BOND':
+                print(f"[DEBUG] Облигация {item.ticker}:")
+                print(f"  current_price (MOEX, проценты): {current_price}")
+                print(f"  current_price_rub: {current_price_rub}")
+                print(f"  calculated_avg_price: {calculated_avg_price}")
+                print(f"  avg_price_rub: {avg_price_rub}")
+                print(f"  quantity: {item.quantity}")
+                print(f"  total_current_value: {total_current_value}")
+                print(f"  Отправляем в API: current_price={current_price_rub}, total_cost={total_current_value}")
             
             result.append({
                 'id': item.id,
@@ -193,9 +270,9 @@ def get_portfolio():
                 'asset_type': item.asset_type if hasattr(item, 'asset_type') else None,
                 'instrument_type': item.instrument_type.value if hasattr(item, 'instrument_type') and item.instrument_type else 'Акция',
                 'quantity': item.quantity,
-                'average_buy_price': calculated_avg_price,
-                'current_price': current_price,
-                'price_change': price_change,
+                'average_buy_price': avg_price_rub,  # уже в рублях для облигаций
+                'current_price': current_price_rub,  # уже в рублях для облигаций
+                'price_change': price_change_rub,  # уже в рублях для облигаций
                 'price_change_percent': price_change_percent,
                 'total_cost': total_current_value,  # стоимость по текущей цене
                 'total_buy_cost': total_buy_cost,
@@ -941,12 +1018,13 @@ def get_price_history():
 @app.route('/api/log-prices-now', methods=['POST'])
 def log_prices_now():
     """
-    Ручное логирование цен (для тестирования)
+    Ручное логирование цен (принудительное)
     
-    В продакшене это выполняется автоматически в 00:00 МСК
+    Логирует цены даже если запись за сегодня уже есть
+    В продакшене автоматическое логирование выполняется в 00:00 МСК
     """
     try:
-        price_logger.log_all_prices()
+        price_logger.log_all_prices(force=True)
         return jsonify({
             'success': True,
             'message': 'Цены успешно залогированы'

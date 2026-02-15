@@ -20,12 +20,15 @@ class PriceLogger:
         self.moex_service = moex_service
         self.moscow_tz = pytz.timezone('Europe/Moscow')
     
-    def log_all_prices(self):
+    def log_all_prices(self, force=False):
         """
         Логирование цен для всех уникальных тикеров в портфеле
         
-        Вызывается ежедневно в 00:00 МСК планировщиком
+        Вызывается ежедневно в 00:00 МСК планировщиком или периодически каждые 3 часа
         Защищено от дублирования: проверяет, были ли уже залогированы цены сегодня
+        
+        Args:
+            force: Если True, логирует цены даже если запись за сегодня уже есть
         """
         try:
             from datetime import date, timedelta
@@ -62,8 +65,8 @@ class PriceLogger:
             # Создаем множество тикеров, для которых уже есть записи сегодня
             tickers_logged_today = {log.ticker for log in existing_logs_today}
             
-            # Если для всех тикеров уже есть записи сегодня, пропускаем логирование
-            if tickers_logged_today.issuperset(unique_tickers.keys()):
+            # Если для всех тикеров уже есть записи сегодня и не принудительное логирование, пропускаем
+            if not force and tickers_logged_today.issuperset(unique_tickers.keys()):
                 print(f"[{datetime.now(self.moscow_tz)}] Цены уже залогированы сегодня для всех тикеров. Пропускаем дублирование.")
                 return
             
@@ -73,8 +76,8 @@ class PriceLogger:
             # Логируем цену для каждого уникального тикера
             for ticker, ticker_info in unique_tickers.items():
                 try:
-                    # Пропускаем, если для этого тикера уже есть запись сегодня
-                    if ticker in tickers_logged_today:
+                    # Пропускаем, если для этого тикера уже есть запись сегодня (если не принудительное логирование)
+                    if not force and ticker in tickers_logged_today:
                         skipped_count += 1
                         print(f"[{datetime.now(self.moscow_tz)}] Пропуск {ticker}: цена уже залогирована сегодня")
                         continue

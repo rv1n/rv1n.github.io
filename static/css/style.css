@@ -522,8 +522,14 @@ header h1 {
     border-bottom: 1px solid #ecf0f1;
 }
 
+.history-table tr {
+    transition: background-color 0.2s, box-shadow 0.2s;
+}
+
 .history-table tr:hover {
-    background: #f8f9fa;
+    background-color: #e8f0f5;
+    box-shadow: 0 2px 8px rgba(30, 58, 95, 0.15);
+    transform: translateY(-1px);
 }
 
 .history-table .price-cell {
@@ -604,8 +610,14 @@ header h1 {
     vertical-align: middle;
 }
 
+.transactions-table tbody tr {
+    transition: background-color 0.2s, box-shadow 0.2s;
+}
+
 .transactions-table tbody tr:hover {
-    background: #f8f9fa;
+    background-color: #e8f0f5;
+    box-shadow: 0 2px 8px rgba(30, 58, 95, 0.15);
+    transform: translateY(-1px);
 }
 
 .transaction-type-buy {
@@ -762,8 +774,14 @@ header h1 {
     margin-left: 5px;
 }
 
+.categories-table tbody tr {
+    transition: background-color 0.2s, box-shadow 0.2s;
+}
+
 .categories-table tbody tr:hover {
-    background: #f8f9fa;
+    background-color: #e8f0f5;
+    box-shadow: 0 2px 8px rgba(30, 58, 95, 0.15);
+    transform: translateY(-1px);
 }
 
 .category-select,
@@ -861,11 +879,18 @@ header h1 {
     margin-bottom: 20px;
     border-bottom: 2px solid #e0e0e0;
     padding-bottom: 10px;
+    gap: 15px;
 }
 
 .view-switcher {
     display: flex;
     gap: 10px;
+    align-items: center;
+}
+
+.view-controls .menu-wrapper {
+    margin-left: 0;
+    margin-right: auto;
 }
 
 .view-btn {
@@ -1231,6 +1256,21 @@ header h1 {
     white-space: nowrap;
 }
 
+/* Ячейка с мини-графиком */
+.sparkline-cell {
+    text-align: center;
+    padding: 10px 5px !important;
+    vertical-align: middle;
+}
+
+.sparkline-container {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 80px;
+    height: 30px;
+}
+
 /* Ячейка с действиями - одна кнопка по центру в колонке */
 .portfolio-table td:last-child {
     white-space: nowrap;
@@ -1243,11 +1283,13 @@ header h1 {
 }
 
 .portfolio-table tbody tr {
-    transition: background-color 0.2s;
+    transition: background-color 0.2s, box-shadow 0.2s;
 }
 
 .portfolio-table tbody tr:hover {
-    background-color: #f8f9fa;
+    background-color: #e8f0f5;
+    box-shadow: 0 2px 8px rgba(30, 58, 95, 0.15);
+    transform: translateY(-1px);
 }
 
 .portfolio-table tbody tr:last-child td {

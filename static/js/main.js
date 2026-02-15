@@ -256,7 +256,7 @@ function displayPortfolio(portfolio, summary) {
         const message = selectedType ? 
             `Нет активов вида "${selectedType}"` : 
             'Портфель пуст. Добавьте первую позицию.';
-        tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; padding: 40px; color: #7f8c8d;">${message}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="9" style="text-align: center; padding: 40px; color: #7f8c8d;">${message}</td></tr>`;
         if (portfolio.length === 0) {
             previousPrices = {}; // Очищаем сохраненные цены только если портфель действительно пуст
         }
@@ -285,11 +285,122 @@ function displayPortfolio(portfolio, summary) {
     // Привязываем обработчики к кнопкам продажи
     attachSellButtonHandlers();
     
+    // Загружаем и отрисовываем мини-графики для всех позиций
+    loadSparklines(filteredPortfolio);
+    
     // Обновление сводки на основе отфильтрованных данных
     updateSummary(filteredSummary);
     
     // Обновление диаграммы категорий
     updateCategoryChart(portfolio);
+}
+
+/**
+ * Загрузка и отрисовка мини-графиков для всех позиций портфеля
+ */
+async function loadSparklines(portfolio) {
+    for (const item of portfolio) {
+        const container = document.querySelector(`.sparkline-container[data-ticker="${item.ticker}"]`);
+        if (container) {
+            await renderSparkline(container, item.ticker, item.instrument_type === 'Облигация');
+        }
+    }
+}
+
+/**
+ * Отрисовка мини-графика (спарклайна) для тикера
+ */
+async function renderSparkline(container, ticker, isBond = false) {
+    try {
+        // Получаем историю цен за последние 7 дней
+        const response = await fetch(`/api/price-history?ticker=${ticker}&days=7&limit=7`);
+        const data = await response.json();
+        
+        if (!data.success || !data.history || data.history.length === 0) {
+            container.innerHTML = '<span style="color: #95a5a6; font-size: 0.8em;">Нет данных</span>';
+            return;
+        }
+        
+        // Сортируем по дате (от старых к новым)
+        const history = data.history.sort((a, b) => {
+            const dateA = new Date(a.logged_at);
+            const dateB = new Date(b.logged_at);
+            return dateA - dateB;
+        });
+        
+        // Извлекаем цены
+        const prices = history.map(h => {
+            let price = parseFloat(h.price) || 0;
+            // Для облигаций переводим из процентов в рубли для отображения
+            if (isBond && price < 1000) {
+                price = (price * 1000) / 100;
+            }
+            return price;
+        });
+        
+        if (prices.length === 0) {
+            container.innerHTML = '<span style="color: #95a5a6; font-size: 0.8em;">Нет данных</span>';
+            return;
+        }
+        
+        // Параметры графика
+        const width = 80;
+        const height = 30;
+        const padding = 2;
+        const graphWidth = width - padding * 2;
+        const graphHeight = height - padding * 2;
+        
+        // Находим min и max для масштабирования
+        const minPrice = Math.min(...prices);
+        const maxPrice = Math.max(...prices);
+        const priceRange = maxPrice - minPrice || 1; // Избегаем деления на 0
+        
+        // Определяем цвет графика (зеленый если последняя цена выше первой, красный если ниже)
+        const firstPrice = prices[0];
+        const lastPrice = prices[prices.length - 1];
+        const isPositive = lastPrice >= firstPrice;
+        const lineColor = isPositive ? '#27ae60' : '#e74c3c';
+        
+        // Создаем SVG
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('width', width);
+        svg.setAttribute('height', height);
+        svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+        svg.style.display = 'block';
+        
+        // Создаем путь для линии графика
+        const pathData = prices.map((price, index) => {
+            const x = padding + (index / (prices.length - 1 || 1)) * graphWidth;
+            const y = padding + graphHeight - ((price - minPrice) / priceRange) * graphHeight;
+            return `${index === 0 ? 'M' : 'L'} ${x} ${y}`;
+        }).join(' ');
+        
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('d', pathData);
+        path.setAttribute('fill', 'none');
+        path.setAttribute('stroke', lineColor);
+        path.setAttribute('stroke-width', '1.5');
+        path.setAttribute('stroke-linecap', 'round');
+        path.setAttribute('stroke-linejoin', 'round');
+        svg.appendChild(path);
+        
+        // Добавляем точку на последней цене
+        const lastX = padding + graphWidth;
+        const lastY = padding + graphHeight - ((lastPrice - minPrice) / priceRange) * graphHeight;
+        const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        circle.setAttribute('cx', lastX);
+        circle.setAttribute('cy', lastY);
+        circle.setAttribute('r', '2');
+        circle.setAttribute('fill', lineColor);
+        svg.appendChild(circle);
+        
+        container.innerHTML = '';
+        container.appendChild(svg);
+        
+    } catch (error) {
+        console.error(`Ошибка загрузки графика для ${ticker}:`, error);
+        container.innerHTML = '<span style="color: #95a5a6; font-size: 0.8em;">Ошибка</span>';
+    }
 }
 
 /**
@@ -324,28 +435,78 @@ function createPortfolioRow(item, totalPortfolioValue = 0) {
     const isBond = item.instrument_type === 'Облигация';
     const bondNominal = 1000; // Номинал большинства облигаций MOEX
 
-    // Эффективная цена в рублях:
-    // Для акций: как есть
-    // Для облигаций: цена на MOEX указывается в % от номинала, поэтому переводим в рубли
-    const effectivePrice = isBond
-        ? (item.current_price * bondNominal) / 100
-        : item.current_price;
-
-    // Рассчитываем процент от общего портфеля, используя цену в рублях
-    const totalValue = item.quantity * effectivePrice;
-    const portfolioPercent = totalPortfolioValue > 0 ? (totalValue / totalPortfolioValue * 100) : 0;
+    // Для облигаций проверяем и переводим цены из процентов в рубли, если нужно
+    let effectivePrice = item.current_price;
+    let effectiveAvgPrice = item.average_buy_price;
     
-    const investmentsTotal = item.quantity * item.average_buy_price;
-    const assetTotal = totalValue;
+    if (isBond) {
+        // Если цена меньше 1000, считаем что она в процентах и переводим в рубли
+        if (effectivePrice < 1000) {
+            effectivePrice = (effectivePrice * bondNominal) / 100;
+        }
+        if (effectiveAvgPrice < 1000) {
+            effectiveAvgPrice = (effectiveAvgPrice * bondNominal) / 100;
+        }
+    }
+    
+    // Отладка для облигаций
+    if (isBond) {
+        console.log(`=== ОТЛАДКА ОБЛИГАЦИИ ${item.ticker} ===`);
+        console.log('Данные с бэкенда:', {
+            current_price: item.current_price,
+            average_buy_price: item.average_buy_price,
+            total_cost: item.total_cost,
+            quantity: item.quantity,
+            instrument_type: item.instrument_type
+        });
+        console.log('Вычисленные значения:', {
+            effectivePrice,
+            effectiveAvgPrice,
+            assetTotal,
+            currentPricePercent,
+            bondNominal
+        });
+        console.log('==========================================');
+    }
+
+    // Используем total_cost из бэкенда (уже правильно рассчитан)
+    // Для облигаций это общая стоимость в рублях, для акций тоже
+    const assetTotal = item.total_cost || (item.quantity * effectivePrice);
+    
+    // Рассчитываем процент от общего портфеля
+    const portfolioPercent = totalPortfolioValue > 0 ? (assetTotal / totalPortfolioValue * 100) : 0;
+    
+    const investmentsTotal = item.quantity * effectiveAvgPrice;
 
     // Линии для объединённой колонки "Текущая стоимость"
-    const currentPriceLine = isBond
-        ? `${formatCurrentPrice(effectivePrice)} (${formatPercent(item.current_price, 5)})`
-        : `${formatCurrentPrice(effectivePrice)}`;
+    // Для облигаций: 1) цена в рублях, 2) процент от номинала, 3) процент от портфеля
+    // Для акций: 1) общая стоимость, 2) цена за единицу, 3) процент от портфеля
+    // Вычисляем процент от номинала для облигаций (цена в рублях / номинал * 100)
+    const currentPricePercent = isBond 
+        ? (effectivePrice / bondNominal) * 100 
+        : null;
     const portfolioPercentLine = formatPercent(portfolioPercent, 2);
     
     const pnlValueText = `${item.profit_loss >= 0 ? '+' : ''}${formatCurrency(item.profit_loss)}`;
     const pnlPercentText = `${item.profit_loss_percent >= 0 ? '+' : ''}${formatPercent(Math.abs(item.profit_loss_percent), 2)}`;
+    
+    // Формируем три строки для колонки "Текущая стоимость"
+    let currentValueLines = '';
+    if (isBond && currentPricePercent !== null) {
+        // Для облигаций: общая стоимость, процент от номинала, процент от портфеля
+        currentValueLines = `
+            <strong>${formatAssetTotal(assetTotal)}</strong>
+            <span style="font-size: 0.85em; color: #2c3e50;">${formatCurrentPrice(effectivePrice)} (${formatPercent(currentPricePercent, 2)})</span>
+            <span style="font-size: 0.85em; color: #7f8c8d;">${portfolioPercentLine}</span>
+        `;
+    } else {
+        // Для акций: общая стоимость, цена за единицу, процент от портфеля
+        currentValueLines = `
+            <strong>${formatAssetTotal(assetTotal)}</strong>
+            <span style="font-size: 0.85em; color: #2c3e50;">${formatCurrentPrice(effectivePrice)}</span>
+            <span style="font-size: 0.85em; color: #7f8c8d;">${portfolioPercentLine}</span>
+        `;
+    }
     
     row.innerHTML = `
         <td>
@@ -354,16 +515,14 @@ function createPortfolioRow(item, totalPortfolioValue = 0) {
                 <span class="ticker-company-ticker">${item.ticker}</span>
             </div>
         </td>
-        <td>${formatCurrency(item.average_buy_price)}</td>
+        <td>${formatCurrency(effectiveAvgPrice)}</td>
         <td>${formatNumber(item.quantity)}</td>
         <td>
             <strong>${formatAssetTotal(investmentsTotal)}</strong>
         </td>
         <td>
             <div style="display: flex; flex-direction: column; align-items: flex-start;">
-                <strong>${formatAssetTotal(assetTotal)}</strong>
-                <span style="font-size: 0.85em; color: #2c3e50;">${currentPriceLine}</span>
-                <span style="font-size: 0.85em; color: #7f8c8d;">${portfolioPercentLine}</span>
+                ${currentValueLines}
             </div>
         </td>
         <td class="${changeClass}">
@@ -375,6 +534,9 @@ function createPortfolioRow(item, totalPortfolioValue = 0) {
                 <span>${pnlValueText}</span>
                 <span style="font-size: 0.85em; color: #7f8c8d;">${pnlPercentText}</span>
             </div>
+        </td>
+        <td class="sparkline-cell">
+            <div class="sparkline-container" data-ticker="${item.ticker}"></div>
         </td>
         <td>
             <button class="btn btn-sell" 
@@ -1321,7 +1483,8 @@ function renderAssetTypesPieChart(portfolio, containerId = 'asset-type-pie-chart
     
     portfolio.forEach(item => {
         const assetType = item.asset_type || 'Без вида';
-        const value = item.quantity * item.current_price || 0;
+        // Используем total_cost из бэкенда (уже правильно рассчитан)
+        const value = item.total_cost || 0;
         
         if (!assetTypeData[assetType]) {
             assetTypeData[assetType] = 0;
@@ -1455,7 +1618,8 @@ function renderCategoriesPieChart(portfolio, containerId = 'categories-pie-chart
     
     portfolio.forEach(item => {
         const category = item.category || 'Без категории';
-        const value = item.quantity * item.current_price || 0;
+        // Используем total_cost из бэкенда (уже правильно рассчитан)
+        const value = item.total_cost || 0;
         
         if (!categoryData[category]) {
             categoryData[category] = 0;
