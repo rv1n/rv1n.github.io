@@ -38,6 +38,8 @@ class Portfolio(Base):
     category = Column(String(100), nullable=True)  # Категория (сектор)
     asset_type = Column(String(100), nullable=True)  # Вид актива
     instrument_type = Column(Enum(InstrumentType), nullable=False, default=InstrumentType.STOCK)  # Тип инструмента
+    bond_facevalue = Column(Float, nullable=True)  # Номинал облигации (для облигаций)
+    bond_currency = Column(String(10), nullable=True)  # Валюта номинала облигации (SUR, USD, EUR и т.д.)
     date_added = Column(DateTime, default=datetime.now)
     
     def __repr__(self):

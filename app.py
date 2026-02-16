@@ -8,6 +8,7 @@ from models.price_history import PriceHistory
 from models.transaction import Transaction, TransactionType
 from models.category import Category
 from models.asset_type import AssetType
+from models.cash_balance import CashBalance
 from services.moex_service import MOEXService
 from services.price_logger import PriceLogger
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -49,6 +50,17 @@ def init_categories():
     db_session.commit()
 
 init_categories()
+
+# Инициализация баланса свободных денег
+def init_cash_balance():
+    """Инициализация баланса свободных денег (если еще не создан)"""
+    balance = db_session.query(CashBalance).filter(CashBalance.id == 1).first()
+    if not balance:
+        balance = CashBalance(id=1, balance=0.0)
+        db_session.add(balance)
+        db_session.commit()
+
+init_cash_balance()
 
 # Инициализация сервисов
 moex_service = MOEXService()
@@ -149,9 +161,38 @@ def get_portfolio():
                 if current_price_data:
                     break
             
+            # Получаем номинал и валюту для облигаций
+            bond_facevalue = None
+            bond_currency = None
+            if instrument_type == 'BOND':
+                # Используем сохраненные значения из базы, если есть
+                if hasattr(item, 'bond_facevalue') and item.bond_facevalue:
+                    bond_facevalue = item.bond_facevalue
+                    bond_currency = item.bond_currency if hasattr(item, 'bond_currency') else 'SUR'
+                # Если нет в базе, получаем из API
+                elif current_price_data:
+                    bond_facevalue = current_price_data.get('facevalue', 1000.0)
+                    bond_currency = current_price_data.get('currency_id', 'SUR')
+                    # Сохраняем в базу для будущего использования
+                    item.bond_facevalue = bond_facevalue
+                    item.bond_currency = bond_currency
+                    db_session.commit()
+                else:
+                    bond_facevalue = 1000.0
+                    bond_currency = 'SUR'
+            
             if current_price_data:
                 current_price = current_price_data.get('price', 0)
                 last_update = current_price_data.get('last_update', '')
+                # Обновляем номинал и валюту из API, если они есть
+                if instrument_type == 'BOND' and current_price_data.get('facevalue'):
+                    bond_facevalue = current_price_data.get('facevalue', bond_facevalue or 1000.0)
+                    bond_currency = current_price_data.get('currency_id', bond_currency or 'SUR')
+                    # Обновляем в базе, если изменились
+                    if hasattr(item, 'bond_facevalue') and (item.bond_facevalue != bond_facevalue or item.bond_currency != bond_currency):
+                        item.bond_facevalue = bond_facevalue
+                        item.bond_currency = bond_currency
+                        db_session.commit()
             else:
                 # Если цена не получена, используем среднюю цену покупки как fallback
                 current_price = item.average_buy_price if hasattr(item, 'average_buy_price') else 0
@@ -211,6 +252,9 @@ def get_portfolio():
             
             # Рассчитываем изменение: разница между последними двумя записями в истории цен
             # Для облигаций цены в истории хранятся в процентах, для акций - в рублях
+            # Используем сохраненный номинал облигации или значение по умолчанию
+            bond_nominal = bond_facevalue if bond_facevalue else 1000.0
+            
             if len(last_two_entries) >= 2:
                 latest_price = last_two_entries[0].price
                 previous_price = last_two_entries[1].price
@@ -235,9 +279,8 @@ def get_portfolio():
                 price_change_percent = 0
             
             # Расчеты прибыли/убытка относительно ТЕКУЩЕЙ цены (с MOEX API)
-            # Для облигаций цены с MOEX в процентах от номинала (1000 руб), переводим в рубли
+            # Для облигаций цены с MOEX в процентах от номинала, переводим в рубли
             # calculated_avg_price из транзакций уже в рублях (как ввел пользователь)
-            bond_nominal = 1000
             if instrument_type == 'BOND':
                 # current_price с MOEX всегда в процентах для облигаций - переводим в рубли
                 current_price_rub = (current_price * bond_nominal) / 100
@@ -269,7 +312,7 @@ def get_portfolio():
                 print(f"  total_current_value: {total_current_value}")
                 print(f"  Отправляем в API: current_price={current_price_rub}, total_cost={total_current_value}")
             
-            result.append({
+            result_item = {
                 'id': item.id,
                 'ticker': item.ticker,
                 'company_name': item.company_name,
@@ -287,7 +330,14 @@ def get_portfolio():
                 'profit_loss_percent': profit_loss_percent,
                 'last_update': last_update,
                 'date_added': item.date_added.isoformat() if item.date_added else None
-            })
+            }
+            
+            # Добавляем информацию о номинале и валюте для облигаций
+            if instrument_type == 'BOND':
+                result_item['bond_facevalue'] = bond_facevalue
+                result_item['bond_currency'] = bond_currency
+            
+            result.append(result_item)
         
         # Общие расчеты портфеля
         total_portfolio_value = sum(item['total_cost'] for item in result)
@@ -307,6 +357,13 @@ def get_portfolio():
             weighted_percent = sum(item['price_change_percent'] * item['total_cost'] for item in result if item['price_change'] != 0)
             total_price_change_percent = weighted_percent / total_value_for_change if total_value_for_change > 0 else 0
         
+        # Получаем баланс свободных денег
+        balance = db_session.query(CashBalance).filter(CashBalance.id == 1).first()
+        if not balance:
+            balance = CashBalance(id=1, balance=0.0)
+            db_session.add(balance)
+            db_session.commit()
+        
         return jsonify({
             'success': True,
             'portfolio': result,
@@ -316,7 +373,8 @@ def get_portfolio():
                 'total_pnl': total_portfolio_pnl,
                 'total_pnl_percent': total_portfolio_pnl_percent,
                 'total_price_change': total_price_change,
-                'total_price_change_percent': total_price_change_percent
+                'total_price_change_percent': total_price_change_percent,
+                'cash_balance': balance.balance
             }
         })
     except Exception as e:
@@ -728,12 +786,32 @@ def add_transaction():
         )
         
         db_session.add(transaction)
+        
+        # Обновляем баланс свободных денег
+        balance = db_session.query(CashBalance).filter(CashBalance.id == 1).first()
+        if not balance:
+            balance = CashBalance(id=1, balance=0.0)
+            db_session.add(balance)
+        
+        if operation_type == TransactionType.SELL:
+            # При продаже добавляем сумму в баланс
+            balance.balance += total
+        elif operation_type == TransactionType.BUY:
+            # При покупке:
+            # Если сумма покупки больше баланса - обнуляем баланс
+            # Если сумма покупки меньше баланса - вычитаем сумму из баланса
+            if total >= balance.balance:
+                balance.balance = 0.0
+            else:
+                balance.balance -= total
+        
         db_session.commit()
         
         return jsonify({
             'success': True,
             'message': 'Транзакция успешно добавлена',
-            'transaction': transaction.to_dict()
+            'transaction': transaction.to_dict(),
+            'cash_balance': balance.balance
         })
         
     except Exception as e:
@@ -760,8 +838,10 @@ def update_transaction(transaction_id):
         
         data = request.get_json()
         
-        # Сохраняем старый тикер до изменения
+        # Сохраняем старые значения для пересчета баланса
         old_ticker = transaction.ticker
+        old_operation_type = transaction.operation_type
+        old_total = transaction.total
         
         # Обновление полей
         if 'ticker' in data:
@@ -944,8 +1024,25 @@ def delete_transaction(transaction_id):
                 'error': 'Транзакция не найдена'
             }), 404
         
-        # Сохраняем тикер для пересчета портфеля
+        # Сохраняем данные для пересчета баланса
         ticker = transaction.ticker
+        operation_type = transaction.operation_type
+        total = transaction.total
+        
+        # Обновляем баланс свободных денег (откатываем влияние транзакции)
+        balance = db_session.query(CashBalance).filter(CashBalance.id == 1).first()
+        if not balance:
+            balance = CashBalance(id=1, balance=0.0)
+            db_session.add(balance)
+        
+        # Откатываем влияние удаляемой транзакции
+        if operation_type == TransactionType.SELL:
+            balance.balance -= total
+        elif operation_type == TransactionType.BUY:
+            # При удалении покупки восстанавливаем баланс
+            # Но мы не знаем точно, сколько было до покупки, если покупка обнулила баланс
+            # Поэтому просто добавляем сумму обратно (это не идеально, но лучше чем ничего)
+            balance.balance += total
         
         # Удаляем транзакцию
         db_session.delete(transaction)
@@ -957,11 +1054,35 @@ def delete_transaction(transaction_id):
         return jsonify({
             'success': True,
             'message': 'Транзакция успешно удалена',
-            'ticker': ticker
+            'ticker': ticker,
+            'cash_balance': balance.balance
         })
         
     except Exception as e:
         db_session.rollback()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/cash-balance', methods=['GET'])
+def get_cash_balance():
+    """
+    Получить текущий баланс свободных денег от продаж
+    """
+    try:
+        balance = db_session.query(CashBalance).filter(CashBalance.id == 1).first()
+        if not balance:
+            balance = CashBalance(id=1, balance=0.0)
+            db_session.add(balance)
+            db_session.commit()
+        
+        return jsonify({
+            'success': True,
+            'balance': balance.balance
+        })
+    except Exception as e:
         return jsonify({
             'success': False,
             'error': str(e)

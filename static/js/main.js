@@ -262,6 +262,10 @@ function displayPortfolio(portfolio, summary) {
         }
         // Обновляем сводку нулевыми значениями для отфильтрованного портфеля
         const emptySummary = calculateSummaryFromPortfolio([]);
+        // Сохраняем cash_balance из оригинального summary (не зависит от фильтрации)
+        if (summary && summary.cash_balance !== undefined) {
+            emptySummary.cash_balance = summary.cash_balance;
+        }
         updateSummary(emptySummary);
         return;
     }
@@ -273,6 +277,11 @@ function displayPortfolio(portfolio, summary) {
     
     // Пересчитываем сводку на основе отфильтрованного портфеля
     const filteredSummary = calculateSummaryFromPortfolio(filteredPortfolio);
+    
+    // Сохраняем cash_balance из оригинального summary (не зависит от фильтрации)
+    if (summary && summary.cash_balance !== undefined) {
+        filteredSummary.cash_balance = summary.cash_balance;
+    }
     
     // Получаем общую стоимость отфильтрованного портфеля для расчета процентов
     const totalPortfolioValue = filteredSummary.total_value || 0;
@@ -452,7 +461,9 @@ function createPortfolioRow(item, totalPortfolioValue = 0) {
     
     // Определяем, является ли инструмент облигацией
     const isBond = item.instrument_type === 'Облигация';
-    const bondNominal = 1000; // Номинал большинства облигаций MOEX
+    // Используем реальный номинал из данных, если есть, иначе 1000 по умолчанию
+    const bondNominal = (isBond && item.bond_facevalue) ? item.bond_facevalue : 1000;
+    const bondCurrency = (isBond && item.bond_currency) ? item.bond_currency : 'SUR';
 
     // Для облигаций проверяем и переводим цены из процентов в рубли, если нужно
     let effectivePrice = item.current_price;
@@ -476,14 +487,17 @@ function createPortfolioRow(item, totalPortfolioValue = 0) {
             average_buy_price: item.average_buy_price,
             total_cost: item.total_cost,
             quantity: item.quantity,
-            instrument_type: item.instrument_type
+            instrument_type: item.instrument_type,
+            bond_facevalue: item.bond_facevalue,
+            bond_currency: item.bond_currency
         });
         console.log('Вычисленные значения:', {
             effectivePrice,
             effectiveAvgPrice,
             assetTotal,
             currentPricePercent,
-            bondNominal
+            bondNominal,
+            bondCurrency
         });
         console.log('==========================================');
     }
@@ -513,8 +527,10 @@ function createPortfolioRow(item, totalPortfolioValue = 0) {
     let currentValueLines = '';
     if (isBond && currentPricePercent !== null) {
         // Для облигаций: общая стоимость, процент от номинала, процент от портфеля
+        // Добавляем информацию о валюте, если это не рубли
+        const currencyText = bondCurrency && bondCurrency !== 'SUR' ? ` (${bondCurrency})` : '';
         currentValueLines = `
-            <strong>${formatAssetTotal(assetTotal)}</strong>
+            <strong>${formatAssetTotal(assetTotal)}${currencyText}</strong>
             <span style="font-size: 0.85em; color: #2c3e50;">${formatCurrentPrice(effectivePrice)} (${formatPercent(currentPricePercent, 2)})</span>
             <span style="font-size: 0.85em; color: #7f8c8d;">${portfolioPercentLine}</span>
         `;
@@ -615,7 +631,8 @@ function calculateSummaryFromPortfolio(portfolio) {
         total_pnl: total_portfolio_pnl,
         total_pnl_percent: total_portfolio_pnl_percent,
         total_price_change: total_price_change,
-        total_price_change_percent: total_price_change_percent
+        total_price_change_percent: total_price_change_percent,
+        cash_balance: 0 // Будет обновлено из summary с сервера
     };
 }
 
@@ -628,9 +645,14 @@ function updateSummary(summary) {
     const totalPnlPercentEl = document.getElementById('total-pnl-percent');
     const totalPriceChangeEl = document.getElementById('total-price-change');
     const totalPriceChangePercentEl = document.getElementById('total-price-change-percent');
+    const cashBalanceEl = document.getElementById('cash-balance');
     
     if (totalValueEl) {
         totalValueEl.textContent = formatCurrency(summary.total_value);
+    }
+    
+    if (cashBalanceEl && summary.cash_balance !== undefined) {
+        cashBalanceEl.textContent = formatCurrency(summary.cash_balance);
     }
     
     if (totalPnlEl) {
@@ -918,6 +940,12 @@ async function handleBuy(e) {
         if (!transData.success) {
             console.error('Ошибка при создании транзакции:', transData.error);
             return;
+        }
+        
+        // Обновляем баланс из ответа сервера
+        if (transData.cash_balance !== undefined && currentPortfolioData) {
+            currentPortfolioData.summary.cash_balance = transData.cash_balance;
+            updateSummary(currentPortfolioData.summary);
         }
         
         // 2. Обновляем портфель
@@ -2445,6 +2473,12 @@ async function deleteTransaction(transactionId) {
             loadTransactions();
             console.log('Транзакция успешно удалена');
             
+            // Обновляем баланс из ответа сервера
+            if (data.cash_balance !== undefined && currentPortfolioData) {
+                currentPortfolioData.summary.cash_balance = data.cash_balance;
+                updateSummary(currentPortfolioData.summary);
+            }
+            
             // Обновляем портфель, так как удаление транзакции влияет на количество и среднюю цену
             const tableView = document.getElementById('table-view');
             if (tableView && tableView.style.display !== 'none') {
@@ -2556,6 +2590,12 @@ async function handleSell(e) {
         if (!transData.success) {
             console.error('Ошибка при создании транзакции продажи:', transData.error);
             return;
+        }
+        
+        // Обновляем баланс из ответа сервера
+        if (transData.cash_balance !== undefined && currentPortfolioData) {
+            currentPortfolioData.summary.cash_balance = transData.cash_balance;
+            updateSummary(currentPortfolioData.summary);
         }
         
         // 2. Обновляем портфель (уменьшаем количество или удаляем позицию)

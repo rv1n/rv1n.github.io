@@ -25,4 +25,5 @@ def init_db():
     from models.transaction import Transaction
     from models.category import Category
     from models.asset_type import AssetType
+    from models.cash_balance import CashBalance
     Base.metadata.create_all(bind=engine)

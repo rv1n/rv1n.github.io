@@ -114,8 +114,10 @@ class MOEXService:
         }
         
         # Для облигаций добавляем запрос marketdata_yields (содержит цену в процентах)
+        # и запрашиваем информацию о номинале и валюте
         if instrument_type == 'BOND':
             params['marketdata_yields.columns'] = 'SECID,PRICE,WAPRICE'
+            params['securities.columns'] = 'SECID,LAST,OPEN,CHANGE,LASTTOPREVPRICE,VALTODAY,FACEVALUE,CURRENCYID'
         
         data = self._make_request(url, params)
         
@@ -220,6 +222,21 @@ class MOEXService:
                 'volume': volume,
                 'last_update': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             }
+            
+            # Для облигаций добавляем информацию о номинале и валюте
+            if instrument_type == 'BOND':
+                facevalue = securities_dict.get('FACEVALUE')
+                currency_id = securities_dict.get('CURRENCYID')
+                
+                if facevalue:
+                    try:
+                        result['facevalue'] = float(facevalue)
+                    except (ValueError, TypeError):
+                        result['facevalue'] = 1000.0  # Значение по умолчанию
+                else:
+                    result['facevalue'] = 1000.0  # Значение по умолчанию
+                
+                result['currency_id'] = currency_id if currency_id else 'SUR'  # SUR = рубли по умолчанию
             
             # Сохраняем в кэш
             self._save_to_cache(cache_key, result)

@@ -893,6 +893,31 @@ header h1 {
     margin-right: auto;
 }
 
+/* Отображение свободных средств */
+.cash-balance-display {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+    margin-right: 15px;
+    padding: 8px 12px;
+    background: #f8f9fa;
+    border-radius: 6px;
+    border: 1px solid #e0e0e0;
+}
+
+.cash-balance-label {
+    color: #7f8c8d;
+    font-size: 0.9em;
+    font-weight: 500;
+}
+
+.cash-balance-value {
+    color: #2c3e50;
+    font-size: 1em;
+    font-weight: 600;
+}
+
 .view-btn {
     padding: 12px 24px;
     background: transparent;
