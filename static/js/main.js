@@ -312,8 +312,8 @@ async function loadSparklines(portfolio) {
  */
 async function renderSparkline(container, ticker, isBond = false) {
     try {
-        // Получаем историю цен за последние 7 дней
-        const response = await fetch(`/api/price-history?ticker=${ticker}&days=7&limit=7`);
+        // Получаем историю цен за последние 7 дней (берем больше записей, чтобы точно получить данные за каждый день)
+        const response = await fetch(`/api/price-history?ticker=${ticker}&days=7&limit=50`);
         const data = await response.json();
         
         if (!data.success || !data.history || data.history.length === 0) {
@@ -321,27 +321,46 @@ async function renderSparkline(container, ticker, isBond = false) {
             return;
         }
         
-        // Сортируем по дате (от старых к новым)
-        const history = data.history.sort((a, b) => {
-            const dateA = new Date(a.logged_at);
-            const dateB = new Date(b.logged_at);
-            return dateA - dateB;
-        });
-        
-        // Извлекаем цены
-        const prices = history.map(h => {
+        // Группируем данные по дням (одна точка = один день)
+        const dailyData = {};
+        data.history.forEach(h => {
+            const date = new Date(h.logged_at);
+            const dayKey = date.toISOString().split('T')[0]; // YYYY-MM-DD
+            
+            if (!dailyData[dayKey]) {
+                dailyData[dayKey] = [];
+            }
+            
             let price = parseFloat(h.price) || 0;
             // Для облигаций переводим из процентов в рубли для отображения
             if (isBond && price < 1000) {
                 price = (price * 1000) / 100;
             }
-            return price;
+            
+            dailyData[dayKey].push({
+                price: price,
+                timestamp: date.getTime()
+            });
         });
         
-        if (prices.length === 0) {
+        // Для каждого дня берем последнюю запись (самую свежую)
+        const dailyPrices = [];
+        const sortedDays = Object.keys(dailyData).sort();
+        
+        sortedDays.forEach(dayKey => {
+            const dayRecords = dailyData[dayKey];
+            // Сортируем по времени и берем последнюю запись за день
+            dayRecords.sort((a, b) => b.timestamp - a.timestamp);
+            dailyPrices.push(dayRecords[0].price);
+        });
+        
+        if (dailyPrices.length === 0) {
             container.innerHTML = '<span style="color: #95a5a6; font-size: 0.8em;">Нет данных</span>';
             return;
         }
+        
+        // Ограничиваем до 7 дней (берем последние 7 дней)
+        const prices = dailyPrices.slice(-7);
         
         // Параметры графика
         const width = 80;

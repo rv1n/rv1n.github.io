@@ -15,6 +15,7 @@ from apscheduler.triggers.cron import CronTrigger
 from datetime import datetime
 import atexit
 import pytz
+import os
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your-secret-key-here'
@@ -95,11 +96,17 @@ scheduler.add_job(
     replace_existing=True
 )
 
-# Запускаем планировщик
-scheduler.start()
-print("Планировщик запущен:")
-print("  - Ежедневное логирование цен в 00:00 МСК")
-print("  - Периодическая проверка каждые 3 часа (если записи за сегодня нет)")
+# Запускаем планировщик только если он еще не запущен
+# Это предотвращает двойной запуск при использовании Flask reloader или Gunicorn
+# Flask reloader создает два процесса, поэтому проверяем переменную окружения WERKZEUG_RUN_MAIN
+if not scheduler.running:
+    # В режиме debug Flask создает два процесса - родительский (reloader) и дочерний (основной)
+    # Планировщик должен запускаться только в дочернем процессе
+    if os.environ.get('WERKZEUG_RUN_MAIN') == 'true' or not app.debug:
+        scheduler.start()
+        print("Планировщик запущен:")
+        print("  - Ежедневное логирование цен в 00:00 МСК")
+        print("  - Периодическая проверка каждые 3 часа (если записи за сегодня нет)")
 
 
 @app.route('/')
@@ -808,7 +815,7 @@ def update_transaction(transaction_id):
             'success': True,
             'message': 'Транзакция успешно обновлена',
             'transaction': transaction.to_dict(),
-            'ticker': ticker
+            'ticker': new_ticker
         })
         
     except Exception as e:
