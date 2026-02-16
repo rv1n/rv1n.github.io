@@ -412,15 +412,20 @@ async function renderSparkline(container, ticker, isBond = false) {
         path.setAttribute('stroke-linejoin', 'round');
         svg.appendChild(path);
         
-        // Добавляем точку на последней цене
-        const lastX = padding + graphWidth;
-        const lastY = padding + graphHeight - ((lastPrice - minPrice) / priceRange) * graphHeight;
-        const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-        circle.setAttribute('cx', lastX);
-        circle.setAttribute('cy', lastY);
-        circle.setAttribute('r', '2');
-        circle.setAttribute('fill', lineColor);
-        svg.appendChild(circle);
+        // Добавляем точки для каждого дня
+        prices.forEach((price, index) => {
+            const x = padding + (index / (prices.length - 1 || 1)) * graphWidth;
+            const y = padding + graphHeight - ((price - minPrice) / priceRange) * graphHeight;
+            
+            const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            circle.setAttribute('cx', x);
+            circle.setAttribute('cy', y);
+            circle.setAttribute('r', '2');
+            circle.setAttribute('fill', lineColor);
+            circle.setAttribute('stroke', '#ffffff');
+            circle.setAttribute('stroke-width', '0.5');
+            svg.appendChild(circle);
+        });
         
         container.innerHTML = '';
         container.appendChild(svg);
