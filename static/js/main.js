@@ -37,6 +37,12 @@ let portfolioSortState = {
 };
 
 /**
+ * Текущий период изменения цен (в днях) для колонки "Изменение"
+ * 1 — день, 7 — неделя, 30 — месяц, 182 — полгода, 365 — год
+ */
+let currentChangeDays = 1;
+
+/**
  * Инициализация приложения при загрузке страницы
  */
 document.addEventListener('DOMContentLoaded', async function() {
@@ -93,26 +99,31 @@ function setupEventListeners() {
         sellPrice.addEventListener('input', calculateSellTotal);
     }
 
-    // Сортировка таблицы портфеля по клику на заголовки
+    // Сортировка таблицы портфеля по кнопкам в заголовках
     const portfolioTable = document.getElementById('portfolio-table');
     if (portfolioTable) {
         const sortableHeaders = portfolioTable.querySelectorAll('th[data-sort-key]');
         sortableHeaders.forEach(th => {
             const columnKey = th.getAttribute('data-sort-key');
 
-            // Клик по всему заголовку
-            th.addEventListener('click', () => {
-                handlePortfolioSort(columnKey);
-            });
-
-            // Отдельно навешиваем на кнопку, чтобы не было конфликтов со стопом всплытия
+            // Сортировка только по кнопке внутри заголовка
             const btn = th.querySelector('.sort-btn');
             if (btn) {
                 btn.addEventListener('click', (e) => {
-                    e.stopPropagation(); // Чтобы не было двойного срабатывания
+                    e.stopPropagation();
                     handlePortfolioSort(columnKey);
                 });
             }
+        });
+    }
+
+    // Смена периода для колонки "Изменение"
+    const changePeriodSelect = document.getElementById('change-period-select');
+    if (changePeriodSelect) {
+        changePeriodSelect.addEventListener('change', () => {
+            const days = parseInt(changePeriodSelect.value, 10);
+            currentChangeDays = !isNaN(days) && days > 0 ? days : 1;
+            loadPortfolio(true); // тихое обновление портфеля при смене периода
         });
     }
 }
@@ -152,7 +163,13 @@ async function loadPortfolio(silent = false) {
         }
         errorMessage.style.display = 'none';
         
-        const response = await fetch('/api/portfolio');
+        // Формируем URL с учетом выбранного периода изменения цен
+        let url = '/api/portfolio';
+        if (currentChangeDays && currentChangeDays > 0) {
+            url += `?change_days=${currentChangeDays}`;
+        }
+
+        const response = await fetch(url);
         const data = await response.json();
         
         if (data.success) {
@@ -576,14 +593,14 @@ function createPortfolioRow(item, totalPortfolioValue = 0) {
         currentValueLines = `
             <strong>${formatAssetTotal(assetTotal)}${currencyText}</strong>
             <span style="font-size: 0.85em; color: #2c3e50;">${formatCurrentPrice(effectivePrice)} (${formatPercent(currentPricePercent, 2)})</span>
-            <span style="font-size: 0.85em; color: #7f8c8d;">${portfolioPercentLine}</span>
+            <span class="portfolio-share-badge">${portfolioPercentLine}</span>
         `;
     } else {
         // Для акций: общая стоимость, цена за единицу, процент от портфеля
         currentValueLines = `
             <strong>${formatAssetTotal(assetTotal)}</strong>
             <span style="font-size: 0.85em; color: #2c3e50;">${formatCurrentPrice(effectivePrice)}</span>
-            <span style="font-size: 0.85em; color: #7f8c8d;">${portfolioPercentLine}</span>
+            <span class="portfolio-share-badge">${portfolioPercentLine}</span>
         `;
     }
     
@@ -604,15 +621,15 @@ function createPortfolioRow(item, totalPortfolioValue = 0) {
                 ${currentValueLines}
             </div>
         </td>
-        <td class="${changeClass}">
-            ${item.price_change >= 0 ? '+' : ''}${formatCurrency(item.price_change)} 
-            (${item.price_change_percent >= 0 ? '+' : ''}${formatPercent(Math.abs(item.price_change_percent), 2)})
-        </td>
         <td class="${pnlClass}">
             <div style="display: flex; flex-direction: column; align-items: flex-start;">
                 <span>${pnlValueText}</span>
                 <span style="font-size: 0.85em; color: #7f8c8d;">${pnlPercentText}</span>
             </div>
+        </td>
+        <td class="${changeClass}">
+            ${item.price_change >= 0 ? '+' : ''}${formatCurrency(item.price_change)} 
+            (${item.price_change_percent >= 0 ? '+' : ''}${formatPercent(Math.abs(item.price_change_percent), 2)})
         </td>
         <td class="sparkline-cell">
             <div class="sparkline-container" data-ticker="${item.ticker}"></div>

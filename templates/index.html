@@ -98,29 +98,60 @@
                     <thead>
                         <tr>
                             <th>Название актива</th>
-                            <th data-sort-key="buy_price" class="sortable" title="Цена за 1 лот / акцию">
-                                Цена приобретения
+                            <th data-sort-key="buy_price" class="sortable">
+                                <div class="th-label-group">
+                                    <span>Цена приобретения</span>
+                                    <div style="font-size: 0.8em; font-weight: normal; color: #7f8c8d; margin-top: 2px;">
+                                        за 1 лот / акцию
+                                    </div>
+                                </div>
                                 <button type="button" class="sort-btn" aria-label="Сортировать по цене приобретения">⇅</button>
                             </th>
-                            <th data-sort-key="quantity" class="sortable" title="Количество, шт">
-                                Количество
+                            <th data-sort-key="quantity" class="sortable">
+                                <div class="th-label-group">
+                                    <span>Количество</span>
+                                    <div style="font-size: 0.8em; font-weight: normal; color: #7f8c8d; margin-top: 2px;">
+                                        шт
+                                    </div>
+                                </div>
                                 <button type="button" class="sort-btn" aria-label="Сортировать по количеству">⇅</button>
                             </th>
-                            <th data-sort-key="invest_sum" class="sortable" title="Сумма инвестиций, ₽">
-                                Сумма инвестиций
+                            <th data-sort-key="invest_sum" class="sortable">
+                                <div class="th-label-group">
+                                    <span>Сумма инвестиций</span>
+                                    <div style="font-size: 0.8em; font-weight: normal; color: #7f8c8d; margin-top: 2px;">
+                                        ₽
+                                    </div>
+                                </div>
                                 <button type="button" class="sort-btn" aria-label="Сортировать по сумме инвестиций">⇅</button>
                             </th>
-                            <th data-sort-key="current_value" class="sortable" title="Текущая стоимость позиции / актива и доля в портфеле">
-                                Текущая стоимость
+                            <th data-sort-key="current_value" class="sortable">
+                                <div class="th-label-group">
+                                    <span>Текущая стоимость</span>
+                                    <div style="font-size: 0.8em; font-weight: normal; color: #7f8c8d; margin-top: 2px;">
+                                        позиции / актива / доля в портфеле
+                                    </div>
+                                </div>
                                 <button type="button" class="sort-btn" aria-label="Сортировать по текущей стоимости">⇅</button>
                             </th>
-                            <th data-sort-key="day_change" class="sortable">
-                                Изменение за день
-                                <button type="button" class="sort-btn" aria-label="Сортировать по изменению за день">⇅</button>
-                            </th>
                             <th data-sort-key="profit" class="sortable">
-                                Прибыль
+                                <div class="th-label-group">
+                                    <span>Прибыль</span>
+                                </div>
                                 <button type="button" class="sort-btn" aria-label="Сортировать по прибыли">⇅</button>
+                            </th>
+                            <th data-sort-key="day_change" class="sortable">
+                                <div class="th-label-group">
+                                    <span>Изменение</span>
+                                    <select id="change-period-select" class="change-period-select" title="Период изменения">
+                                        <option value="1">день</option>
+                                        <option value="7">неделя</option>
+                                        <option value="30">месяц</option>
+                                        <option value="182">полгода</option>
+                                        <option value="365">год</option>
+                                    </select>
+                                </div>
+                                <button type="button" class="sort-btn" aria-label="Сортировать по изменению за период">⇅</button>
                             </th>
                             <th>График (7 дней)</th>
                             <th>Действия</th>

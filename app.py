@@ -14,7 +14,7 @@ from services.price_logger import PriceLogger
 from services.currency_service import CurrencyService
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
-from datetime import datetime
+from datetime import datetime, timedelta
 import atexit
 import pytz
 import os
@@ -129,6 +129,9 @@ def get_portfolio():
     Средняя цена покупки рассчитывается из истории транзакций покупки
     """
     try:
+        # Период для расчета изменения цены (в днях). Если не задан - используем "последние две записи".
+        change_days = request.args.get('change_days', type=int)
+
         portfolio_items = db_session.query(Portfolio).all()
         result = []
         
@@ -240,19 +243,53 @@ def get_portfolio():
                 # Если нет релевантных транзакций, используем цену из портфеля
                 calculated_avg_price = item.average_buy_price
             
-            # Получаем последние две цены из истории для расчета изменения
-            last_two_entries = db_session.query(PriceHistory).filter(
-                PriceHistory.ticker == item.ticker
-            ).order_by(PriceHistory.logged_at.desc()).limit(2).all()
-            
-            # Рассчитываем изменение: разница между последними двумя записями в истории цен
-            # Для облигаций цены в истории хранятся в процентах, для акций - в рублях
-            # Используем сохраненный номинал облигации или значение по умолчанию
+            # Получаем данные истории цен для расчета изменения
+            # Если задан change_days > 0 — берем цены за период и считаем изменение между
+            # самой старой и самой новой записью. Иначе — между двумя последними записями.
             bond_nominal = bond_facevalue if bond_facevalue else 1000.0
-            
-            if len(last_two_entries) >= 2:
-                latest_price = last_two_entries[0].price
-                previous_price = last_two_entries[1].price
+
+            latest_price = None
+            previous_price = None
+
+            if change_days and change_days > 0:
+                # Для периода считаем "окном" от последней сохраненной цены назад на N дней.
+                # Это корректнее, чем от текущего времени, если логирование не каждый день.
+                latest_entry = db_session.query(PriceHistory).filter(
+                    PriceHistory.ticker == item.ticker
+                ).order_by(PriceHistory.logged_at.desc()).first()
+
+                if latest_entry:
+                    end_time = latest_entry.logged_at
+                    period_start = end_time - timedelta(days=change_days)
+
+                    history_entries = db_session.query(PriceHistory).filter(
+                        PriceHistory.ticker == item.ticker,
+                        PriceHistory.logged_at >= period_start,
+                        PriceHistory.logged_at <= end_time
+                    ).order_by(PriceHistory.logged_at.asc()).all()
+
+                    if len(history_entries) >= 2:
+                        previous_price = history_entries[0].price
+                        latest_price = history_entries[-1].price
+                    elif len(history_entries) == 1:
+                        # Только одна запись за период — считаем, что изменения нет
+                        latest_price = history_entries[0].price
+                        previous_price = history_entries[0].price
+            else:
+                last_two_entries = db_session.query(PriceHistory).filter(
+                    PriceHistory.ticker == item.ticker
+                ).order_by(PriceHistory.logged_at.desc()).limit(2).all()
+
+                if len(last_two_entries) >= 2:
+                    latest_price = last_two_entries[0].price
+                    previous_price = last_two_entries[1].price
+                elif len(last_two_entries) == 1:
+                    latest_price = last_two_entries[0].price
+                    previous_price = last_two_entries[0].price
+
+            # Рассчитываем изменение: разница между предыдущей и последней ценой
+            # Для облигаций цены в истории хранятся в процентах, для акций - в рублях
+            if latest_price is not None and previous_price is not None:
                 # Для облигаций переводим из процентов в рубли
                 if instrument_type == 'BOND':
                     latest_price_rub = (latest_price * bond_nominal) / 100
@@ -262,14 +299,7 @@ def get_portfolio():
                 else:
                     price_change = latest_price - previous_price
                     price_change_percent = (price_change / previous_price * 100) if previous_price > 0 else 0
-            elif len(last_two_entries) == 1:
-                # Если есть только одна запись, изменение = 0
-                latest_price = last_two_entries[0].price
-                price_change = 0
-                price_change_percent = 0
             else:
-                # Если истории нет, изменение = 0
-                latest_price = calculated_avg_price
                 price_change = 0
                 price_change_percent = 0
             
