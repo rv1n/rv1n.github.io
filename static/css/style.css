@@ -145,6 +145,38 @@ header h1 {
     color: #1a252f;
 }
 
+/* Сортировка колонок в таблице портфеля */
+.portfolio-table th.sortable {
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.portfolio-table th.sortable .sort-btn {
+    margin-left: 6px;
+    padding: 2px 6px;
+    font-size: 0.8em;
+    border-radius: 4px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: #7f8c8d;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.portfolio-table th.sortable:hover .sort-btn {
+    border-color: #d0d7de;
+    background: #f3f4f6;
+    color: #34495e;
+}
+
+.portfolio-table th.sortable.sorted-asc .sort-btn {
+    color: #1e3a5f;
+}
+
+.portfolio-table th.sortable.sorted-desc .sort-btn {
+    color: #1e3a5f;
+}
+
 /* Сводка портфеля */
 .portfolio-summary {
     display: grid;
@@ -197,6 +229,21 @@ header h1 {
 .summary-percent {
     font-size: 1.2em;
     font-weight: bold;
+}
+
+/* Курсы валют в хедере */
+.header-currency-rates {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    font-size: 0.9em;
+    color: #2c3e50;
+    margin: 0 15px;
+}
+
+.header-currency-rates span {
+    white-space: nowrap;
 }
 
 /* Форма добавления */
@@ -829,14 +876,15 @@ header h1 {
 }
 
 .ticker-company-ticker {
-    font-weight: 700;
-    font-size: 1.1em;
-    color: #2c3e50;
+    font-weight: 400;
+    font-size: 0.9em;
+    color: #7f8c8d;
 }
 
 .ticker-company-name {
-    font-size: 0.9em;
-    color: #7f8c8d;
+    font-size: 1.1em;
+    font-weight: 700;
+    color: #2c3e50;
 }
 
 @keyframes shake {

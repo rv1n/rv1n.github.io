@@ -14,6 +14,11 @@
                 <div class="last-update">
                     Последнее обновление: <span id="last-update-time">-</span>
                 </div>
+                <div class="header-currency-rates" id="header-currency-rates">
+                    <span id="rate-usd">USD: -</span>
+                    <span id="rate-eur">EUR: -</span>
+                    <span id="rate-cny">CNY: -</span>
+                </div>
                 <button id="refresh-btn" class="btn btn-refresh" onclick="manualRefresh()" title="Обновить данные">
                     🔄 Обновить
                 </button>
@@ -93,12 +98,30 @@
                     <thead>
                         <tr>
                             <th>Название актива</th>
-                            <th>Цена приобретения</th>
-                            <th>Количество</th>
-                            <th>Сумма инвестиций</th>
-                            <th>Текущая стоимость</th>
-                            <th>Изменение за день</th>
-                            <th>Прибыль</th>
+                            <th data-sort-key="buy_price" class="sortable" title="Цена за 1 лот / акцию">
+                                Цена приобретения
+                                <button type="button" class="sort-btn" aria-label="Сортировать по цене приобретения">⇅</button>
+                            </th>
+                            <th data-sort-key="quantity" class="sortable" title="Количество, шт">
+                                Количество
+                                <button type="button" class="sort-btn" aria-label="Сортировать по количеству">⇅</button>
+                            </th>
+                            <th data-sort-key="invest_sum" class="sortable" title="Сумма инвестиций, ₽">
+                                Сумма инвестиций
+                                <button type="button" class="sort-btn" aria-label="Сортировать по сумме инвестиций">⇅</button>
+                            </th>
+                            <th data-sort-key="current_value" class="sortable" title="Текущая стоимость позиции / актива и доля в портфеле">
+                                Текущая стоимость
+                                <button type="button" class="sort-btn" aria-label="Сортировать по текущей стоимости">⇅</button>
+                            </th>
+                            <th data-sort-key="day_change" class="sortable">
+                                Изменение за день
+                                <button type="button" class="sort-btn" aria-label="Сортировать по изменению за день">⇅</button>
+                            </th>
+                            <th data-sort-key="profit" class="sortable">
+                                Прибыль
+                                <button type="button" class="sort-btn" aria-label="Сортировать по прибыли">⇅</button>
+                            </th>
                             <th>График (7 дней)</th>
                             <th>Действия</th>
                         </tr>

@@ -30,6 +30,12 @@ let currentAssetTypeChartType = localStorage.getItem('assetTypeChartType') || 'p
 let lastPriceLogCheck = null; // Последняя проверка записи цен
 let priceLogCheckInterval = null; // Интервал проверки новых записей цен
 
+// Состояние сортировки таблицы портфеля
+let portfolioSortState = {
+    column: null,   // buy_price, quantity, invest_sum, current_value, day_change, profit
+    direction: 'asc'
+};
+
 /**
  * Инициализация приложения при загрузке страницы
  */
@@ -39,6 +45,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     loadPortfolio();
     setupEventListeners();
     startPriceLogMonitoring(); // Запускаем мониторинг новых записей цен
+    loadCurrencyRates(); // Загружаем курсы валют для отображения
 });
 
 /**
@@ -84,6 +91,29 @@ function setupEventListeners() {
     if (sellQuantity && sellPrice) {
         sellQuantity.addEventListener('input', calculateSellTotal);
         sellPrice.addEventListener('input', calculateSellTotal);
+    }
+
+    // Сортировка таблицы портфеля по клику на заголовки
+    const portfolioTable = document.getElementById('portfolio-table');
+    if (portfolioTable) {
+        const sortableHeaders = portfolioTable.querySelectorAll('th[data-sort-key]');
+        sortableHeaders.forEach(th => {
+            const columnKey = th.getAttribute('data-sort-key');
+
+            // Клик по всему заголовку
+            th.addEventListener('click', () => {
+                handlePortfolioSort(columnKey);
+            });
+
+            // Отдельно навешиваем на кнопку, чтобы не было конфликтов со стопом всплытия
+            const btn = th.querySelector('.sort-btn');
+            if (btn) {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation(); // Чтобы не было двойного срабатывания
+                    handlePortfolioSort(columnKey);
+                });
+            }
+        });
     }
 }
 
@@ -270,6 +300,12 @@ function displayPortfolio(portfolio, summary) {
         return;
     }
     
+    // Применяем сортировку, если выбрана колонка
+    let sortedPortfolio = [...filteredPortfolio];
+    if (portfolioSortState.column) {
+        sortedPortfolio.sort((a, b) => comparePortfolioItems(a, b, portfolioSortState));
+    }
+
     // Сохраняем текущие цены для отслеживания изменений
     portfolio.forEach(item => {
         previousPrices[item.ticker] = item.current_price;
@@ -286,7 +322,7 @@ function displayPortfolio(portfolio, summary) {
     // Получаем общую стоимость отфильтрованного портфеля для расчета процентов
     const totalPortfolioValue = filteredSummary.total_value || 0;
     
-    filteredPortfolio.forEach(item => {
+    sortedPortfolio.forEach(item => {
         const row = createPortfolioRow(item, totalPortfolioValue);
         tbody.appendChild(row);
     });
@@ -302,6 +338,9 @@ function displayPortfolio(portfolio, summary) {
     
     // Обновление диаграммы категорий
     updateCategoryChart(portfolio);
+
+    // Обновляем визуальные индикаторы сортировки в заголовках
+    updatePortfolioSortIndicators();
 }
 
 /**
@@ -642,6 +681,108 @@ function calculateSummaryFromPortfolio(portfolio) {
 }
 
 /**
+ * Обработчик клика по заголовку для сортировки портфеля
+ * @param {string} columnKey
+ */
+function handlePortfolioSort(columnKey) {
+    if (!currentPortfolioData || !currentPortfolioData.portfolio) {
+        return;
+    }
+
+    if (portfolioSortState.column === columnKey) {
+        // Переключаем направление
+        portfolioSortState.direction = portfolioSortState.direction === 'asc' ? 'desc' : 'asc';
+    } else {
+        // Новая колонка — по умолчанию по возрастанию
+        portfolioSortState.column = columnKey;
+        portfolioSortState.direction = 'asc';
+    }
+
+    // Перерисовываем портфель с учетом сортировки
+    displayPortfolio(currentPortfolioData.portfolio, currentPortfolioData.summary);
+}
+
+/**
+ * Сравнение двух позиций портфеля для сортировки
+ * @param {Object} a
+ * @param {Object} b
+ * @param {{column: string, direction: string}} sortState
+ */
+function comparePortfolioItems(a, b, sortState) {
+    const dir = sortState.direction === 'asc' ? 1 : -1;
+    let aVal = 0;
+    let bVal = 0;
+
+    switch (sortState.column) {
+        case 'buy_price':
+            aVal = parseFloat(a.average_buy_price) || 0;
+            bVal = parseFloat(b.average_buy_price) || 0;
+            break;
+        case 'quantity':
+            aVal = parseFloat(a.quantity) || 0;
+            bVal = parseFloat(b.quantity) || 0;
+            break;
+        case 'invest_sum':
+            // Сумма инвестиций = количество * цена приобретения
+            aVal = (parseFloat(a.quantity) || 0) * (parseFloat(a.average_buy_price) || 0);
+            bVal = (parseFloat(b.quantity) || 0) * (parseFloat(b.average_buy_price) || 0);
+            break;
+        case 'current_value':
+            // Текущая стоимость — используем total_cost, если есть
+            aVal = parseFloat(a.total_cost) || ((parseFloat(a.quantity) || 0) * (parseFloat(a.current_price) || 0));
+            bVal = parseFloat(b.total_cost) || ((parseFloat(b.quantity) || 0) * (parseFloat(b.current_price) || 0));
+            break;
+        case 'day_change':
+            // Изменение за день — берем абсолютное изменение в деньгах (price_change * quantity)
+            aVal = (parseFloat(a.price_change) || 0) * (parseFloat(a.quantity) || 0);
+            bVal = (parseFloat(b.price_change) || 0) * (parseFloat(b.quantity) || 0);
+            break;
+        case 'profit':
+            // Прибыль — profit_loss в деньгах
+            aVal = parseFloat(a.profit_loss) || 0;
+            bVal = parseFloat(b.profit_loss) || 0;
+            break;
+        default:
+            aVal = 0;
+            bVal = 0;
+    }
+
+    if (aVal === bVal) return 0;
+    return aVal > bVal ? dir : -dir;
+}
+
+/**
+ * Обновление визуальных индикаторов сортировки в заголовках таблицы портфеля
+ */
+function updatePortfolioSortIndicators() {
+    const portfolioTable = document.getElementById('portfolio-table');
+    if (!portfolioTable) return;
+
+    const headers = portfolioTable.querySelectorAll('th[data-sort-key]');
+    headers.forEach(th => {
+        const key = th.getAttribute('data-sort-key');
+        const btn = th.querySelector('.sort-btn');
+
+        // Удаляем старый индикатор
+        th.classList.remove('sorted-asc', 'sorted-desc');
+        if (btn) {
+            btn.textContent = '⇅';
+        }
+
+        // Добавляем индикатор только для активной колонки
+        if (portfolioSortState.column === key) {
+            if (portfolioSortState.direction === 'asc') {
+                th.classList.add('sorted-asc');
+                if (btn) btn.textContent = '▲';
+            } else {
+                th.classList.add('sorted-desc');
+                if (btn) btn.textContent = '▼';
+            }
+        }
+    });
+}
+
+/**
  * Обновление сводки портфеля
  */
 function updateSummary(summary) {
@@ -671,16 +812,70 @@ function updateSummary(summary) {
         totalPnlPercentEl.className = `summary-percent ${pnlPercent >= 0 ? 'profit' : 'loss'}`;
     }
     
+    const priceChange = summary.total_price_change || 0;
     if (totalPriceChangeEl) {
-        const priceChange = summary.total_price_change || 0;
         totalPriceChangeEl.textContent = `${priceChange >= 0 ? '+' : ''}${formatCurrency(priceChange)}`;
         totalPriceChangeEl.className = `summary-value ${priceChange >= 0 ? 'profit' : 'loss'}`;
     }
     
     if (totalPriceChangePercentEl) {
-        const priceChangePercent = summary.total_price_change_percent || 0;
-        totalPriceChangePercentEl.textContent = `${priceChangePercent >= 0 ? '+' : ''}${formatPercent(Math.abs(priceChangePercent), 2)}`;
-        totalPriceChangePercentEl.className = `summary-percent ${priceChangePercent >= 0 ? 'profit' : 'loss'}`;
+        const rawPercent = summary.total_price_change_percent || 0;
+        const sign = priceChange >= 0 ? '+' : ''; // Процент подчиняем знаку рублёвого изменения
+        totalPriceChangePercentEl.textContent = `${sign}${formatPercent(Math.abs(rawPercent), 2)}`;
+        totalPriceChangePercentEl.className = `summary-percent ${priceChange >= 0 ? 'profit' : 'loss'}`;
+    }
+}
+
+/**
+ * Загрузка и отображение курсов валют (USD, EUR, CNY к RUB)
+ */
+async function loadCurrencyRates() {
+    try {
+        const response = await fetch('/api/currency-rates');
+        if (!response.ok) {
+            throw new Error('Ошибка ответа сервера');
+        }
+        const data = await response.json();
+        if (!data.success || !data.rates) {
+            return;
+        }
+
+        const usdEl = document.getElementById('rate-usd');
+        const eurEl = document.getElementById('rate-eur');
+        const cnyEl = document.getElementById('rate-cny');
+
+        const formatRate = (rate) => {
+            if (rate === null || rate === undefined) return '-';
+            return rate.toFixed(2);
+        };
+
+        const formatChangePercent = (changePercent) => {
+            if (changePercent === null || changePercent === undefined) return '0.00';
+            return changePercent.toFixed(2);
+        };
+
+        const updateEl = (el, code, info) => {
+            if (!el || !info) return;
+            const rate = info.rate;
+            const change = info.change || 0;
+            const changePercent = info.change_percent || 0;
+
+            const sign = change >= 0 ? '+' : '';
+            el.textContent = `${code}: ${formatRate(rate)} ₽ (${sign}${formatChangePercent(changePercent)}%)`;
+
+            el.classList.remove('profit', 'loss');
+            if (change > 0) {
+                el.classList.add('profit');
+            } else if (change < 0) {
+                el.classList.add('loss');
+            }
+        };
+
+        updateEl(usdEl, 'USD', data.rates.USD);
+        updateEl(eurEl, 'EUR', data.rates.EUR);
+        updateEl(cnyEl, 'CNY', data.rates.CNY);
+    } catch (err) {
+        console.error('Ошибка загрузки курсов валют:', err);
     }
 }
 

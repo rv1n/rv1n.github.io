@@ -114,10 +114,11 @@ class MOEXService:
         }
         
         # Для облигаций добавляем запрос marketdata_yields (содержит цену в процентах)
-        # и запрашиваем информацию о номинале и валюте
+        # и запрашиваем информацию о номинале и валюте номинала
         if instrument_type == 'BOND':
             params['marketdata_yields.columns'] = 'SECID,PRICE,WAPRICE'
-            params['securities.columns'] = 'SECID,LAST,OPEN,CHANGE,LASTTOPREVPRICE,VALTODAY,FACEVALUE,CURRENCYID'
+            # FACEUNIT — валюта номинала (то, что на сайте отображается как "Валюта номинала")
+            params['securities.columns'] = 'SECID,LAST,OPEN,CHANGE,LASTTOPREVPRICE,VALTODAY,FACEVALUE,CURRENCYID,FACEUNIT'
         
         data = self._make_request(url, params)
         
@@ -226,6 +227,9 @@ class MOEXService:
             # Для облигаций добавляем информацию о номинале и валюте
             if instrument_type == 'BOND':
                 facevalue = securities_dict.get('FACEVALUE')
+                # FACEUNIT — валюта номинала (USD для RU000A105SG2 и т.п.)
+                face_unit = securities_dict.get('FACEUNIT')
+                # CURRENCYID — валюта обращения (часто SUR для рублёвых торгов)
                 currency_id = securities_dict.get('CURRENCYID')
                 
                 if facevalue:
@@ -235,8 +239,13 @@ class MOEXService:
                         result['facevalue'] = 1000.0  # Значение по умолчанию
                 else:
                     result['facevalue'] = 1000.0  # Значение по умолчанию
-                
-                result['currency_id'] = currency_id if currency_id else 'SUR'  # SUR = рубли по умолчанию
+
+                # В качестве валюты номинала используем FACEUNIT, а если его нет — CURRENCYID
+                # Это значение дальше трактуется как валюта номинала в приложении.
+                if face_unit:
+                    result['currency_id'] = face_unit
+                else:
+                    result['currency_id'] = currency_id if currency_id else 'SUR'  # SUR = рубли по умолчанию
             
             # Сохраняем в кэш
             self._save_to_cache(cache_key, result)

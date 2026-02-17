@@ -11,6 +11,7 @@ from models.asset_type import AssetType
 from models.cash_balance import CashBalance
 from services.moex_service import MOEXService
 from services.price_logger import PriceLogger
+from services.currency_service import CurrencyService
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from datetime import datetime
@@ -64,6 +65,7 @@ init_cash_balance()
 
 # Инициализация сервисов
 moex_service = MOEXService()
+currency_service = CurrencyService()
 price_logger = PriceLogger(moex_service)
 
 # Инициализация планировщика задач
@@ -85,6 +87,12 @@ def check_and_log_prices():
     from models.price_history import PriceHistory
     
     now_moscow = datetime.now(pytz.timezone('Europe/Moscow'))
+
+    # В 00:00 отдельная задачa daily_price_logging сама пишет цены.
+    # Чтобы не было двойной записи, периодическая проверка в этот момент ничего не делает.
+    if now_moscow.hour == 0 and now_moscow.minute == 0:
+        print(f"[{now_moscow}] Периодическая проверка пропущена (сработает ежедневное логирование в 00:00)")
+        return
     today_start = now_moscow.replace(hour=0, minute=0, second=0, microsecond=0)
     today_end = today_start + timedelta(days=1)
     
@@ -107,19 +115,6 @@ scheduler.add_job(
     name='Периодическое логирование цен (каждые 3 часа, если записи нет)',
     replace_existing=True
 )
-
-# Запускаем планировщик только если он еще не запущен
-# Это предотвращает двойной запуск при использовании Flask reloader или Gunicorn
-# Flask reloader создает два процесса, поэтому проверяем переменную окружения WERKZEUG_RUN_MAIN
-if not scheduler.running:
-    # В режиме debug Flask создает два процесса - родительский (reloader) и дочерний (основной)
-    # Планировщик должен запускаться только в дочернем процессе
-    if os.environ.get('WERKZEUG_RUN_MAIN') == 'true' or not app.debug:
-        scheduler.start()
-        print("Планировщик запущен:")
-        print("  - Ежедневное логирование цен в 00:00 МСК")
-        print("  - Периодическая проверка каждые 3 часа (если записи за сегодня нет)")
-
 
 @app.route('/')
 def index():
@@ -279,11 +274,24 @@ def get_portfolio():
                 price_change_percent = 0
             
             # Расчеты прибыли/убытка относительно ТЕКУЩЕЙ цены (с MOEX API)
-            # Для облигаций цены с MOEX в процентах от номинала, переводим в рубли
+            # Для облигаций цены с MOEX в процентах от номинала, сначала получаем цену в валюте номинала,
+            # затем при необходимости переводим в рубли по курсу
             # calculated_avg_price из транзакций уже в рублях (как ввел пользователь)
             if instrument_type == 'BOND':
-                # current_price с MOEX всегда в процентах для облигаций - переводим в рубли
-                current_price_rub = (current_price * bond_nominal) / 100
+                # Цена одной облигации в валюте номинала (например, USD) = проценты * номинал / 100
+                current_price_in_nominal_currency = (current_price * bond_nominal) / 100
+
+                # Если номинал не в рублях, конвертируем в RUB по курсу
+                if bond_currency and bond_currency != 'SUR' and bond_currency != 'RUB':
+                    try:
+                        fx_rate = currency_service.get_rate_to_rub(bond_currency)
+                    except Exception:
+                        fx_rate = 1.0
+                else:
+                    fx_rate = 1.0
+
+                current_price_rub = current_price_in_nominal_currency * fx_rate
+
                 # calculated_avg_price уже в рублях (как ввел пользователь при покупке)
                 avg_price_rub = calculated_avg_price
             else:
@@ -295,9 +303,19 @@ def get_portfolio():
             profit_loss = total_current_value - total_buy_cost
             profit_loss_percent = ((current_price_rub - avg_price_rub) / avg_price_rub * 100) if avg_price_rub > 0 else 0
             
-            # Для облигаций переводим price_change из процентов в рубли
+            # Для облигаций переводим price_change из процентов в рубли с учетом валюты номинала
             if instrument_type == 'BOND':
-                price_change_rub = (price_change * bond_nominal) / 100
+                # price_change здесь считается как разница цен (latest - previous) в валюте номинала,
+                # умноженная на номинал и делённая на 100.
+                price_change_in_nominal_currency = (price_change * bond_nominal) / 100
+                if bond_currency and bond_currency != 'SUR' and bond_currency != 'RUB':
+                    try:
+                        fx_rate_change = currency_service.get_rate_to_rub(bond_currency)
+                    except Exception:
+                        fx_rate_change = 1.0
+                else:
+                    fx_rate_change = 1.0
+                price_change_rub = price_change_in_nominal_currency * fx_rate_change
             else:
                 price_change_rub = price_change
             
@@ -1089,6 +1107,27 @@ def get_cash_balance():
         }), 500
 
 
+@app.route('/api/currency-rates', methods=['GET'])
+def get_currency_rates():
+    """
+    Получить основные курсы валют к рублю (для отображения в UI).
+    Возвращает минимальный набор: USD, EUR, CNY (если есть), а также дату обновления.
+    """
+    try:
+        # Получаем расширенную информацию по основным валютам
+        rates_info = currency_service.get_rates_info(['USD', 'EUR', 'CNY'])
+
+        return jsonify({
+            'success': True,
+            'rates': rates_info
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
 @app.route('/api/price-history', methods=['GET'])
 def get_price_history():
     """
@@ -1470,4 +1509,12 @@ atexit.register(close_db)
 
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    # Запускаем планировщик один раз в единственном процессе приложения
+    if not scheduler.running:
+        scheduler.start()
+        print("Планировщик запущен:")
+        print("  - Ежедневное логирование цен в 00:00 МСК")
+        print("  - Периодическая проверка каждые 3 часа (если записи за сегодня нет)")
+
+    # Отключаем автоматический перезапуск (reloader), чтобы не было второго процесса
+    app.run(debug=True, host='0.0.0.0', port=5000, use_reloader=False)
