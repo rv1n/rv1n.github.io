@@ -16,13 +16,15 @@
         <header>
             <h1>📈 Портфель акций Московской биржи</h1>
             <div class="header-controls">
-                <div class="last-update">
-                    Последнее обновление: <span id="last-update-time">-</span>
-                </div>
-                <div class="header-currency-rates" id="header-currency-rates">
-                    <span id="rate-usd">USD: -</span>
-                    <span id="rate-eur">EUR: -</span>
-                    <span id="rate-cny">CNY: -</span>
+                <div class="header-info-vertical">
+                    <div class="header-currency-rates" id="header-currency-rates">
+                        <span id="rate-usd">USD: -</span>
+                        <span id="rate-eur">EUR: -</span>
+                        <span id="rate-cny">CNY: -</span>
+                    </div>
+                    <div class="last-update">
+                        Дата и обновление: <span id="last-update-time">-</span>
+                    </div>
                 </div>
                 <button id="refresh-btn" class="btn btn-refresh" onclick="manualRefresh()" title="Обновить данные">
                     🔄 Обновить
@@ -81,6 +83,9 @@
                         <button type="button" class="dropdown-item" onclick="openLoggingTimeModal(); closeMainMenu();">
                             ⏰ Настройка времени логирования
                         </button>
+                        <button type="button" class="dropdown-item" onclick="switchView('server'); closeMainMenu();">
+                            🖥️ Мониторинг сервера
+                        </button>
                     </div>
                 </div>
                 <div class="cash-balance-display">
@@ -96,13 +101,10 @@
             <!-- Представление таблицы портфеля -->
             <div id="table-view" class="portfolio-view active">
                 <!-- Фильтры портфеля -->
-                <div class="history-controls" style="margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center;">
+                <div class="history-controls" style="margin-bottom: 15px; display: flex; justify-content: flex-start; align-items: center;">
                     <select id="portfolio-type-filter" class="history-filter">
                         <option value="">Все типы</option>
                     </select>
-                    <div class="current-time-msk">
-                        МСК: <span id="current-time-msk">-</span>
-                    </div>
                 </div>
                 
                 <table class="portfolio-table" id="portfolio-table" style="display: none;">
@@ -259,6 +261,16 @@
                     </div>
                     <div id="price-history-content" class="price-history-content">
                         <!-- История загружается через JavaScript -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Мониторинг сервера -->
+            <div id="server-view" class="portfolio-view" style="display: none;">
+                <div class="server-status-container">
+                    <h3>Мониторинг сервера</h3>
+                    <div id="server-status-content" class="server-status-content">
+                        Загрузка данных о сервере...
                     </div>
                 </div>
             </div>

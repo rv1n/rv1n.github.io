@@ -19,6 +19,7 @@ from datetime import datetime, timedelta
 import atexit
 import pytz
 import os
+import shutil
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your-secret-key-here'
@@ -859,12 +860,69 @@ def get_ticker_info(ticker):
             }
         
         return jsonify(result)
-        
     except Exception as e:
         return jsonify({
             'success': False,
             'error': str(e)
         }), 500
+
+
+@app.route('/api/server-status', methods=['GET'])
+def get_server_status():
+    """
+    Простой мониторинг сервера:
+    - Место на диске (в корне файловой системы)
+    - Папка приложения
+    - Размер файла базы данных (если есть)
+    - Опционально (если установлен psutil): загрузка CPU и использование памяти
+    """
+    try:
+        # Дисковое пространство для корневого раздела
+        disk_usage = shutil.disk_usage(os.path.abspath(os.sep))
+        total_gb = round(disk_usage.total / (1024 ** 3), 2)
+        used_gb = round(disk_usage.used / (1024 ** 3), 2)
+        free_gb = round(disk_usage.free / (1024 ** 3), 2)
+        used_percent = round(disk_usage.used / disk_usage.total * 100, 1) if disk_usage.total > 0 else 0
+
+        # Папка приложения
+        app_path = os.path.abspath(os.path.dirname(__file__))
+
+        # Размер файла базы данных (если существует)
+        db_path = os.path.join(app_path, 'portfolio.db')
+        db_size_mb = None
+        if os.path.exists(db_path):
+            db_size_mb = round(os.path.getsize(db_path) / (1024 ** 2), 2)
+
+        cpu_percent = None
+        memory_percent = None
+        try:
+            import psutil  # type: ignore
+            cpu_percent = psutil.cpu_percent(interval=0.1)
+            memory_percent = psutil.virtual_memory().percent
+        except ImportError:
+            # psutil не установлен — просто не возвращаем эти поля
+            pass
+
+        return jsonify({
+            'success': True,
+            'disk': {
+                'total_gb': total_gb,
+                'used_gb': used_gb,
+                'free_gb': free_gb,
+                'used_percent': used_percent
+            },
+            'app': {
+                'path': app_path,
+                'db_path': db_path if os.path.exists(db_path) else None,
+                'db_size_mb': db_size_mb
+            },
+            'system': {
+                'cpu_percent': cpu_percent,
+                'memory_percent': memory_percent
+            }
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 @app.route('/api/validate-ticker/<ticker>', methods=['GET'])

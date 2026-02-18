@@ -52,7 +52,6 @@ document.addEventListener('DOMContentLoaded', async function() {
     setupEventListeners();
     startPriceLogMonitoring(); // Запускаем мониторинг новых записей цен
     loadCurrencyRates(); // Загружаем курсы валют для отображения
-    startMoscowTimeDisplay(); // Запускаем отображение текущего времени МСК
 });
 
 /**
@@ -1362,14 +1361,20 @@ async function deletePosition(id, ticker) {
 }
 
 /**
- * Обновление времени последнего обновления
+ * Обновление даты и времени последнего обновления таблицы
  */
 function updateLastUpdateTime() {
     const now = new Date();
-    const timeString = now.toLocaleTimeString('ru-RU');
+    const dateString = now.toLocaleDateString('ru-RU');
+    const timeString = now.toLocaleTimeString('ru-RU', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+    });
     const lastUpdateEl = document.getElementById('last-update-time');
     if (lastUpdateEl) {
-        lastUpdateEl.textContent = timeString;
+        // Пример: 18.02.2026 14:23:05
+        lastUpdateEl.textContent = `${dateString} ${timeString}`;
     }
 }
 
@@ -1518,6 +1523,7 @@ function switchView(viewType) {
     const historyView = document.getElementById('history-view');
     const transactionsView = document.getElementById('transactions-view');
     const categoriesView = document.getElementById('categories-view');
+    const serverView = document.getElementById('server-view');
     const btnTable = document.getElementById('btn-table-view');
     const btnChart = document.getElementById('btn-chart-view');
     const btnHistory = document.getElementById('btn-history-view');
@@ -1530,6 +1536,7 @@ function switchView(viewType) {
         historyView.style.display = 'none';
         transactionsView.style.display = 'none';
         categoriesView.style.display = 'none';
+        if (serverView) serverView.style.display = 'none';
         if (btnTable) btnTable.classList.add('active');
         if (btnChart) btnChart.classList.remove('active');
         if (btnHistory) btnHistory.classList.remove('active');
@@ -1546,6 +1553,7 @@ function switchView(viewType) {
         historyView.style.display = 'none';
         transactionsView.style.display = 'none';
         categoriesView.style.display = 'none';
+        if (serverView) serverView.style.display = 'none';
         if (btnTable) btnTable.classList.remove('active');
         if (btnChart) btnChart.classList.add('active');
         if (btnHistory) btnHistory.classList.remove('active');
@@ -1568,6 +1576,7 @@ function switchView(viewType) {
         historyView.style.display = 'block';
         transactionsView.style.display = 'none';
         categoriesView.style.display = 'none';
+        if (serverView) serverView.style.display = 'none';
         if (btnTable) btnTable.classList.remove('active');
         if (btnChart) btnChart.classList.remove('active');
         if (btnHistory) btnHistory.classList.add('active');
@@ -1581,6 +1590,7 @@ function switchView(viewType) {
         historyView.style.display = 'none';
         transactionsView.style.display = 'block';
         categoriesView.style.display = 'none';
+        if (serverView) serverView.style.display = 'none';
         if (btnTable) btnTable.classList.remove('active');
         if (btnChart) btnChart.classList.remove('active');
         if (btnHistory) btnHistory.classList.remove('active');
@@ -1594,6 +1604,7 @@ function switchView(viewType) {
         historyView.style.display = 'none';
         transactionsView.style.display = 'none';
         categoriesView.style.display = 'block';
+        if (serverView) serverView.style.display = 'none';
         if (btnTable) btnTable.classList.remove('active');
         if (btnChart) btnChart.classList.remove('active');
         if (btnHistory) btnHistory.classList.remove('active');
@@ -1604,6 +1615,76 @@ function switchView(viewType) {
         loadCategoriesList().then(() => {
             loadCategories();
         });
+    } else if (viewType === 'server') {
+        tableView.style.display = 'none';
+        chartView.style.display = 'none';
+        historyView.style.display = 'none';
+        transactionsView.style.display = 'none';
+        if (categoriesView) categoriesView.style.display = 'none';
+        if (serverView) serverView.style.display = 'block';
+
+        if (btnTable) btnTable.classList.remove('active');
+        if (btnChart) btnChart.classList.remove('active');
+        if (btnHistory) btnHistory.classList.remove('active');
+        if (btnTransactions) btnTransactions.classList.remove('active');
+        if (btnCategories) btnCategories.classList.remove('active');
+
+        // Загружаем данные мониторинга сервера
+        loadServerStatus();
+    }
+}
+
+/**
+ * Загрузка и отображение мониторинга сервера
+ */
+async function loadServerStatus() {
+    const container = document.getElementById('server-status-content');
+    if (!container) return;
+
+    container.textContent = 'Загрузка данных о сервере...';
+
+    try {
+        const response = await fetch('/api/server-status');
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+        const data = await response.json();
+        if (!data.success) {
+            throw new Error(data.error || 'Не удалось получить данные');
+        }
+
+        const disk = data.disk || {};
+        const app = data.app || {};
+        const system = data.system || {};
+
+        let html = '';
+        html += '<div class="server-status-grid">';
+        html += '<div class="server-status-section">';
+        html += '<h4>Диск</h4>';
+        html += '<p><strong>Всего:</strong> ' + (disk.total_gb ?? '-') + ' ГБ</p>';
+        html += '<p><strong>Использовано:</strong> ' + (disk.used_gb ?? '-') + ' ГБ (' + (disk.used_percent ?? '-') + '%)</p>';
+        html += '<p><strong>Свободно:</strong> ' + (disk.free_gb ?? '-') + ' ГБ</p>';
+        html += '</div>';
+
+        html += '<div class="server-status-section">';
+        html += '<h4>Приложение</h4>';
+        html += '<p><strong>Путь:</strong> ' + (app.path ?? '-') + '</p>';
+        html += '<p><strong>База данных:</strong> ' + (app.db_path ?? '—') + '</p>';
+        html += '<p><strong>Размер БД:</strong> ' + (app.db_size_mb != null ? app.db_size_mb + ' МБ' : '—') + '</p>';
+        html += '</div>';
+
+        html += '<div class="server-status-section">';
+        html += '<h4>Система</h4>';
+        html += '<p><strong>Загрузка CPU:</strong> ' + (system.cpu_percent != null ? system.cpu_percent + '%' : 'требуется psutil') + '</p>';
+        html += '<p><strong>Использование RAM:</strong> ' + (system.memory_percent != null ? system.memory_percent + '%' : 'требуется psutil') + '</p>';
+        html += '</div>';
+
+        html += '</div>';
+
+        container.innerHTML = html;
+    } catch (error) {
+        console.error('Ошибка загрузки мониторинга сервера:', error);
+        container.textContent = 'Ошибка загрузки данных о сервере';
     }
 }
 
