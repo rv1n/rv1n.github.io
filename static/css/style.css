@@ -20,7 +20,7 @@ body {
     background: white;
     border-radius: 0;
     box-shadow: none;
-    padding: 20px 24px;
+    padding: 20px 24px 80px; /* добавляем «активное» поле снизу до низа окна */
     box-sizing: border-box;
     min-height: 100vh;
 }
@@ -134,6 +134,8 @@ header h1 {
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
     padding: 8px 0;
     min-width: 220px;
+    max-height: calc(100vh - 140px); /* если пунктов больше высоты экрана — появится внутренняя прокрутка */
+    overflow-y: auto;
     display: none;
     z-index: 1000;
 }
@@ -1361,6 +1363,7 @@ header h1 {
     margin-top: 30px;
     overflow-x: auto; /* Горизонтальная прокрутка для таблицы */
     -webkit-overflow-scrolling: touch; /* Плавная прокрутка на iOS */
+    padding-bottom: 80px; /* дополнительное место снизу для полного отображения сэндвич-меню */
 }
 
 .portfolio-table-container h2 {

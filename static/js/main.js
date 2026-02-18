@@ -1371,10 +1371,17 @@ function updateLastUpdateTime() {
         minute: '2-digit',
         second: '2-digit'
     });
+    const todayEl = document.getElementById('today-date');
     const lastUpdateEl = document.getElementById('last-update-time');
+
+    // Обновляем дату "Сегодня"
+    if (todayEl) {
+        todayEl.textContent = dateString;
+    }
+
+    // Обновляем время последнего обновления таблицы
     if (lastUpdateEl) {
-        // Пример: 18.02.2026 14:23:05
-        lastUpdateEl.textContent = `${dateString} ${timeString}`;
+        lastUpdateEl.textContent = timeString;
     }
 }
 
@@ -1454,6 +1461,34 @@ function formatCurrency(value) {
         minimumFractionDigits: 0,
         maximumFractionDigits: 5
     }).format(value);
+}
+
+/**
+ * Форматирование цен в истории:
+ * - для акций показываем в рублях (как и раньше)
+ * - для облигаций показываем цену в процентах от номинала (как на MOEX),
+ *   чтобы не вводить в заблуждение символом ₽, особенно для бумаг не в рублях
+ */
+function formatHistoryPrice(item) {
+    if (!item) return '-';
+
+    const price = item.price;
+    const instrumentType = item.instrument_type; // 'Акция' или 'Облигация'
+
+    if (instrumentType === 'Облигация') {
+        if (price === null || price === undefined) {
+            return '-';
+        }
+        const num = Number(price);
+        if (isNaN(num)) {
+            return '-';
+        }
+        // Пример: 102.35%
+        return `${num.toFixed(2)}%`;
+    }
+
+    // Для акций и остальных инструментов оставляем форматирование в рублях
+    return formatCurrency(price);
 }
 
 /**
@@ -2361,7 +2396,7 @@ function renderTickerHistory(history, ticker) {
         html += `
             <tr>
                 <td>${item.logged_at}</td>
-                <td class="price-cell">${formatCurrency(item.price)}</td>
+                <td class="price-cell">${formatHistoryPrice(item)}</td>
             </tr>
         `;
     });
@@ -2417,7 +2452,7 @@ function renderGroupedHistory(groupedHistory) {
                 <td>${item.logged_at}</td>
                 <td><strong>${item.ticker}</strong></td>
                 <td>${item.company_name || '-'}</td>
-                <td class="price-cell"><strong>${formatCurrency(item.price)}</strong></td>
+                <td class="price-cell"><strong>${formatHistoryPrice(item)}</strong></td>
             </tr>
         `;
     });
