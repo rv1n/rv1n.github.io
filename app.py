@@ -148,26 +148,48 @@ scheduler.add_job(
     replace_existing=True
 )
 
+import threading
+
 # Функция для запуска планировщика (вызывается при первом запросе или при прямом запуске)
 def start_scheduler():
     """Запускает планировщик задач, если он еще не запущен"""
-    if not scheduler.running:
-        try:
-            scheduler.start()
-            hour, minute = get_logging_time()
-            print(f"[{datetime.now(pytz.timezone('Europe/Moscow'))}] Планировщик запущен:")
-            print(f"  - Ежедневное логирование цен в {hour:02d}:{minute:02d} МСК")
-            print("  - Периодическая проверка каждые 3 часа (если записи за сегодня нет)")
-        except Exception as e:
-            print(f"[{datetime.now(pytz.timezone('Europe/Moscow'))}] Ошибка запуска планировщика: {e}")
+    if scheduler.running:
+        moscow_time = datetime.now(pytz.timezone('Europe/Moscow'))
+        print(f"[{moscow_time}] Планировщик уже запущен, пропускаем повторный запуск")
+        return
+    
+    try:
+        moscow_time = datetime.now(pytz.timezone('Europe/Moscow'))
+        print(f"[{moscow_time}] Запуск планировщика...")
+        scheduler.start()
+        hour, minute = get_logging_time()
+        moscow_time = datetime.now(pytz.timezone('Europe/Moscow'))
+        print(f"[{moscow_time}] ===== ПЛАНИРОВЩИК ЗАПУЩЕН =====")
+        print(f"[{moscow_time}] Ежедневное логирование цен в {hour:02d}:{minute:02d} МСК")
+        print(f"[{moscow_time}] Периодическая проверка каждые 3 часа (если записи за сегодня нет)")
+        print(f"[{moscow_time}] Статус планировщика: {scheduler.running}")
+        print(f"[{moscow_time}] Задач в планировщике: {len(scheduler.get_jobs())}")
+        for job in scheduler.get_jobs():
+            next_run = job.next_run_time.strftime('%Y-%m-%d %H:%M:%S %Z') if job.next_run_time else 'Не запланировано'
+            print(f"[{moscow_time}]   - {job.name} (ID: {job.id}), следующее выполнение: {next_run}")
+    except Exception as e:
+        moscow_time = datetime.now(pytz.timezone('Europe/Moscow'))
+        print(f"[{moscow_time}] ОШИБКА запуска планировщика: {e}")
+        import traceback
+        traceback.print_exc()
 
 # Запускаем планировщик при первом запросе к приложению
 # Это нужно для работы с Gunicorn, где if __name__ == '__main__' не выполняется
+# Используем threading.Lock для предотвращения множественного запуска
+_scheduler_lock = threading.Lock()
+
 @app.before_request
 def ensure_scheduler_running():
     """Убеждаемся, что планировщик запущен при первом запросе"""
     if not scheduler.running:
-        start_scheduler()
+        with _scheduler_lock:
+            if not scheduler.running:  # Двойная проверка
+                start_scheduler()
 
 @app.route('/')
 def index():
@@ -1421,6 +1443,33 @@ def get_logging_time_setting():
         }), 500
 
 
+@app.route('/api/scheduler/status', methods=['GET'])
+def get_scheduler_status():
+    """
+    Получить статус планировщика задач
+    """
+    try:
+        jobs = []
+        for job in scheduler.get_jobs():
+            jobs.append({
+                'id': job.id,
+                'name': job.name,
+                'next_run_time': str(job.next_run_time) if job.next_run_time else None
+            })
+        
+        return jsonify({
+            'success': True,
+            'running': scheduler.running,
+            'jobs_count': len(scheduler.get_jobs()),
+            'jobs': jobs
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
 @app.route('/api/settings/logging-time', methods=['POST'])
 def set_logging_time_setting():
     """
@@ -1793,7 +1842,15 @@ atexit.register(close_db)
 if __name__ == '__main__':
     # При прямом запуске запускаем планировщик сразу
     # При запуске через Gunicorn планировщик запустится при первом запросе через @app.before_request
+    print("=" * 60)
+    print("Запуск приложения...")
+    print("=" * 60)
     start_scheduler()
+    
+    if not scheduler.running:
+        print("ПРЕДУПРЕЖДЕНИЕ: Планировщик не запустился!")
+    else:
+        print("Планировщик успешно запущен")
 
     # Отключаем автоматический перезапуск (reloader), чтобы не было второго процесса
     app.run(debug=True, host='0.0.0.0', port=5000, use_reloader=False)

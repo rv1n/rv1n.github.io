@@ -30,6 +30,9 @@ class PriceLogger:
         Args:
             force: Если True, логирует цены даже если запись за сегодня уже есть
         """
+        moscow_time = datetime.now(self.moscow_tz)
+        print(f"[{moscow_time}] ===== НАЧАЛО ЛОГИРОВАНИЯ ЦЕН =====")
+        print(f"[{moscow_time}] Принудительное логирование: {force}")
         try:
             from datetime import date, timedelta
             
@@ -152,13 +155,18 @@ class PriceLogger:
             # Сохраняем все изменения в БД
             db_session.commit()
             
+            moscow_time = datetime.now(self.moscow_tz)
             if skipped_count > 0:
-                print(f"[{datetime.now(self.moscow_tz)}] Успешно залогировано цен: {logged_count}/{len(unique_tickers)} (пропущено дубликатов: {skipped_count})")
+                print(f"[{moscow_time}] Успешно залогировано цен: {logged_count}/{len(unique_tickers)} (пропущено дубликатов: {skipped_count})")
             else:
-                print(f"[{datetime.now(self.moscow_tz)}] Успешно залогировано цен: {logged_count}/{len(unique_tickers)}")
+                print(f"[{moscow_time}] Успешно залогировано цен: {logged_count}/{len(unique_tickers)}")
+            print(f"[{moscow_time}] ===== ЛОГИРОВАНИЕ ЦЕН ЗАВЕРШЕНО =====")
             
         except Exception as e:
-            print(f"[{datetime.now(self.moscow_tz)}] Ошибка при логировании цен: {e}")
+            moscow_time = datetime.now(self.moscow_tz)
+            print(f"[{moscow_time}] ОШИБКА при логировании цен: {e}")
+            import traceback
+            traceback.print_exc()
             db_session.rollback()
     
     def get_price_history(self, ticker=None, days=None, date_from=None, date_to=None, limit=None):
