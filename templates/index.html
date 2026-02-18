@@ -40,7 +40,7 @@
                 <div class="summary-label">Общая стоимость</div>
                 <div class="summary-value" id="total-value">0 ₽</div>
             </div>
-            <div class="summary-card summary-card-split">
+                <div class="summary-card summary-card-split">
                 <div class="summary-card-half">
                     <div class="summary-label">Общая прибыль/убыток</div>
                     <div class="summary-value" id="total-pnl">0 ₽</div>
@@ -48,7 +48,9 @@
                 </div>
                 <div class="summary-card-divider"></div>
                 <div class="summary-card-half">
-                    <div class="summary-label">Изменение за день</div>
+                    <div class="summary-label">
+                        Изменение за <span id="summary-change-period-label">день</span>
+                    </div>
                     <div class="summary-value" id="total-price-change">0 ₽</div>
                     <div class="summary-percent" id="total-price-change-percent">0%</div>
                 </div>
@@ -108,19 +110,17 @@
             
             <!-- Представление таблицы портфеля -->
             <div id="table-view" class="portfolio-view active">
-                <!-- Фильтры портфеля -->
-                <div class="history-controls" style="margin-bottom: 15px; display: flex; justify-content: flex-start; align-items: center;">
-                    <select id="portfolio-type-filter" class="history-filter">
-                        <option value="">Все типы</option>
-                    </select>
-                </div>
-                
                 <table class="portfolio-table" id="portfolio-table" style="display: none;">
                     <thead>
                         <tr>
                             <th data-sort-key="company_name" class="sortable">
                                 <div class="th-label-group">
                                     <span>Название актива</span>
+                                    <div>
+                                        <select id="portfolio-type-filter" class="change-period-select" title="Фильтр по типу актива" style="margin-left: 0; margin-top: 6px;">
+                                            <option value="">Все типы</option>
+                                        </select>
+                                    </div>
                                 </div>
                                 <button type="button" class="sort-btn" aria-label="Сортировать по названию компании">⇅</button>
                             </th>
@@ -169,13 +169,15 @@
                             <th data-sort-key="day_change" class="sortable">
                                 <div class="th-label-group">
                                     <span>Изменение</span>
-                                    <select id="change-period-select" class="change-period-select" title="Период изменения">
-                                        <option value="1">день</option>
-                                        <option value="7">неделя</option>
-                                        <option value="30">месяц</option>
-                                        <option value="182">полгода</option>
-                                        <option value="365">год</option>
-                                    </select>
+                                    <div>
+                                        <select id="change-period-select" class="change-period-select" title="Период изменения" style="margin-left: 0; margin-top: 6px;">
+                                            <option value="1">день</option>
+                                            <option value="7">неделя</option>
+                                            <option value="30">месяц</option>
+                                            <option value="182">полгода</option>
+                                            <option value="365">год</option>
+                                        </select>
+                                    </div>
                                 </div>
                                 <button type="button" class="sort-btn" aria-label="Сортировать по изменению за период">⇅</button>
                             </th>

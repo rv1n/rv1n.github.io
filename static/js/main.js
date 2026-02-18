@@ -124,6 +124,31 @@ function setupEventListeners() {
             const days = parseInt(changePeriodSelect.value, 10);
             currentChangeDays = !isNaN(days) && days > 0 ? days : 1;
             loadPortfolio(true); // тихое обновление портфеля при смене периода
+
+            // Обновляем подпись в верхней панели "Изменение за ..."
+            const labelSpan = document.getElementById('summary-change-period-label');
+            if (labelSpan) {
+                switch (changePeriodSelect.value) {
+                    case '1':
+                        labelSpan.textContent = 'день';
+                        break;
+                    case '7':
+                        labelSpan.textContent = 'неделю';
+                        break;
+                    case '30':
+                        labelSpan.textContent = 'месяц';
+                        break;
+                    case '182':
+                        labelSpan.textContent = 'полгода';
+                        break;
+                    case '365':
+                        labelSpan.textContent = 'год';
+                        break;
+                    default:
+                        labelSpan.textContent = 'период';
+                        break;
+                }
+            }
         });
     }
 
@@ -649,7 +674,7 @@ function createPortfolioRow(item, totalPortfolioValue = 0) {
             <strong>${formatAssetTotal(investmentsTotal)}</strong>
         </td>
         <td>
-            <div style="display: flex; flex-direction: column; align-items: flex-start;">
+            <div style="display: flex; flex-direction: column; align-items: center; text-align: center;">
                 ${currentValueLines}
             </div>
         </td>

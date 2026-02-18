@@ -649,13 +649,14 @@ header h1 {
     background: #1e3a5f;
     color: white;
     padding: 12px;
-    text-align: left;
+    text-align: center;
     font-weight: 600;
 }
 
 .history-table td {
     padding: 12px;
     border-bottom: 1px solid #ecf0f1;
+    text-align: center;
 }
 
 .history-table tr {
@@ -735,7 +736,7 @@ header h1 {
     background: #1e3a5f;
     color: white;
     padding: 15px 10px;
-    text-align: left;
+    text-align: center;
     font-weight: 600;
     white-space: nowrap;
 }
@@ -744,6 +745,7 @@ header h1 {
     padding: 15px 10px;
     border-bottom: 1px solid #ecf0f1;
     vertical-align: middle;
+    text-align: center;
 }
 
 .transactions-table tbody tr {
@@ -1404,7 +1406,7 @@ header h1 {
 
 .portfolio-table th {
     padding: 15px 10px;
-    text-align: left;
+    text-align: center;
     font-weight: 600;
     font-size: 0.85em;
     text-transform: uppercase;
@@ -1434,6 +1436,7 @@ header h1 {
     border-bottom: 1px solid #e0e0e0;
     vertical-align: middle;
     white-space: nowrap;
+    text-align: center;
 }
 
 /* Бейдж процента доли в портфеле в колонке "Текущая стоимость" */
