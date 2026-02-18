@@ -197,6 +197,33 @@ def index():
     return render_template('index.html')
 
 
+@app.route('/favicon.ico')
+def favicon():
+    """Явный маршрут для favicon"""
+    from flask import send_from_directory
+    import os
+    favicon_path = os.path.join(app.static_folder, 'favicon.ico')
+    if os.path.exists(favicon_path):
+        return send_from_directory(app.static_folder, 'favicon.ico', mimetype='image/vnd.microsoft.icon')
+    else:
+        # Fallback на SVG если ICO нет
+        return send_from_directory(app.static_folder, 'favicon.svg', mimetype='image/svg+xml')
+
+
+@app.route('/favicon.svg')
+def favicon_svg():
+    """Явный маршрут для SVG favicon"""
+    from flask import send_from_directory
+    import os
+    favicon_path = os.path.join(app.static_folder, 'favicon.svg')
+    if os.path.exists(favicon_path):
+        return send_from_directory(app.static_folder, 'favicon.svg', mimetype='image/svg+xml')
+    else:
+        # Возвращаем 404 если файл не найден
+        from flask import abort
+        abort(404)
+
+
 @app.route('/api/portfolio', methods=['GET'])
 def get_portfolio():
     """

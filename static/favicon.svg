@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- Фон -->
+  <rect width="100" height="100" fill="#1e3a5f" rx="20"/>
+  
+  <!-- График роста -->
+  <polyline points="10,80 25,70 40,50 55,40 70,30 85,20 90,15" 
+            stroke="#00d084" 
+            stroke-width="4" 
+            fill="none" 
+            stroke-linecap="round" 
+            stroke-linejoin="round"/>
+  
+  <!-- Точки на графике -->
+  <circle cx="10" cy="80" r="3" fill="#00d084"/>
+  <circle cx="25" cy="70" r="3" fill="#00d084"/>
+  <circle cx="40" cy="50" r="3" fill="#00d084"/>
+  <circle cx="55" cy="40" r="3" fill="#00d084"/>
+  <circle cx="70" cy="30" r="3" fill="#00d084"/>
+  <circle cx="85" cy="20" r="3" fill="#00d084"/>
+  <circle cx="90" cy="15" r="4" fill="#00d084"/>
+  
+  <!-- Стрелка вверх -->
+  <path d="M 45 60 L 50 50 L 55 60" 
+        stroke="#ffffff" 
+        stroke-width="3" 
+        fill="none" 
+        stroke-linecap="round" 
+        stroke-linejoin="round"/>
+</svg>

@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Favicon Generator</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        canvas {
+            border: 1px solid #ddd;
+            margin: 20px 0;
+            background: #1e3a5f;
+        }
+        button {
+            background: #1e3a5f;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 5px;
+        }
+        button:hover {
+            background: #2c5282;
+        }
+        .instructions {
+            background: #e3f2fd;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📈 Генератор Favicon для Портфеля Акций</h1>
+        
+        <div class="instructions">
+            <h3>Инструкция:</h3>
+            <ol>
+                <li>Нажмите "Создать Favicon"</li>
+                <li>Правой кнопкой мыши на изображении → "Сохранить изображение как..."</li>
+                <li>Сохраните как <code>favicon.ico</code>, <code>favicon-32x32.png</code> и т.д.</li>
+                <li>Поместите файлы в папку <code>static/</code></li>
+            </ol>
+        </div>
+
+        <canvas id="faviconCanvas" width="32" height="32"></canvas>
+        <canvas id="faviconCanvas64" width="64" height="64" style="display:none;"></canvas>
+        <canvas id="faviconCanvas180" width="180" height="180" style="display:none;"></canvas>
+        
+        <div>
+            <button onclick="generateFavicon(32)">Создать 32x32</button>
+            <button onclick="generateFavicon(64)">Создать 64x64</button>
+            <button onclick="generateFavicon(180)">Создать 180x180 (Apple)</button>
+            <button onclick="downloadAll()">Скачать все размеры</button>
+        </div>
+
+        <div id="downloadLinks"></div>
+    </div>
+
+    <script>
+        function drawGraph(canvas, size) {
+            const ctx = canvas.getContext('2d');
+            const scale = size / 100;
+            
+            // Фон
+            ctx.fillStyle = '#1e3a5f';
+            ctx.fillRect(0, 0, size, size);
+            
+            // График роста (зеленая линия)
+            ctx.strokeStyle = '#00d084';
+            ctx.lineWidth = 4 * scale;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            
+            ctx.beginPath();
+            ctx.moveTo(10 * scale, 80 * scale);
+            ctx.lineTo(25 * scale, 70 * scale);
+            ctx.lineTo(40 * scale, 50 * scale);
+            ctx.lineTo(55 * scale, 40 * scale);
+            ctx.lineTo(70 * scale, 30 * scale);
+            ctx.lineTo(85 * scale, 20 * scale);
+            ctx.lineTo(90 * scale, 15 * scale);
+            ctx.stroke();
+            
+            // Точки на графике
+            const points = [
+                [10, 80], [25, 70], [40, 50], [55, 40], 
+                [70, 30], [85, 20], [90, 15]
+            ];
+            
+            ctx.fillStyle = '#00d084';
+            points.forEach(([x, y], i) => {
+                const radius = i === points.length - 1 ? 4 * scale : 3 * scale;
+                ctx.beginPath();
+                ctx.arc(x * scale, y * scale, radius, 0, Math.PI * 2);
+                ctx.fill();
+            });
+            
+            // Стрелка вверх
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 3 * scale;
+            ctx.beginPath();
+            ctx.moveTo(45 * scale, 60 * scale);
+            ctx.lineTo(50 * scale, 50 * scale);
+            ctx.lineTo(55 * scale, 60 * scale);
+            ctx.stroke();
+        }
+
+        function generateFavicon(size) {
+            let canvas;
+            if (size === 32) {
+                canvas = document.getElementById('faviconCanvas');
+                canvas.width = 32;
+                canvas.height = 32;
+            } else if (size === 64) {
+                canvas = document.getElementById('faviconCanvas64');
+                canvas.style.display = 'block';
+            } else {
+                canvas = document.getElementById('faviconCanvas180');
+                canvas.style.display = 'block';
+            }
+            
+            drawGraph(canvas, size);
+            
+            // Показать ссылку для скачивания
+            const link = document.createElement('a');
+            link.download = `favicon-${size}x${size}.png`;
+            link.href = canvas.toDataURL('image/png');
+            link.textContent = `Скачать ${size}x${size}`;
+            link.style.display = 'block';
+            link.style.margin = '10px 0';
+            link.style.padding = '10px';
+            link.style.background = '#e3f2fd';
+            link.style.borderRadius = '5px';
+            link.style.textDecoration = 'none';
+            link.style.color = '#1e3a5f';
+            
+            document.getElementById('downloadLinks').appendChild(link);
+        }
+
+        function downloadAll() {
+            [32, 64, 180].forEach(size => {
+                generateFavicon(size);
+            });
+        }
+
+        // Автоматически создать 32x32 при загрузке
+        window.onload = function() {
+            generateFavicon(32);
+        };
+    </script>
+</body>
+</html>
