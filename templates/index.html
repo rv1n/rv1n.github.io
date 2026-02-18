@@ -73,6 +73,9 @@
                         <button type="button" class="dropdown-item" onclick="switchView('categories'); closeMainMenu();">
                             🏷️ Категории и виды
                         </button>
+                        <button type="button" class="dropdown-item" onclick="openLoggingTimeModal(); closeMainMenu();">
+                            ⏰ Настройка времени логирования
+                        </button>
                     </div>
                 </div>
                 <div class="cash-balance-display">
@@ -88,10 +91,13 @@
             <!-- Представление таблицы портфеля -->
             <div id="table-view" class="portfolio-view active">
                 <!-- Фильтры портфеля -->
-                <div class="history-controls" style="margin-bottom: 15px;">
+                <div class="history-controls" style="margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center;">
                     <select id="portfolio-type-filter" class="history-filter">
                         <option value="">Все типы</option>
                     </select>
+                    <div class="current-time-msk">
+                        МСК: <span id="current-time-msk">-</span>
+                    </div>
                 </div>
                 
                 <table class="portfolio-table" id="portfolio-table" style="display: none;">
@@ -692,6 +698,34 @@
             <h2 id="ticker-info-title">Информация о тикере</h2>
             <div id="ticker-info-content" style="margin-top: 20px;">
                 <div class="loading">Загрузка данных...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно настройки времени логирования -->
+    <div id="logging-time-modal" class="modal" style="display: none;">
+        <div class="modal-content" style="max-width: 500px;">
+            <span class="close" onclick="closeLoggingTimeModal()">&times;</span>
+            <h2>⏰ Настройка времени автоматического логирования цен</h2>
+            <div style="margin-top: 20px;">
+                <p style="margin-bottom: 15px; color: #7f8c8d;">
+                    Установите время, когда будут автоматически логироваться цены всех активов из вашего портфеля.
+                </p>
+                <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 20px;">
+                    <label for="logging-hour" style="font-weight: bold;">Час (0-23):</label>
+                    <input type="number" id="logging-hour" min="0" max="23" value="0" 
+                           style="width: 80px; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                    <label for="logging-minute" style="font-weight: bold;">Минута (0-59):</label>
+                    <input type="number" id="logging-minute" min="0" max="59" value="0" 
+                           style="width: 80px; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                </div>
+                <div style="margin-bottom: 20px; padding: 10px; background-color: #ecf0f1; border-radius: 4px;">
+                    <strong>Текущее время:</strong> <span id="current-logging-time">-</span>
+                </div>
+                <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                    <button class="btn btn-secondary" onclick="closeLoggingTimeModal()">Отмена</button>
+                    <button class="btn btn-primary" onclick="saveLoggingTime()">Сохранить</button>
+                </div>
             </div>
         </div>
     </div>

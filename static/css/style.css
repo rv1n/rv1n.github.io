@@ -55,6 +55,18 @@ header h1 {
     color: #34495e;
 }
 
+.current-time-msk {
+    color: #7f8c8d;
+    font-size: 1.1em;
+    white-space: nowrap;
+}
+
+.current-time-msk span {
+    font-weight: bold;
+    color: #34495e;
+    font-size: 1.1em;
+}
+
 .update-timer {
     color: #7f8c8d;
     margin-left: 5px;

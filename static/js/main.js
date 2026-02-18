@@ -52,6 +52,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     setupEventListeners();
     startPriceLogMonitoring(); // Запускаем мониторинг новых записей цен
     loadCurrencyRates(); // Загружаем курсы валют для отображения
+    startMoscowTimeDisplay(); // Запускаем отображение текущего времени МСК
 });
 
 /**
@@ -1370,6 +1371,52 @@ function updateLastUpdateTime() {
     if (lastUpdateEl) {
         lastUpdateEl.textContent = timeString;
     }
+}
+
+/**
+ * Обновление отображения текущего времени МСК
+ */
+function updateMoscowTime() {
+    try {
+        const now = new Date();
+        // Используем Intl.DateTimeFormat для правильного отображения московского времени
+        const moscowTimeString = new Intl.DateTimeFormat('ru-RU', {
+            timeZone: 'Europe/Moscow',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: false
+        }).format(now);
+        
+        const moscowTimeEl = document.getElementById('current-time-msk');
+        if (moscowTimeEl) {
+            moscowTimeEl.textContent = moscowTimeString;
+        }
+    } catch (error) {
+        console.error('Ошибка обновления времени МСК:', error);
+        // Fallback: просто добавляем 3 часа к UTC
+        const now = new Date();
+        const utcTime = now.getTime() + (now.getTimezoneOffset() * 60000);
+        const moscowTime = new Date(utcTime + (3 * 3600000));
+        const hours = String(moscowTime.getHours()).padStart(2, '0');
+        const minutes = String(moscowTime.getMinutes()).padStart(2, '0');
+        const seconds = String(moscowTime.getSeconds()).padStart(2, '0');
+        const moscowTimeEl = document.getElementById('current-time-msk');
+        if (moscowTimeEl) {
+            moscowTimeEl.textContent = `${hours}:${minutes}:${seconds}`;
+        }
+    }
+}
+
+/**
+ * Запуск отображения текущего времени МСК с обновлением каждую секунду
+ */
+function startMoscowTimeDisplay() {
+    // Обновляем сразу при загрузке
+    updateMoscowTime();
+    
+    // Обновляем каждую секунду
+    setInterval(updateMoscowTime, 1000);
 }
 
 /**
@@ -4088,3 +4135,101 @@ function displayTickerInfo(data, ticker, instrumentType) {
     
     content.innerHTML = html;
 }
+
+/**
+ * Открытие модального окна настройки времени логирования
+ */
+async function openLoggingTimeModal() {
+    const modal = document.getElementById('logging-time-modal');
+    if (!modal) return;
+    
+    // Загружаем текущее время логирования
+    try {
+        const response = await fetch('/api/settings/logging-time');
+        const data = await response.json();
+        
+        if (data.success) {
+            document.getElementById('logging-hour').value = data.hour;
+            document.getElementById('logging-minute').value = data.minute;
+            document.getElementById('current-logging-time').textContent = data.time;
+        } else {
+            console.error('Ошибка загрузки настроек времени:', data.error);
+        }
+    } catch (error) {
+        console.error('Ошибка загрузки настроек времени:', error);
+    }
+    
+    modal.style.display = 'flex';
+}
+
+/**
+ * Закрытие модального окна настройки времени логирования
+ */
+function closeLoggingTimeModal() {
+    const modal = document.getElementById('logging-time-modal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+}
+
+/**
+ * Сохранение времени логирования
+ */
+async function saveLoggingTime() {
+    const hourInput = document.getElementById('logging-hour');
+    const minuteInput = document.getElementById('logging-minute');
+    
+    if (!hourInput || !minuteInput) return;
+    
+    const hour = parseInt(hourInput.value);
+    const minute = parseInt(minuteInput.value);
+    
+    // Валидация
+    if (isNaN(hour) || hour < 0 || hour > 23) {
+        alert('Час должен быть от 0 до 23');
+        return;
+    }
+    
+    if (isNaN(minute) || minute < 0 || minute > 59) {
+        alert('Минута должна быть от 0 до 59');
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/settings/logging-time', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                hour: hour,
+                minute: minute
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            alert(`Время логирования установлено: ${data.time} МСК\n\nПланировщик обновлен. Следующее логирование произойдет в ${data.time} МСК.`);
+            document.getElementById('current-logging-time').textContent = data.time;
+            closeLoggingTimeModal();
+        } else {
+            alert('Ошибка сохранения: ' + (data.error || 'Неизвестная ошибка'));
+        }
+    } catch (error) {
+        console.error('Ошибка сохранения времени логирования:', error);
+        alert('Ошибка соединения с сервером');
+    }
+}
+
+// Закрытие модального окна настройки времени при клике вне его
+document.addEventListener('DOMContentLoaded', function() {
+    const loggingTimeModal = document.getElementById('logging-time-modal');
+    if (loggingTimeModal) {
+        loggingTimeModal.addEventListener('click', function(e) {
+            if (e.target === loggingTimeModal) {
+                closeLoggingTimeModal();
+            }
+        });
+    }
+});

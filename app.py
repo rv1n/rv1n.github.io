@@ -9,6 +9,7 @@ from models.transaction import Transaction, TransactionType
 from models.category import Category
 from models.asset_type import AssetType
 from models.cash_balance import CashBalance
+from models.settings import Settings
 from services.moex_service import MOEXService
 from services.price_logger import PriceLogger
 from services.currency_service import CurrencyService
@@ -71,14 +72,44 @@ price_logger = PriceLogger(moex_service)
 # Инициализация планировщика задач
 scheduler = BackgroundScheduler(timezone=pytz.timezone('Europe/Moscow'))
 
-# Добавляем задачу логирования цен каждый день в 00:00 МСК
-scheduler.add_job(
-    func=price_logger.log_all_prices,
-    trigger=CronTrigger(hour=0, minute=0, timezone='Europe/Moscow'),
-    id='daily_price_logging',
-    name='Ежедневное логирование цен в 00:00 МСК',
-    replace_existing=True
-)
+# Функции для работы с настройками времени логирования
+def get_logging_time():
+    """Получает время логирования из настроек (по умолчанию 00:00)"""
+    try:
+        settings = db_session.query(Settings).filter(Settings.id == 1).first()
+        if settings:
+            return settings.price_logging_hour, settings.price_logging_minute
+    except Exception as e:
+        print(f"[{datetime.now(pytz.timezone('Europe/Moscow'))}] Ошибка получения настроек: {e}")
+    return 0, 0  # По умолчанию 00:00
+
+def update_scheduler_time():
+    """Обновляет время задачи планировщика из настроек"""
+    hour, minute = get_logging_time()
+    try:
+        # Обновляем существующую задачу или создаем новую
+        if scheduler.running:
+            scheduler.reschedule_job(
+                'daily_price_logging',
+                trigger=CronTrigger(hour=hour, minute=minute, timezone='Europe/Moscow')
+            )
+            print(f"[{datetime.now(pytz.timezone('Europe/Moscow'))}] Время логирования обновлено: {hour:02d}:{minute:02d} МСК")
+    except Exception as e:
+        print(f"[{datetime.now(pytz.timezone('Europe/Moscow'))}] Ошибка обновления времени планировщика: {e}")
+
+# Добавляем задачу логирования цен с настраиваемым временем
+def setup_daily_logging_job():
+    """Настраивает задачу ежедневного логирования с временем из настроек"""
+    hour, minute = get_logging_time()
+    scheduler.add_job(
+        func=price_logger.log_all_prices,
+        trigger=CronTrigger(hour=hour, minute=minute, timezone='Europe/Moscow'),
+        id='daily_price_logging',
+        name=f'Ежедневное логирование цен в {hour:02d}:{minute:02d} МСК',
+        replace_existing=True
+    )
+
+setup_daily_logging_job()
 
 # Добавляем периодическую проверку каждые 3 часа, если записи за сегодня нет
 def check_and_log_prices():
@@ -88,10 +119,11 @@ def check_and_log_prices():
     
     now_moscow = datetime.now(pytz.timezone('Europe/Moscow'))
 
-    # В 00:00 отдельная задачa daily_price_logging сама пишет цены.
+    # В установленное время отдельная задача daily_price_logging сама пишет цены.
     # Чтобы не было двойной записи, периодическая проверка в этот момент ничего не делает.
-    if now_moscow.hour == 0 and now_moscow.minute == 0:
-        print(f"[{now_moscow}] Периодическая проверка пропущена (сработает ежедневное логирование в 00:00)")
+    logging_hour, logging_minute = get_logging_time()
+    if now_moscow.hour == logging_hour and now_moscow.minute == logging_minute:
+        print(f"[{now_moscow}] Периодическая проверка пропущена (сработает ежедневное логирование в {logging_hour:02d}:{logging_minute:02d})")
         return
     today_start = now_moscow.replace(hour=0, minute=0, second=0, microsecond=0)
     today_end = today_start + timedelta(days=1)
@@ -115,6 +147,27 @@ scheduler.add_job(
     name='Периодическое логирование цен (каждые 3 часа, если записи нет)',
     replace_existing=True
 )
+
+# Функция для запуска планировщика (вызывается при первом запросе или при прямом запуске)
+def start_scheduler():
+    """Запускает планировщик задач, если он еще не запущен"""
+    if not scheduler.running:
+        try:
+            scheduler.start()
+            hour, minute = get_logging_time()
+            print(f"[{datetime.now(pytz.timezone('Europe/Moscow'))}] Планировщик запущен:")
+            print(f"  - Ежедневное логирование цен в {hour:02d}:{minute:02d} МСК")
+            print("  - Периодическая проверка каждые 3 часа (если записи за сегодня нет)")
+        except Exception as e:
+            print(f"[{datetime.now(pytz.timezone('Europe/Moscow'))}] Ошибка запуска планировщика: {e}")
+
+# Запускаем планировщик при первом запросе к приложению
+# Это нужно для работы с Gunicorn, где if __name__ == '__main__' не выполняется
+@app.before_request
+def ensure_scheduler_running():
+    """Убеждаемся, что планировщик запущен при первом запросе"""
+    if not scheduler.running:
+        start_scheduler()
 
 @app.route('/')
 def index():
@@ -1333,7 +1386,7 @@ def log_prices_now():
     Ручное логирование цен (принудительное)
     
     Логирует цены даже если запись за сегодня уже есть
-    В продакшене автоматическое логирование выполняется в 00:00 МСК
+    В продакшене автоматическое логирование выполняется в настраиваемое время
     """
     try:
         price_logger.log_all_prices(force=True)
@@ -1342,6 +1395,90 @@ def log_prices_now():
             'message': 'Цены успешно залогированы'
         })
     except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/settings/logging-time', methods=['GET'])
+def get_logging_time_setting():
+    """
+    Получить текущее время автоматического логирования цен
+    """
+    try:
+        hour, minute = get_logging_time()
+        return jsonify({
+            'success': True,
+            'hour': hour,
+            'minute': minute,
+            'time': f'{hour:02d}:{minute:02d}'
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/settings/logging-time', methods=['POST'])
+def set_logging_time_setting():
+    """
+    Установить время автоматического логирования цен
+    
+    Body JSON:
+    {
+        "hour": 0-23,
+        "minute": 0-59
+    }
+    """
+    try:
+        data = request.get_json()
+        hour = data.get('hour')
+        minute = data.get('minute')
+        
+        # Валидация
+        if hour is None or minute is None:
+            return jsonify({
+                'success': False,
+                'error': 'Необходимо указать hour и minute'
+            }), 400
+        
+        if not (0 <= hour <= 23):
+            return jsonify({
+                'success': False,
+                'error': 'hour должен быть от 0 до 23'
+            }), 400
+        
+        if not (0 <= minute <= 59):
+            return jsonify({
+                'success': False,
+                'error': 'minute должен быть от 0 до 59'
+            }), 400
+        
+        # Получаем или создаем настройки
+        settings = db_session.query(Settings).filter(Settings.id == 1).first()
+        if not settings:
+            settings = Settings(id=1, price_logging_hour=hour, price_logging_minute=minute)
+            db_session.add(settings)
+        else:
+            settings.price_logging_hour = hour
+            settings.price_logging_minute = minute
+        
+        db_session.commit()
+        
+        # Обновляем планировщик
+        update_scheduler_time()
+        
+        return jsonify({
+            'success': True,
+            'message': f'Время логирования установлено: {hour:02d}:{minute:02d} МСК',
+            'hour': hour,
+            'minute': minute,
+            'time': f'{hour:02d}:{minute:02d}'
+        })
+    except Exception as e:
+        db_session.rollback()
         return jsonify({
             'success': False,
             'error': str(e)
@@ -1654,12 +1791,9 @@ atexit.register(close_db)
 
 
 if __name__ == '__main__':
-    # Запускаем планировщик один раз в единственном процессе приложения
-    if not scheduler.running:
-        scheduler.start()
-        print("Планировщик запущен:")
-        print("  - Ежедневное логирование цен в 00:00 МСК")
-        print("  - Периодическая проверка каждые 3 часа (если записи за сегодня нет)")
+    # При прямом запуске запускаем планировщик сразу
+    # При запуске через Gunicorn планировщик запустится при первом запросе через @app.before_request
+    start_scheduler()
 
     # Отключаем автоматический перезапуск (reloader), чтобы не было второго процесса
     app.run(debug=True, host='0.0.0.0', port=5000, use_reloader=False)

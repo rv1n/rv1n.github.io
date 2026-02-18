@@ -26,4 +26,12 @@ def init_db():
     from models.category import Category
     from models.asset_type import AssetType
     from models.cash_balance import CashBalance
+    from models.settings import Settings
     Base.metadata.create_all(bind=engine)
+    
+    # Создаем настройки по умолчанию, если их еще нет
+    settings = db_session.query(Settings).filter(Settings.id == 1).first()
+    if not settings:
+        default_settings = Settings(id=1, price_logging_hour=0, price_logging_minute=0)
+        db_session.add(default_settings)
+        db_session.commit()
