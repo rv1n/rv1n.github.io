@@ -83,11 +83,11 @@ function setupEventListeners() {
         buyTickerInput.addEventListener('blur', handleBuyTickerBlur);
     }
     
-    // Автоматический расчет суммы покупки
-    const buyQuantity = document.getElementById('buy-quantity');
+    // Автоматический расчет суммы покупки (по лотам)
+    const buyLots = document.getElementById('buy-lots');
     const buyPrice = document.getElementById('buy-price');
-    if (buyQuantity && buyPrice) {
-        buyQuantity.addEventListener('input', calculateBuyTotal);
+    if (buyLots && buyPrice) {
+        buyLots.addEventListener('input', calculateBuyTotal);
         buyPrice.addEventListener('input', calculateBuyTotal);
     }
     
@@ -1524,6 +1524,8 @@ function switchView(viewType) {
     const transactionsView = document.getElementById('transactions-view');
     const categoriesView = document.getElementById('categories-view');
     const serverView = document.getElementById('server-view');
+    const tickerSberView = document.getElementById('ticker-sber-view');
+    const tickerRuView = document.getElementById('ticker-ru-view');
     const btnTable = document.getElementById('btn-table-view');
     const btnChart = document.getElementById('btn-chart-view');
     const btnHistory = document.getElementById('btn-history-view');
@@ -1537,6 +1539,8 @@ function switchView(viewType) {
         transactionsView.style.display = 'none';
         categoriesView.style.display = 'none';
         if (serverView) serverView.style.display = 'none';
+        if (tickerSberView) tickerSberView.style.display = 'none';
+        if (tickerRuView) tickerRuView.style.display = 'none';
         if (btnTable) btnTable.classList.add('active');
         if (btnChart) btnChart.classList.remove('active');
         if (btnHistory) btnHistory.classList.remove('active');
@@ -1554,6 +1558,8 @@ function switchView(viewType) {
         transactionsView.style.display = 'none';
         categoriesView.style.display = 'none';
         if (serverView) serverView.style.display = 'none';
+        if (tickerSberView) tickerSberView.style.display = 'none';
+        if (tickerRuView) tickerRuView.style.display = 'none';
         if (btnTable) btnTable.classList.remove('active');
         if (btnChart) btnChart.classList.add('active');
         if (btnHistory) btnHistory.classList.remove('active');
@@ -1577,6 +1583,8 @@ function switchView(viewType) {
         transactionsView.style.display = 'none';
         categoriesView.style.display = 'none';
         if (serverView) serverView.style.display = 'none';
+        if (tickerSberView) tickerSberView.style.display = 'none';
+        if (tickerRuView) tickerRuView.style.display = 'none';
         if (btnTable) btnTable.classList.remove('active');
         if (btnChart) btnChart.classList.remove('active');
         if (btnHistory) btnHistory.classList.add('active');
@@ -1591,6 +1599,8 @@ function switchView(viewType) {
         transactionsView.style.display = 'block';
         categoriesView.style.display = 'none';
         if (serverView) serverView.style.display = 'none';
+        if (tickerSberView) tickerSberView.style.display = 'none';
+        if (tickerRuView) tickerRuView.style.display = 'none';
         if (btnTable) btnTable.classList.remove('active');
         if (btnChart) btnChart.classList.remove('active');
         if (btnHistory) btnHistory.classList.remove('active');
@@ -1605,6 +1615,8 @@ function switchView(viewType) {
         transactionsView.style.display = 'none';
         categoriesView.style.display = 'block';
         if (serverView) serverView.style.display = 'none';
+        if (tickerSberView) tickerSberView.style.display = 'none';
+        if (tickerRuView) tickerRuView.style.display = 'none';
         if (btnTable) btnTable.classList.remove('active');
         if (btnChart) btnChart.classList.remove('active');
         if (btnHistory) btnHistory.classList.remove('active');
@@ -1622,6 +1634,8 @@ function switchView(viewType) {
         transactionsView.style.display = 'none';
         if (categoriesView) categoriesView.style.display = 'none';
         if (serverView) serverView.style.display = 'block';
+        if (tickerSberView) tickerSberView.style.display = 'none';
+        if (tickerRuView) tickerRuView.style.display = 'none';
 
         if (btnTable) btnTable.classList.remove('active');
         if (btnChart) btnChart.classList.remove('active');
@@ -1631,6 +1645,67 @@ function switchView(viewType) {
 
         // Загружаем данные мониторинга сервера
         loadServerStatus();
+    } else if (viewType === 'ticker-sber') {
+        tableView.style.display = 'none';
+        chartView.style.display = 'none';
+        historyView.style.display = 'none';
+        transactionsView.style.display = 'none';
+        if (categoriesView) categoriesView.style.display = 'none';
+        if (serverView) serverView.style.display = 'none';
+        if (tickerRuView) tickerRuView.style.display = 'none';
+        if (tickerSberView) tickerSberView.style.display = 'block';
+
+        if (btnTable) btnTable.classList.remove('active');
+        if (btnChart) btnChart.classList.remove('active');
+        if (btnHistory) btnHistory.classList.remove('active');
+        if (btnTransactions) btnTransactions.classList.remove('active');
+        if (btnCategories) btnCategories.classList.remove('active');
+
+        loadTickerDebug('SBER', 'ticker-sber-content', 'STOCK');
+    } else if (viewType === 'ticker-ru') {
+        tableView.style.display = 'none';
+        chartView.style.display = 'none';
+        historyView.style.display = 'none';
+        transactionsView.style.display = 'none';
+        if (categoriesView) categoriesView.style.display = 'none';
+        if (serverView) serverView.style.display = 'none';
+        if (tickerSberView) tickerSberView.style.display = 'none';
+        if (tickerRuView) tickerRuView.style.display = 'block';
+
+        if (btnTable) btnTable.classList.remove('active');
+        if (btnChart) btnChart.classList.remove('active');
+        if (btnHistory) btnHistory.classList.remove('active');
+        if (btnTransactions) btnTransactions.classList.remove('active');
+        if (btnCategories) btnCategories.classList.remove('active');
+
+        loadTickerDebug('RU000A105SG2', 'ticker-ru-content', 'BOND');
+    }
+}
+
+/**
+ * Загрузка и отображение полных данных по конкретному тикеру
+ */
+async function loadTickerDebug(ticker, containerId, instrumentType) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+
+    container.textContent = `Загрузка данных по ${ticker}...`;
+
+    try {
+        const params = instrumentType ? `?instrument_type=${encodeURIComponent(instrumentType)}` : '';
+        const response = await fetch(`/api/ticker-info/${encodeURIComponent(ticker)}${params}`);
+        const data = await response.json();
+
+        if (!data || data.success === false) {
+            container.textContent = `Ошибка загрузки данных по ${ticker}: ${data && data.error ? data.error : 'нет данных'}`;
+            return;
+        }
+
+        const prettyJson = JSON.stringify(data, null, 2);
+        container.innerHTML = `<pre class="ticker-raw-content">${prettyJson}</pre>`;
+    } catch (error) {
+        console.error('Ошибка загрузки данных по тикеру:', error);
+        container.textContent = `Ошибка загрузки данных по ${ticker}`;
     }
 }
 

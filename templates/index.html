@@ -81,10 +81,16 @@
                             🏷️ Категории и виды
                         </button>
                         <button type="button" class="dropdown-item" onclick="openLoggingTimeModal(); closeMainMenu();">
-                            ⏰ Настройка времени логирования
+                            ⏰ Настройка времени автоматического обновления цен
                         </button>
                         <button type="button" class="dropdown-item" onclick="switchView('server'); closeMainMenu();">
                             🖥️ Мониторинг сервера
+                        </button>
+                        <button type="button" class="dropdown-item" onclick="switchView('ticker-sber'); closeMainMenu();">
+                            🔍 Полные данные по SBER
+                        </button>
+                        <button type="button" class="dropdown-item" onclick="switchView('ticker-ru'); closeMainMenu();">
+                            🔍 Полные данные по RU000A105SG2
                         </button>
                     </div>
                 </div>
@@ -181,40 +187,10 @@
                 </table>
             </div>
 
-            <!-- Представление диаграммы категорий -->
+            <!-- Представление диаграмм распределения -->
             <div id="chart-view" class="portfolio-view" style="display: none;">
+                <!-- СНАЧАЛА: Диаграмма распределения по видам активов -->
                 <div class="category-chart-container">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                        <h3 style="margin: 0;">Распределение портфеля по категориям</h3>
-                        
-                        <!-- Переключатель типа диаграммы -->
-                        <div class="chart-type-toggle">
-                            <button id="chart-toggle-pie" class="chart-toggle-btn active" onclick="switchChartType('pie')">
-                                🥧 Круговая
-                            </button>
-                            <button id="chart-toggle-bar" class="chart-toggle-btn" onclick="switchChartType('bar')">
-                                📊 Столбчатая
-                            </button>
-                        </div>
-                    </div>
-                    
-                    <!-- Круговая диаграмма -->
-                    <div id="distribution-pie-chart-container" class="categories-pie-chart-container" style="display: block;">
-                        <div id="distribution-pie-chart" class="categories-pie-chart">
-                            <!-- Диаграмма загружается через JavaScript -->
-                        </div>
-                    </div>
-                    
-                    <!-- Столбчатая диаграмма -->
-                    <div id="category-chart-container" style="display: none;">
-                        <div id="category-chart" class="category-chart">
-                            <!-- Диаграмма загружается через JavaScript -->
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Диаграмма распределения по видам активов -->
-                <div class="category-chart-container" style="margin-top: 40px;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
                         <h3 style="margin: 0;">Распределение портфеля по видам активов</h3>
                         
@@ -239,6 +215,37 @@
                     <!-- Столбчатая диаграмма -->
                     <div id="asset-type-chart-container" style="display: none;">
                         <div id="asset-type-chart" class="category-chart">
+                            <!-- Диаграмма загружается через JavaScript -->
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- НИЖЕ: Диаграмма распределения по категориям -->
+                <div class="category-chart-container" style="margin-top: 40px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                        <h3 style="margin: 0;">Распределение портфеля по категориям</h3>
+                        
+                        <!-- Переключатель типа диаграммы -->
+                        <div class="chart-type-toggle">
+                            <button id="chart-toggle-pie" class="chart-toggle-btn active" onclick="switchChartType('pie')">
+                                🥧 Круговая
+                            </button>
+                            <button id="chart-toggle-bar" class="chart-toggle-btn" onclick="switchChartType('bar')">
+                                📊 Столбчатая
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Круговая диаграмма -->
+                    <div id="distribution-pie-chart-container" class="categories-pie-chart-container" style="display: block;">
+                        <div id="distribution-pie-chart" class="categories-pie-chart">
+                            <!-- Диаграмма загружается через JavaScript -->
+                        </div>
+                    </div>
+                    
+                    <!-- Столбчатая диаграмма -->
+                    <div id="category-chart-container" style="display: none;">
+                        <div id="category-chart" class="category-chart">
                             <!-- Диаграмма загружается через JavaScript -->
                         </div>
                     </div>
@@ -271,6 +278,32 @@
                     <h3>Мониторинг сервера</h3>
                     <div id="server-status-content" class="server-status-content">
                         Загрузка данных о сервере...
+                    </div>
+                </div>
+            </div>
+
+            <!-- Полные данные по тикеру SBER -->
+            <div id="ticker-sber-view" class="portfolio-view" style="display: none;">
+                <div class="server-status-container">
+                    <h3>Полные данные по тикеру SBER</h3>
+                    <p style="margin-top: 8px; color: #7f8c8d; font-size: 0.9em;">
+                        Здесь отображаются все данные, которые приложение получает по тикеру SBER из MOEX API и базы.
+                    </p>
+                    <div id="ticker-sber-content" class="server-status-content">
+                        Загрузка данных по SBER...
+                    </div>
+                </div>
+            </div>
+
+            <!-- Полные данные по тикеру RU000A105SG2 -->
+            <div id="ticker-ru-view" class="portfolio-view" style="display: none;">
+                <div class="server-status-container">
+                    <h3>Полные данные по тикеру RU000A105SG2</h3>
+                    <p style="margin-top: 8px; color: #7f8c8d; font-size: 0.9em;">
+                        Здесь отображаются все данные, которые приложение получает по тикеру RU000A105SG2 из MOEX API и базы.
+                    </p>
+                    <div id="ticker-ru-content" class="server-status-content">
+                        Загрузка данных по RU000A105SG2...
                     </div>
                 </div>
             </div>
@@ -719,14 +752,14 @@
         </div>
     </div>
 
-    <!-- Модальное окно настройки времени логирования -->
+    <!-- Модальное окно настройки времени автоматического обновления цен -->
     <div id="logging-time-modal" class="modal" style="display: none;">
         <div class="modal-content" style="max-width: 500px;">
             <span class="close" onclick="closeLoggingTimeModal()">&times;</span>
-            <h2>⏰ Настройка времени автоматического логирования цен</h2>
+            <h2>⏰ Настройка времени автоматического обновления цен</h2>
             <div style="margin-top: 20px;">
                 <p style="margin-bottom: 15px; color: #7f8c8d;">
-                    Установите время, когда будут автоматически логироваться цены всех активов из вашего портфеля.
+                    Установите время, когда будут автоматически обновлять цены всех активов из вашего портфеля.
                 </p>
                 <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 20px;">
                     <label for="logging-hour" style="font-weight: bold;">Час (0-23):</label>
@@ -737,7 +770,7 @@
                            style="width: 80px; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
                 </div>
                 <div style="margin-bottom: 20px; padding: 10px; background-color: #ecf0f1; border-radius: 4px;">
-                    <strong>Текущее время:</strong> <span id="current-logging-time">-</span>
+                    <strong>Текущее время обновления:</strong> <span id="current-logging-time">-</span>
                 </div>
                 <div style="display: flex; gap: 10px; justify-content: flex-end;">
                     <button class="btn btn-secondary" onclick="closeLoggingTimeModal()">Отмена</button>

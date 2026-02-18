@@ -258,6 +258,20 @@ header h1 {
     margin: 2px 0;
 }
 
+/* Отображение сырых данных по тикерам */
+.ticker-raw-content {
+    font-family: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size: 0.85em;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 500px;
+    overflow: auto;
+    background: #111827;
+    color: #e5e7eb;
+    padding: 12px 14px;
+    border-radius: 8px;
+}
+
 .summary-card {
     display: flex;
     flex-direction: column;
