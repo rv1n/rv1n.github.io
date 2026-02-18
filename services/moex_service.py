@@ -282,44 +282,145 @@ class MOEXService:
         if not data or len(data) < 2:
             return None
         
+        result = {}
+        trading_params = {}
+        
         try:
             data_dict = data[1]
             
             # Сначала пробуем получить из description
             description_table = data_dict.get('description', [])
             if description_table and isinstance(description_table, list):
-                result = {}
+                fields = {}
                 for item in description_table:
                     if isinstance(item, dict):
                         name = item.get('name')
                         value = item.get('value')
+                        if not name:
+                            continue
+                        # Базовые поля
                         if name == 'SECID':
                             result['ticker'] = value
                         elif name == 'NAME':
                             result['name'] = value
                         elif name == 'SHORTNAME':
                             result['short_name'] = value
+                        # Сохраняем все поля в словарь для детального отображения в UI
+                        fields[name] = value
                 
-                # Если нашли хотя бы название
-                if result.get('name') or result.get('short_name'):
-                    print(f"Информация о бумаге {ticker}: {result}")
-                    return result
+                if fields:
+                    result['fields'] = fields
             
-            # Если не нашли в description, пробуем в boards
+            # Получаем информацию о торговых параметрах из boards (лоты, шаги цены)
             boards_table = data_dict.get('boards', [])
-            if boards_table and isinstance(boards_table, list) and len(boards_table) > 0:
+            if boards_table and isinstance(boards_table, list):
+                # Берем первый активный board (обычно это основной режим торгов)
+                for board in boards_table:
+                    if isinstance(board, dict):
+                        lotsize = board.get('lotsize')
+                        minstep = board.get('minstep')
+                        stepprice = board.get('stepprice')
+                        if lotsize is not None and lotsize != '':
+                            try:
+                                trading_params['lotsize'] = int(float(lotsize))
+                            except (ValueError, TypeError):
+                                pass
+                        if minstep is not None and minstep != '':
+                            try:
+                                trading_params['minstep'] = float(minstep)
+                            except (ValueError, TypeError):
+                                pass
+                        if stepprice is not None and stepprice != '':
+                            try:
+                                trading_params['stepprice'] = float(stepprice)
+                            except (ValueError, TypeError):
+                                pass
+                        # Если нашли хотя бы один параметр, используем этот board
+                        if trading_params:
+                            break
+            
+            # Всегда пробуем получить из markets endpoint (более надежный источник для облигаций)
+            # Если trading_params пустой или нужно обновить данные, проверяем markets endpoint
+            if instrument_type and (not trading_params or not trading_params.get('lotsize')):
+                market = 'bonds' if instrument_type == 'BOND' else 'shares'
+                market_url = f"{self.BASE_URL}/engines/stock/markets/{market}/securities/{ticker}.json"
+                market_params = {
+                    'iss.meta': 'off',
+                    'iss.json': 'extended',
+                    'securities.columns': 'SECID,LOTSIZE,MINSTEP,STEPPRICE'
+                }
+                market_data = self._make_request(market_url, market_params)
+                if market_data and len(market_data) >= 2:
+                    market_dict = market_data[1]
+                    securities_table = market_dict.get('securities', [])
+                    if securities_table and isinstance(securities_table, list):
+                        # Ищем запись с максимальным LOTSIZE (обычно это основной режим торгов)
+                        # или берем первую с LOTSIZE > 1, если есть
+                        best_sec = None
+                        max_lotsize = 0
+                        for sec in securities_table:
+                            if isinstance(sec, dict):
+                                lotsize = sec.get('LOTSIZE')
+                                if lotsize is not None and lotsize != '':
+                                    try:
+                                        lotsize_int = int(float(lotsize))
+                                        if lotsize_int > max_lotsize:
+                                            max_lotsize = lotsize_int
+                                            best_sec = sec
+                                    except (ValueError, TypeError):
+                                        pass
+                        
+                        # Если нашли лучшую запись, используем её (перезаписываем, если markets endpoint дал лучшие данные)
+                        if best_sec:
+                            lotsize = best_sec.get('LOTSIZE')
+                            minstep = best_sec.get('MINSTEP')
+                            stepprice = best_sec.get('STEPPRICE')
+                            if lotsize is not None and lotsize != '':
+                                try:
+                                    lotsize_int = int(float(lotsize))
+                                    # Используем данные из markets endpoint, если они лучше (больше lotsize) или если их еще нет
+                                    if not trading_params.get('lotsize') or lotsize_int > trading_params.get('lotsize', 0):
+                                        trading_params['lotsize'] = lotsize_int
+                                except (ValueError, TypeError):
+                                    pass
+                            if minstep is not None and minstep != '':
+                                try:
+                                    if not trading_params.get('minstep'):
+                                        trading_params['minstep'] = float(minstep)
+                                except (ValueError, TypeError):
+                                    pass
+                            if stepprice is not None and stepprice != '':
+                                try:
+                                    if not trading_params.get('stepprice'):
+                                        trading_params['stepprice'] = float(stepprice)
+                                except (ValueError, TypeError):
+                                    pass
+            
+            # Если не нашли в description, пробуем в boards как запасной вариант для названия
+            if not result.get('name') and boards_table and isinstance(boards_table, list) and len(boards_table) > 0:
                 first_board = boards_table[0]
                 if isinstance(first_board, dict):
                     secid = first_board.get('secid')
                     title = first_board.get('title') or first_board.get('shortname')
                     if secid and title:
-                        result = {
-                            'ticker': secid,
-                            'name': title,
-                            'short_name': title
-                        }
-                        print(f"Информация о бумаге {ticker} из boards: {result}")
-                        return result
+                        if not result.get('ticker'):
+                            result['ticker'] = secid
+                        if not result.get('name'):
+                            result['name'] = title
+                        if not result.get('short_name'):
+                            result['short_name'] = title
+            
+            # Добавляем торговые параметры к результату
+            if trading_params:
+                result['trading_params'] = trading_params
+            
+            # Если нашли хотя бы название или тикер, возвращаем результат
+            if result.get('name') or result.get('short_name') or result.get('ticker'):
+                # Раньше здесь была подробная отладочная печать информации о бумаге,
+                # но она сильно засоряла логи и тормозила работу при частых запросах.
+                # Если понадобится, можно временно раскомментировать:
+                # print(f\"Информация о бумаге {ticker}: {result}\")
+                return result
                         
         except Exception as e:
             print(f"Ошибка получения информации о бумаге {ticker}: {e}")

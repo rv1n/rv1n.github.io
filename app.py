@@ -159,6 +159,12 @@ def get_portfolio():
                 if current_price_data:
                     break
             
+            # Получаем информацию о размере лота
+            lotsize = 1  # По умолчанию 1
+            security_info = moex_service.get_security_info(item.ticker, instrument_type)
+            if security_info and security_info.get('trading_params'):
+                lotsize = security_info['trading_params'].get('lotsize', 1)
+            
             # Получаем номинал и валюту для облигаций
             bond_facevalue = None
             bond_currency = None
@@ -349,16 +355,8 @@ def get_portfolio():
             else:
                 price_change_rub = price_change
             
-            # Отладка для облигаций
-            if instrument_type == 'BOND':
-                print(f"[DEBUG] Облигация {item.ticker}:")
-                print(f"  current_price (MOEX, проценты): {current_price}")
-                print(f"  current_price_rub: {current_price_rub}")
-                print(f"  calculated_avg_price: {calculated_avg_price}")
-                print(f"  avg_price_rub: {avg_price_rub}")
-                print(f"  quantity: {item.quantity}")
-                print(f"  total_current_value: {total_current_value}")
-                print(f"  Отправляем в API: current_price={current_price_rub}, total_cost={total_current_value}")
+            # Рассчитываем количество лотов
+            lots = item.quantity / lotsize if lotsize > 0 else item.quantity
             
             result_item = {
                 'id': item.id,
@@ -367,7 +365,9 @@ def get_portfolio():
                 'category': item.category if hasattr(item, 'category') else None,
                 'asset_type': item.asset_type if hasattr(item, 'asset_type') else None,
                 'instrument_type': item.instrument_type.value if hasattr(item, 'instrument_type') and item.instrument_type else 'Акция',
-                'quantity': item.quantity,
+                'quantity': item.quantity,  # Количество бумаг
+                'lots': lots,  # Количество лотов
+                'lotsize': lotsize,  # Размер лота
                 'average_buy_price': avg_price_rub,  # уже в рублях для облигаций
                 'current_price': current_price_rub,  # уже в рублях для облигаций
                 'price_change': price_change_rub,  # уже в рублях для облигаций
@@ -657,11 +657,120 @@ def update_category():
         }), 500
 
 
+@app.route('/api/ticker-info/<ticker>', methods=['GET'])
+def get_ticker_info(ticker):
+    """
+    Получить расширенную информацию о тикере из MOEX API
+    """
+    try:
+        ticker = ticker.upper().strip()
+        
+        if not ticker:
+            return jsonify({
+                'success': False,
+                'error': 'Тикер не указан'
+            }), 400
+        
+        # Пытаемся определить тип инструмента
+        # 1) По записи в портфеле (если есть)
+        portfolio_item = db_session.query(Portfolio).filter(Portfolio.ticker == ticker).first()
+        instrument_type = None
+        if portfolio_item and getattr(portfolio_item, 'instrument_type', None):
+            # Enum InstrumentType: используем .name (STOCK/BOND)
+            instrument_type = portfolio_item.instrument_type.name
+        
+        # 2) Если тип не определён из портфеля, используем параметр запроса (если он корректный)
+        if not instrument_type:
+            param_type = request.args.get('instrument_type')
+            if param_type in ['STOCK', 'BOND']:
+                instrument_type = param_type
+        
+        # 3) Если всё ещё не определили - эвристика по тикеру
+        if not instrument_type:
+            if (ticker.startswith('RU') or ticker.startswith('SU')) and len(ticker) > 10:
+                instrument_type = 'BOND'
+            else:
+                instrument_type = 'STOCK'
+        
+        # Получаем общую информацию о бумаге из MOEX (для определения типа по GROUPNAME)
+        security_info = moex_service.get_security_info(ticker, instrument_type)
+        
+        # 4) Проверяем GROUPNAME из MOEX API для точного определения типа
+        # Если GROUPNAME не найден, пробуем альтернативный тип
+        if security_info and security_info.get('fields'):
+            groupname = security_info['fields'].get('GROUPNAME', '')
+        else:
+            # Пробуем получить security_info с альтернативным типом
+            alt_type = 'BOND' if instrument_type == 'STOCK' else 'STOCK'
+            alt_security_info = moex_service.get_security_info(ticker, alt_type)
+            if alt_security_info and alt_security_info.get('fields'):
+                security_info = alt_security_info
+                groupname = alt_security_info['fields'].get('GROUPNAME', '')
+            else:
+                groupname = ''
+        
+        # Определяем тип по GROUPNAME
+        if groupname:
+            groupname_lower = groupname.lower()
+            # Если в GROUPNAME есть "облигации" или "bond" - это облигация
+            if 'облигации' in groupname_lower or 'bond' in groupname_lower:
+                instrument_type = 'BOND'
+            # Если есть "акции" или "share" - это акция
+            elif 'акции' in groupname_lower or 'share' in groupname_lower or 'stock' in groupname_lower:
+                instrument_type = 'STOCK'
+        
+        # Человеко-читаемый ярлык типа инструмента
+        try:
+            instrument_label = InstrumentType[instrument_type].value
+        except KeyError:
+            instrument_label = 'Облигация' if instrument_type == 'BOND' else 'Акция'
+        
+        # Получаем текущую цену и котировки (используем уточнённый тип)
+        quote_data = moex_service.get_current_price(ticker, instrument_type)
+        
+        # Перезапрашиваем security_info с правильным типом, чтобы получить trading_params
+        if not security_info or not security_info.get('trading_params'):
+            security_info = moex_service.get_security_info(ticker, instrument_type)
+        
+        # Формируем ответ
+        result = {
+            'success': True,
+            'ticker': ticker,
+            'instrument_type': instrument_type,
+            'instrument_label': instrument_label
+        }
+        
+        if quote_data:
+            result['quote'] = quote_data
+        
+        if security_info:
+            result['security'] = security_info
+        
+        # Если есть данные из портфеля, добавляем их
+        if portfolio_item:
+            result['portfolio'] = {
+                'quantity': portfolio_item.quantity,
+                'average_buy_price': float(portfolio_item.average_buy_price) if portfolio_item.average_buy_price else None,
+                'company_name': portfolio_item.company_name,
+                'category': portfolio_item.category if portfolio_item.category else None,
+                'asset_type': portfolio_item.asset_type if portfolio_item.asset_type else None
+            }
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
 @app.route('/api/validate-ticker/<ticker>', methods=['GET'])
 def validate_ticker(ticker):
     """
     Проверить существование тикера на MOEX
     Поддерживает параметр instrument_type (STOCK или BOND)
+    Возвращает также информацию о размере лота (LOTSIZE)
     """
     try:
         ticker = ticker.upper().strip()
@@ -683,13 +792,19 @@ def validate_ticker(ticker):
             if security_info:
                 company_name = security_info.get('short_name') or security_info.get('name') or ''
             
+            # Получаем размер лота из security_info
+            lotsize = 1  # По умолчанию 1
+            if security_info and security_info.get('trading_params'):
+                lotsize = security_info['trading_params'].get('lotsize', 1)
+            
             return jsonify({
                 'success': True,
                 'ticker': ticker,
                 'exists': True,
                 'company_name': company_name,
                 'current_price': quote_data.get('price') if quote_data else None,
-                'instrument_type': instrument_type
+                'instrument_type': instrument_type,
+                'lotsize': lotsize  # Размер лота
             })
         else:
             # Тикер не найден

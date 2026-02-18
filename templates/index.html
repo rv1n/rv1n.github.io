@@ -97,11 +97,16 @@
                 <table class="portfolio-table" id="portfolio-table" style="display: none;">
                     <thead>
                         <tr>
-                            <th>Название актива</th>
+                            <th data-sort-key="company_name" class="sortable">
+                                <div class="th-label-group">
+                                    <span>Название актива</span>
+                                </div>
+                                <button type="button" class="sort-btn" aria-label="Сортировать по названию компании">⇅</button>
+                            </th>
                             <th data-sort-key="buy_price" class="sortable">
                                 <div class="th-label-group">
                                     <span>Цена приобретения</span>
-                                    <div style="font-size: 0.8em; font-weight: normal; color: #7f8c8d; margin-top: 2px;">
+                                    <div class="th-sub-label">
                                         за 1 лот / акцию
                                     </div>
                                 </div>
@@ -110,8 +115,8 @@
                             <th data-sort-key="quantity" class="sortable">
                                 <div class="th-label-group">
                                     <span>Количество</span>
-                                    <div style="font-size: 0.8em; font-weight: normal; color: #7f8c8d; margin-top: 2px;">
-                                        шт
+                                    <div class="th-sub-label">
+                                        лоты / бумаги
                                     </div>
                                 </div>
                                 <button type="button" class="sort-btn" aria-label="Сортировать по количеству">⇅</button>
@@ -119,7 +124,7 @@
                             <th data-sort-key="invest_sum" class="sortable">
                                 <div class="th-label-group">
                                     <span>Сумма инвестиций</span>
-                                    <div style="font-size: 0.8em; font-weight: normal; color: #7f8c8d; margin-top: 2px;">
+                                    <div class="th-sub-label">
                                         ₽
                                     </div>
                                 </div>
@@ -128,7 +133,7 @@
                             <th data-sort-key="current_value" class="sortable">
                                 <div class="th-label-group">
                                     <span>Текущая стоимость</span>
-                                    <div style="font-size: 0.8em; font-weight: normal; color: #7f8c8d; margin-top: 2px;">
+                                    <div class="th-sub-label">
                                         позиции / актива / доля в портфеле
                                     </div>
                                 </div>
@@ -506,9 +511,11 @@
                     <input type="text" id="buy-company-name" name="company_name" readonly style="background: #f5f5f5;">
                 </div>
                 <div class="form-group">
-                    <label for="buy-quantity">Количество *</label>
-                    <input type="number" id="buy-quantity" name="quantity" required min="0.01" step="0.01">
+                    <label for="buy-lots">Количество лотов *</label>
+                    <input type="number" id="buy-lots" name="lots" required min="1" step="1">
+                    <small id="buy-lots-hint" style="display: none; color: #7f8c8d; margin-top: 5px;"></small>
                 </div>
+                <input type="hidden" id="buy-lotsize" value="1">
                 <div class="form-group">
                     <label for="buy-price">Цена покупки *</label>
                     <input type="number" id="buy-price" name="price" required min="0.00001" step="0.00001">
@@ -547,9 +554,13 @@
                     <input type="text" id="sell-available-display" readonly style="background: #f5f5f5;">
                 </div>
                 <div class="form-group">
-                    <label for="sell-quantity">Количество для продажи *</label>
-                    <input type="number" id="sell-quantity" name="quantity" required min="0.01" step="0.01" placeholder="0">
+                    <label for="sell-lots">Количество лотов для продажи *</label>
+                    <!-- Разрешаем дробные лоты (например, 0.01) для продажи остатков -->
+                    <input type="number" id="sell-lots" name="lots" required min="0.01" step="0.01" placeholder="0">
+                    <small id="sell-lots-hint" style="display: none; color: #7f8c8d; margin-top: 5px;"></small>
                 </div>
+                <input type="hidden" id="sell-lotsize" value="1">
+                <input type="hidden" id="sell-available-quantity" value="0">
                 <div class="form-group">
                     <label for="sell-price">Цена продажи *</label>
                     <input type="number" id="sell-price" name="price" required min="0.00001" step="0.00001" placeholder="0.00000">
@@ -671,6 +682,17 @@
                     <button type="button" class="btn btn-secondary" onclick="closeAssetTypeEditModal()">Отмена</button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- Модальное окно с информацией о тикере -->
+    <div id="ticker-info-modal" class="modal" style="display: none;">
+        <div class="modal-content" style="max-width: 800px; max-height: 90vh; overflow-y: auto;">
+            <span class="close" onclick="closeTickerInfoModal()">&times;</span>
+            <h2 id="ticker-info-title">Информация о тикере</h2>
+            <div id="ticker-info-content" style="margin-top: 20px;">
+                <div class="loading">Загрузка данных...</div>
+            </div>
         </div>
     </div>
 

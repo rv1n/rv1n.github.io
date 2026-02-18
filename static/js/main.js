@@ -126,6 +126,30 @@ function setupEventListeners() {
             loadPortfolio(true); // тихое обновление портфеля при смене периода
         });
     }
+
+    // Закрытие сэндвич-меню при клике вне его области
+    document.addEventListener('click', function(e) {
+        const menuWrapper = document.querySelector('.menu-wrapper');
+        const menu = document.getElementById('main-menu');
+        const menuToggle = document.getElementById('menu-toggle');
+        
+        if (isMainMenuOpen && menu && menuWrapper && menuToggle) {
+            // Проверяем, был ли клик вне menu-wrapper
+            if (!menuWrapper.contains(e.target)) {
+                closeMainMenu();
+            }
+        }
+    });
+
+    // Закрытие модального окна информации о тикере при клике вне его
+    const tickerInfoModal = document.getElementById('ticker-info-modal');
+    if (tickerInfoModal) {
+        tickerInfoModal.addEventListener('click', function(e) {
+            if (e.target === tickerInfoModal) {
+                closeTickerInfoModal();
+            }
+        });
+    }
 }
 
 /**
@@ -503,9 +527,11 @@ function attachSellButtonHandlers() {
             const ticker = this.getAttribute('data-ticker');
             const companyName = this.getAttribute('data-company-name');
             const quantity = parseFloat(this.getAttribute('data-quantity'));
+            const lots = parseFloat(this.getAttribute('data-lots')) || (quantity / (parseFloat(this.getAttribute('data-lotsize')) || 1));
+            const lotsize = parseFloat(this.getAttribute('data-lotsize')) || 1;
             const price = parseFloat(this.getAttribute('data-price'));
             
-            openSellModal(portfolioId, ticker, companyName, quantity, price);
+            openSellModal(portfolioId, ticker, companyName, quantity, lots, lotsize, price);
         });
     });
 }
@@ -608,11 +634,17 @@ function createPortfolioRow(item, totalPortfolioValue = 0) {
         <td>
             <div class="ticker-company-cell">
                 <span class="ticker-company-name">${item.company_name || item.ticker}</span>
-                <span class="ticker-company-ticker">${item.ticker}</span>
+                <span class="ticker-company-ticker" style="cursor: pointer; text-decoration: underline; color: #1e3a5f;" 
+                      onclick="openTickerInfoModal('${item.ticker}', '${item.instrument_type || 'STOCK'}')" 
+                      title="Нажмите для просмотра информации о тикере">${item.ticker}</span>
             </div>
         </td>
         <td>${formatCurrency(effectiveAvgPrice)}</td>
-        <td>${formatNumber(item.quantity)}</td>
+        <td>
+            ${item.lotsize && item.lotsize > 1 
+                ? `<strong>${formatNumber(item.lots || (item.quantity / item.lotsize))} лот${(item.lots || (item.quantity / item.lotsize)) === 1 ? '' : (item.lots || (item.quantity / item.lotsize)) % 10 >= 2 && (item.lots || (item.quantity / item.lotsize)) % 10 <= 4 && ((item.lots || (item.quantity / item.lotsize)) % 100 < 10 || (item.lots || (item.quantity / item.lotsize)) % 100 >= 20) ? 'а' : 'ов'}</strong><br><span style="font-size: 0.85em; color: #7f8c8d;">${formatNumber(item.quantity)} ${item.quantity === 1 ? 'бумага' : 'бумаг'}</span>`
+                : `${formatNumber(item.quantity)} ${item.quantity === 1 ? 'бумага' : 'бумаг'}`}
+        </td>
         <td>
             <strong>${formatAssetTotal(investmentsTotal)}</strong>
         </td>
@@ -640,6 +672,8 @@ function createPortfolioRow(item, totalPortfolioValue = 0) {
                 data-ticker="${item.ticker}" 
                 data-company-name="${item.company_name || ''}" 
                 data-quantity="${item.quantity}" 
+                data-lots="${item.lots || (item.quantity / (item.lotsize || 1))}"
+                data-lotsize="${item.lotsize || 1}"
                 data-price="${item.current_price}" 
                 title="Продать"></button>
         </td>
@@ -731,6 +765,12 @@ function comparePortfolioItems(a, b, sortState) {
     let bVal = 0;
 
     switch (sortState.column) {
+        case 'company_name':
+            // Сортировка по названию компании (алфавитная)
+            const aName = (a.company_name || a.ticker || '').toLowerCase();
+            const bName = (b.company_name || b.ticker || '').toLowerCase();
+            const comparison = aName.localeCompare(bName, 'ru', { sensitivity: 'base' });
+            return comparison * dir;
         case 'buy_price':
             aVal = parseFloat(a.average_buy_price) || 0;
             bVal = parseFloat(b.average_buy_price) || 0;
@@ -1023,6 +1063,19 @@ async function validateBuyTicker(ticker) {
                 companyNameInput.value = data.company_name;
             }
             
+            // Сохраняем размер лота и показываем подсказку
+            const lotsize = data.lotsize || 1;
+            document.getElementById('buy-lotsize').value = lotsize;
+            const lotsHint = document.getElementById('buy-lots-hint');
+            if (lotsHint) {
+                if (lotsize > 1) {
+                    lotsHint.textContent = `1 лот = ${lotsize} ${lotsize === 1 ? 'бумага' : 'бумаг'}`;
+                    lotsHint.style.display = 'block';
+                } else {
+                    lotsHint.style.display = 'none';
+                }
+            }
+            
             lastValidatedTicker = ticker;
         } else {
             // Тикер не существует
@@ -1044,22 +1097,26 @@ async function validateBuyTicker(ticker) {
 }
 
 /**
- * Расчет общей суммы покупки
+ * Расчет общей суммы покупки (с учетом лотов)
  */
 function calculateBuyTotal() {
-    const quantity = parseFloat(document.getElementById('buy-quantity').value) || 0;
+    const lots = parseFloat(document.getElementById('buy-lots').value) || 0;
     const price = parseFloat(document.getElementById('buy-price').value) || 0;
+    const lotsize = parseFloat(document.getElementById('buy-lotsize').value) || 1;
+    const quantity = lots * lotsize; // Количество бумаг = лоты * размер лота
     const total = quantity * price;
     
     document.getElementById('buy-total').value = total > 0 ? total.toFixed(2) : '';
 }
 
 /**
- * Расчет общей суммы продажи
+ * Расчет общей суммы продажи (с учетом лотов)
  */
 function calculateSellTotal() {
-    const quantity = parseFloat(document.getElementById('sell-quantity').value) || 0;
+    const lots = parseFloat(document.getElementById('sell-lots').value) || 0;
     const price = parseFloat(document.getElementById('sell-price').value) || 0;
+    const lotsize = parseFloat(document.getElementById('sell-lotsize').value) || 1;
+    const quantity = lots * lotsize; // Количество бумаг = лоты * размер лота
     const total = quantity * price;
     
     document.getElementById('sell-total').value = total > 0 ? total.toFixed(2) : '';
@@ -1085,6 +1142,17 @@ function openBuyModal() {
     if (hintEl) {
         hintEl.textContent = '';
     }
+    
+    // Сброс подсказки о лотах
+    const lotsHint = document.getElementById('buy-lots-hint');
+    if (lotsHint) {
+        lotsHint.textContent = '';
+        lotsHint.style.display = 'none';
+    }
+    
+    // Сброс размера лота
+    document.getElementById('buy-lotsize').value = '1';
+    
     lastValidatedTicker = '';
     
     // Показываем модальное окно
@@ -1122,15 +1190,19 @@ async function handleBuy(e) {
         return;
     }
     
-    const quantity = parseFloat(document.getElementById('buy-quantity').value);
+    const lots = parseFloat(document.getElementById('buy-lots').value);
     const price = parseFloat(document.getElementById('buy-price').value);
+    const lotsize = parseFloat(document.getElementById('buy-lotsize').value) || 1;
     const companyName = document.getElementById('buy-company-name').value.trim();
     const instrumentType = 'STOCK';
     
-    if (!ticker || quantity <= 0 || price <= 0) {
+    if (!ticker || lots <= 0 || price <= 0) {
         console.warn('Заполните все обязательные поля корректно');
         return;
     }
+    
+    // Рассчитываем количество бумаг: лоты * размер лота
+    const quantity = lots * lotsize;
     
     try {
         // 1. Создаём транзакцию покупки
@@ -1139,9 +1211,9 @@ async function handleBuy(e) {
             company_name: companyName,
             operation_type: 'Покупка',
             price: price,
-            quantity: quantity,
+            quantity: quantity, // Сохраняем количество бумаг (лоты * размер лота)
             instrument_type: instrumentType,
-            notes: 'Покупка через модальное окно'
+            notes: `Покупка через модальное окно: ${lots} ${lots === 1 ? 'лот' : 'лотов'} (${quantity} ${quantity === 1 ? 'бумага' : 'бумаг'})`
         };
         
         const transResponse = await fetch('/api/transactions', {
@@ -1193,9 +1265,9 @@ async function handleBuy(e) {
             
             // Логируем результат в консоль вместо всплывающего окна
             if (data.updated) {
-                console.log(`Покупка оформлена. Тикер: ${ticker}, куплено: ${quantity} шт. по ${parseFloat(price).toFixed(5)} ₽. Новое количество: ${data.new_quantity.toFixed(2)}, средняя цена: ${parseFloat(data.new_average_price).toFixed(5)} ₽`);
+                console.log(`Покупка оформлена. Тикер: ${ticker}, куплено: ${lots} ${lots === 1 ? 'лот' : 'лотов'} (${quantity} ${quantity === 1 ? 'бумага' : 'бумаг'}) по ${parseFloat(price).toFixed(5)} ₽. Новое количество: ${data.new_quantity.toFixed(2)}, средняя цена: ${parseFloat(data.new_average_price).toFixed(5)} ₽`);
             } else {
-                console.log(`Покупка оформлена. Тикер: ${ticker}, куплено: ${quantity} шт. по ${parseFloat(price).toFixed(5)} ₽, сумма: ${(quantity * price).toFixed(2)} ₽`);
+                console.log(`Покупка оформлена. Тикер: ${ticker}, куплено: ${lots} ${lots === 1 ? 'лот' : 'лотов'} (${quantity} ${quantity === 1 ? 'бумага' : 'бумаг'}) по ${parseFloat(price).toFixed(5)} ₽, сумма: ${(quantity * price).toFixed(2)} ₽`);
             }
         } else {
             console.error('Ошибка при обновлении портфеля:', data.error);
@@ -2718,7 +2790,7 @@ async function deleteTransaction(transactionId) {
 /**
  * Открытие модального окна продажи
  */
-function openSellModal(portfolioId, ticker, companyName, availableQuantity, currentPrice) {
+function openSellModal(portfolioId, ticker, companyName, availableQuantity, availableLots, lotsize, currentPrice) {
     const modal = document.getElementById('sell-modal');
     if (!modal) return;
     
@@ -2726,19 +2798,40 @@ function openSellModal(portfolioId, ticker, companyName, availableQuantity, curr
     document.getElementById('sell-portfolio-id').value = portfolioId;
     document.getElementById('sell-ticker').value = ticker;
     document.getElementById('sell-company-name').value = companyName;
+    document.getElementById('sell-lotsize').value = lotsize;
+    document.getElementById('sell-available-quantity').value = availableQuantity;
     
     // Заполняем видимые поля
     document.getElementById('sell-ticker-display').value = ticker;
     document.getElementById('sell-company-display').value = companyName || ticker;
-    document.getElementById('sell-available-display').value = `${availableQuantity} шт.`;
+    
+    // Показываем доступное количество в лотах и бумагах
+    const availableDisplay = document.getElementById('sell-available-display');
+    if (lotsize > 1) {
+        availableDisplay.value = `${formatNumber(availableLots)} ${availableLots === 1 ? 'лот' : 'лотов'} (${formatNumber(availableQuantity)} ${availableQuantity === 1 ? 'бумага' : 'бумаг'})`;
+    } else {
+        availableDisplay.value = `${formatNumber(availableQuantity)} ${availableQuantity === 1 ? 'бумага' : 'бумаг'}`;
+    }
+    
+    // Показываем подсказку о размере лота
+    const lotsHint = document.getElementById('sell-lots-hint');
+    if (lotsHint) {
+        if (lotsize > 1) {
+            lotsHint.textContent = `1 лот = ${lotsize} ${lotsize === 1 ? 'бумага' : 'бумаг'}`;
+            lotsHint.style.display = 'block';
+        } else {
+            lotsHint.style.display = 'none';
+        }
+    }
     
     // Устанавливаем текущую цену как цену продажи по умолчанию
     document.getElementById('sell-price').value = currentPrice.toFixed(5);
     
-    // Устанавливаем максимальное количество для продажи
-    const quantityInput = document.getElementById('sell-quantity');
-    quantityInput.max = availableQuantity;
-    quantityInput.value = '';
+    // Устанавливаем максимальное количество лотов для продажи
+    // ВАЖНО: не округляем вниз, чтобы можно было продать «хвосты» вроде 0.01 лота
+    const lotsInput = document.getElementById('sell-lots');
+    lotsInput.max = availableLots;
+    lotsInput.value = '';
     
     // Очищаем остальные поля
     document.getElementById('sell-total').value = '';
@@ -2767,19 +2860,23 @@ async function handleSell(e) {
     const portfolioId = parseInt(document.getElementById('sell-portfolio-id').value);
     const ticker = document.getElementById('sell-ticker').value;
     const companyName = document.getElementById('sell-company-name').value;
-    const quantity = parseFloat(document.getElementById('sell-quantity').value);
+    const lots = parseFloat(document.getElementById('sell-lots').value);
     const price = parseFloat(document.getElementById('sell-price').value);
-    const availableStr = document.getElementById('sell-available-display').value;
-    const availableQuantity = parseFloat(availableStr.split(' ')[0]);
+    const lotsize = parseFloat(document.getElementById('sell-lotsize').value) || 1;
+    const availableQuantity = parseFloat(document.getElementById('sell-available-quantity').value);
+    const availableLots = availableQuantity / lotsize;
+    
+    // Рассчитываем количество бумаг: лоты * размер лота
+    const quantity = lots * lotsize;
     
     // Валидация количества
-    if (quantity <= 0) {
-        console.warn('Количество должно быть больше 0');
+    if (lots <= 0) {
+        console.warn('Количество лотов должно быть больше 0');
         return;
     }
     
     if (quantity > availableQuantity) {
-        console.warn(`Недостаточно акций для продажи. Доступно: ${availableQuantity}, указано: ${quantity}`);
+        console.warn(`Недостаточно бумаг для продажи. Доступно: ${availableQuantity} (${formatNumber(availableLots)} ${availableLots === 1 ? 'лот' : 'лотов'}), указано: ${quantity} (${lots} ${lots === 1 ? 'лот' : 'лотов'})`);
         return;
     }
     
@@ -2790,8 +2887,8 @@ async function handleSell(e) {
             company_name: companyName,
             operation_type: 'Продажа',
             price: price,
-            quantity: quantity,
-            notes: 'Продажа через кнопку портфеля'
+            quantity: quantity, // Сохраняем количество бумаг (лоты * размер лота)
+            notes: `Продажа через кнопку портфеля: ${lots} ${lots === 1 ? 'лот' : 'лотов'} (${quantity} ${quantity === 1 ? 'бумага' : 'бумаг'})`
         };
         
         const transResponse = await fetch('/api/transactions', {
@@ -3812,3 +3909,182 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 });
+
+/**
+ * Открытие модального окна с информацией о тикере
+ */
+async function openTickerInfoModal(ticker, instrumentType = 'STOCK') {
+    const modal = document.getElementById('ticker-info-modal');
+    const content = document.getElementById('ticker-info-content');
+    const title = document.getElementById('ticker-info-title');
+    
+    if (!modal || !content || !title) return;
+    
+    title.textContent = `Информация о тикере: ${ticker}`;
+    content.innerHTML = '<div class="loading">Загрузка данных...</div>';
+    modal.style.display = 'flex';
+    
+    try {
+        const response = await fetch(`/api/ticker-info/${ticker}?instrument_type=${instrumentType}`);
+        const data = await response.json();
+        
+        if (data.success) {
+            displayTickerInfo(data, ticker, instrumentType);
+        } else {
+            content.innerHTML = `<div class="error-message">Ошибка загрузки данных: ${data.error || 'Неизвестная ошибка'}</div>`;
+        }
+    } catch (error) {
+        console.error('Ошибка загрузки информации о тикере:', error);
+        content.innerHTML = `<div class="error-message">Ошибка загрузки данных: ${error.message}</div>`;
+    }
+}
+
+/**
+ * Закрытие модального окна с информацией о тикере
+ */
+function closeTickerInfoModal() {
+    const modal = document.getElementById('ticker-info-modal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+}
+
+/**
+ * Отображение информации о тикере в модальном окне
+ */
+function displayTickerInfo(data, ticker, instrumentType) {
+    const content = document.getElementById('ticker-info-content');
+    if (!content) return;
+    
+    let html = '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px;">';
+    
+    // Основная информация
+    html += '<div style="background: #f8f9fa; padding: 20px; border-radius: 8px;">';
+    html += '<h3 style="margin-top: 0; color: #1e3a5f;">Основная информация</h3>';
+    html += `<p><strong>Тикер:</strong> ${data.ticker || ticker}</p>`;
+
+    const instrumentLabel = data.instrument_label
+        ? data.instrument_label
+        : (data.instrument_type === 'BOND' ? 'Облигация' : 'Акция');
+    html += `<p><strong>Тип инструмента:</strong> ${instrumentLabel}</p>`;
+    
+    if (data.security) {
+        if (data.security.name) {
+            html += `<p><strong>Название:</strong> ${data.security.name}</p>`;
+        }
+        if (data.security.short_name && data.security.short_name !== data.security.name) {
+            html += `<p><strong>Краткое название:</strong> ${data.security.short_name}</p>`;
+        }
+    }
+    
+    // Параметры торговли (лоты)
+    if (data.security && data.security.trading_params) {
+        const tp = data.security.trading_params;
+        if (tp.lotsize) {
+            html += `<p><strong>Размер лота:</strong> ${formatNumber(tp.lotsize)} ${tp.lotsize == 1 ? 'бумага' : 'бумаг'}</p>`;
+        }
+        if (tp.minstep !== undefined && tp.minstep !== null) {
+            html += `<p><strong>Минимальный шаг цены:</strong> ${formatCurrency(tp.minstep)}</p>`;
+        }
+        if (tp.stepprice !== undefined && tp.stepprice !== null) {
+            html += `<p><strong>Цена шага:</strong> ${formatCurrency(tp.stepprice)}</p>`;
+        }
+    }
+    
+    html += '</div>';
+
+    // Дополнительные поля бумаги из MOEX (description.fields)
+    if (data.security && data.security.fields) {
+        // Словарь основных полей с русскими названиями
+        const fieldNames = {
+            'GROUPNAME': 'Группа инструментов',
+            'ISIN': 'ISIN код',
+            'CURRENCYID': 'Валюта обращения',
+            'FACEVALUE': 'Номинал',
+            'FACEUNIT': 'Валюта номинала',
+            'MATDATE': 'Дата погашения',
+            'COUPONVALUE': 'Размер купона',
+            'COUPONPERIOD': 'Период выплаты купона',
+            'ISSUEDATE': 'Дата выпуска',
+            'ISSUESIZE': 'Размер выпуска',
+            'SECTYPE': 'Тип ценной бумаги',
+            'LISTLEVEL': 'Уровень листинга',
+            'LOTSIZE': 'Размер лота',
+            'DECIMALS': 'Количество знаков после запятой',
+            'PREVPRICE': 'Цена закрытия предыдущего дня',
+            'YIELD': 'Доходность',
+            'ACCRUEDINT': 'Накопленный купонный доход'
+        };
+        
+        const entries = Object.entries(data.security.fields)
+            .filter(([key, value]) =>
+                value !== null &&
+                value !== '' &&
+                !['SECID', 'NAME', 'SHORTNAME'].includes(key)
+            );
+        
+        if (entries.length > 0) {
+            html += '<div style="background: #f8f9fa; padding: 20px; border-radius: 8px;">';
+            html += '<h3 style="margin-top: 0; color: #1e3a5f;">Параметры бумаги (MOEX)</h3>';
+            html += '<ul style="list-style: none; padding-left: 0; margin: 0;">';
+            
+            entries.forEach(([key, value]) => {
+                const displayName = fieldNames[key] || key;
+                html += `<li style="margin: 4px 0;"><strong>${displayName}:</strong> ${value}</li>`;
+            });
+            
+            html += '</ul>';
+            html += '</div>';
+        }
+    }
+    
+    // Котировки
+    if (data.quote) {
+        html += '<div style="background: #f8f9fa; padding: 20px; border-radius: 8px;">';
+        html += '<h3 style="margin-top: 0; color: #1e3a5f;">Текущие котировки</h3>';
+        html += `<p><strong>Текущая цена:</strong> <span style="font-size: 1.2em; font-weight: bold; color: #1e3a5f;">${formatCurrentPrice(data.quote.price)}</span></p>`;
+        
+        const changeColor = data.quote.change >= 0 ? '#27ae60' : '#e74c3c';
+        const changeSign = data.quote.change >= 0 ? '+' : '';
+        html += `<p><strong>Изменение:</strong> <span style="color: ${changeColor}; font-weight: bold;">${changeSign}${formatCurrency(data.quote.change)} (${changeSign}${formatPercent(Math.abs(data.quote.change_percent), 2)})</span></p>`;
+        
+        if (data.quote.volume) {
+            html += `<p><strong>Объем торгов:</strong> ${formatNumber(data.quote.volume)}</p>`;
+        }
+        
+        if (data.quote.last_update) {
+            html += `<p><strong>Последнее обновление:</strong> ${data.quote.last_update}</p>`;
+        }
+        
+        // Для облигаций
+        if (data.quote.facevalue) {
+            html += `<p><strong>Номинал:</strong> ${formatNumber(data.quote.facevalue)} ${data.quote.currency_id || 'RUB'}</p>`;
+        }
+        
+        html += '</div>';
+    }
+    
+    // Информация из портфеля
+    if (data.portfolio) {
+        html += '<div style="background: #f8f9fa; padding: 20px; border-radius: 8px;">';
+        html += '<h3 style="margin-top: 0; color: #1e3a5f;">Информация из портфеля</h3>';
+        html += `<p><strong>Количество:</strong> ${formatNumber(data.portfolio.quantity)}</p>`;
+        if (data.portfolio.average_buy_price) {
+            html += `<p><strong>Средняя цена покупки:</strong> ${formatCurrency(data.portfolio.average_buy_price)}</p>`;
+        }
+        if (data.portfolio.company_name) {
+            html += `<p><strong>Название компании:</strong> ${data.portfolio.company_name}</p>`;
+        }
+        if (data.portfolio.category) {
+            html += `<p><strong>Категория:</strong> ${data.portfolio.category}</p>`;
+        }
+        if (data.portfolio.asset_type) {
+            html += `<p><strong>Вид актива:</strong> ${data.portfolio.asset_type}</p>`;
+        }
+        html += '</div>';
+    }
+    
+    html += '</div>';
+    
+    content.innerHTML = html;
+}
