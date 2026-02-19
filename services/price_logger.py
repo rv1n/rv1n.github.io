@@ -222,7 +222,7 @@ class PriceLogger:
             print(f"Ошибка получения истории цен: {e}")
             return []
     
-    def get_price_history_grouped(self, days=None, date_from=None, date_to=None):
+    def get_price_history_grouped(self, days=None, date_from=None, date_to=None, limit=None):
         """
         Получить историю цен, сгруппированную по датам и тикерам
         
@@ -235,7 +235,13 @@ class PriceLogger:
             Словарь с историей цен, сгруппированной по датам
         """
         try:
-            history = self.get_price_history(ticker=None, days=days, date_from=date_from, date_to=date_to)
+            history = self.get_price_history(
+                ticker=None,
+                days=days,
+                date_from=date_from,
+                date_to=date_to,
+                limit=limit,
+            )
             
             # Группируем по датам
             grouped = {}
