@@ -899,6 +899,14 @@ header h1 {
     text-align: right;
 }
 
+/* В модальном окне управления категориями/видами заголовок и ячейки столбца "Действия" выравниваем по правому краю */
+.manage-categories-content .categories-table th:last-child,
+.manage-categories-content .categories-table td:last-child {
+    text-align: right;
+}
+
+/* В модальном окне управления категориями/видами столбец "Действия" выравниваем по левому краю */
+
 /* Выравнивание столбца с видами активов по левому краю */
 .categories-table th:nth-child(4),
 .categories-table td:nth-child(4) {
