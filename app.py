@@ -112,7 +112,7 @@ def setup_daily_logging_job():
 
 setup_daily_logging_job()
 
-# Добавляем периодическую проверку каждые 3 часа, если записи за сегодня нет
+# Добавляем периодическую проверку в 6, 12, 17, 21 час, если записи за сегодня нет
 def check_and_log_prices():
     """Проверяет, есть ли записи за сегодня, и если нет - логирует цены"""
     from datetime import date, timedelta
@@ -143,54 +143,69 @@ def check_and_log_prices():
 
 scheduler.add_job(
     func=check_and_log_prices,
-    trigger=CronTrigger(hour='*/3', minute=0, timezone='Europe/Moscow'),  # Каждые 3 часа
+    trigger=CronTrigger(hour='6,12,17,21', minute=0, timezone='Europe/Moscow'),  # В 6, 12, 17, 21 час
     id='periodic_price_logging',
-    name='Периодическое логирование цен (каждые 3 часа, если записи нет)',
+    name='Периодическое логирование цен (в 6, 12, 17, 21 час, если записи нет)',
     replace_existing=True
 )
 
 import threading
 
+# Флаг, показывающий, что планировщик был запущен при старте приложения
+# Это позволяет избежать лишних проверок в @app.before_request
+_scheduler_started = False
+_scheduler_lock = threading.Lock()
+
 # Функция для запуска планировщика (вызывается при первом запросе или при прямом запуске)
 def start_scheduler():
     """Запускает планировщик задач, если он еще не запущен"""
+    global _scheduler_started
+    
     if scheduler.running:
-        moscow_time = datetime.now(pytz.timezone('Europe/Moscow'))
-        print(f"[{moscow_time}] Планировщик уже запущен, пропускаем повторный запуск")
+        # Планировщик уже запущен, просто обновляем флаг
+        _scheduler_started = True
         return
     
-    try:
-        moscow_time = datetime.now(pytz.timezone('Europe/Moscow'))
-        print(f"[{moscow_time}] Запуск планировщика...")
-        scheduler.start()
-        hour, minute = get_logging_time()
-        moscow_time = datetime.now(pytz.timezone('Europe/Moscow'))
-        print(f"[{moscow_time}] ===== ПЛАНИРОВЩИК ЗАПУЩЕН =====")
-        print(f"[{moscow_time}] Ежедневное логирование цен в {hour:02d}:{minute:02d} МСК")
-        print(f"[{moscow_time}] Периодическая проверка каждые 3 часа (если записи за сегодня нет)")
-        print(f"[{moscow_time}] Статус планировщика: {scheduler.running}")
-        print(f"[{moscow_time}] Задач в планировщике: {len(scheduler.get_jobs())}")
-        for job in scheduler.get_jobs():
-            next_run = job.next_run_time.strftime('%Y-%m-%d %H:%M:%S %Z') if job.next_run_time else 'Не запланировано'
-            print(f"[{moscow_time}]   - {job.name} (ID: {job.id}), следующее выполнение: {next_run}")
-    except Exception as e:
-        moscow_time = datetime.now(pytz.timezone('Europe/Moscow'))
-        print(f"[{moscow_time}] ОШИБКА запуска планировщика: {e}")
-        import traceback
-        traceback.print_exc()
+    # Используем lock для предотвращения одновременного запуска из разных потоков
+    with _scheduler_lock:
+        # Двойная проверка после получения lock
+        if scheduler.running:
+            _scheduler_started = True
+            return
+        
+        try:
+            moscow_time = datetime.now(pytz.timezone('Europe/Moscow'))
+            print(f"[{moscow_time}] Запуск планировщика...")
+            scheduler.start()
+            _scheduler_started = True
+            hour, minute = get_logging_time()
+            moscow_time = datetime.now(pytz.timezone('Europe/Moscow'))
+            print(f"[{moscow_time}] ===== ПЛАНИРОВЩИК ЗАПУЩЕН =====")
+            print(f"[{moscow_time}] Ежедневное логирование цен в {hour:02d}:{minute:02d} МСК")
+            print(f"[{moscow_time}] Периодическая проверка в 6, 12, 17, 21 час (если записи за сегодня нет)")
+            print(f"[{moscow_time}] Статус планировщика: {scheduler.running}")
+            print(f"[{moscow_time}] Задач в планировщике: {len(scheduler.get_jobs())}")
+            for job in scheduler.get_jobs():
+                next_run = job.next_run_time.strftime('%Y-%m-%d %H:%M:%S %Z') if job.next_run_time else 'Не запланировано'
+                print(f"[{moscow_time}]   - {job.name} (ID: {job.id}), следующее выполнение: {next_run}")
+        except Exception as e:
+            moscow_time = datetime.now(pytz.timezone('Europe/Moscow'))
+            print(f"[{moscow_time}] ОШИБКА запуска планировщика: {e}")
+            import traceback
+            traceback.print_exc()
 
 # Запускаем планировщик при первом запросе к приложению
 # Это нужно для работы с Gunicorn, где if __name__ == '__main__' не выполняется
-# Используем threading.Lock для предотвращения множественного запуска
-_scheduler_lock = threading.Lock()
-
 @app.before_request
 def ensure_scheduler_running():
-    """Убеждаемся, что планировщик запущен при первом запросе"""
+    """Убеждаемся, что планировщик запущен при первом запросе (только для Gunicorn)"""
+    # Если планировщик уже был запущен при старте приложения, пропускаем проверку
+    if _scheduler_started:
+        return
+    
+    # Запускаем только если планировщик не запущен
     if not scheduler.running:
-        with _scheduler_lock:
-            if not scheduler.running:  # Двойная проверка
-                start_scheduler()
+        start_scheduler()
 
 @app.route('/')
 def index():
