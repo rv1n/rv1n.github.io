@@ -1491,8 +1491,7 @@ function formatCurrency(value) {
 /**
  * Форматирование цен в истории:
  * - для акций показываем в рублях (как и раньше)
- * - для облигаций показываем цену в процентах от номинала (как на MOEX),
- *   чтобы не вводить в заблуждение символом ₽, особенно для бумаг не в рублях
+ * - для облигаций показываем цену в рублях (конвертированную из валюты номинала)
  */
 function formatHistoryPrice(item) {
     if (!item) return '-';
@@ -1501,15 +1500,32 @@ function formatHistoryPrice(item) {
     const instrumentType = item.instrument_type; // 'Акция' или 'Облигация'
 
     if (instrumentType === 'Облигация') {
-        if (price === null || price === undefined) {
-            return '-';
+        // Для облигаций используем цену в рублях, которая уже конвертирована на сервере
+        const priceRub = item.price_rub;
+        
+        if (priceRub === null || priceRub === undefined || priceRub === 0) {
+            // Если price_rub не задан, конвертируем сами (fallback)
+            const pricePercent = item.price;
+            if (pricePercent === null || pricePercent === undefined) {
+                return '-';
+            }
+            const bondFacevalue = item.bond_facevalue || 1000.0;
+            const bondCurrency = item.bond_currency || 'SUR';
+            const priceInNominal = (Number(pricePercent) * bondFacevalue) / 100;
+            // Если валюта не рубли, не можем конвертировать на клиенте - показываем как есть
+            if (bondCurrency === 'SUR' || bondCurrency === 'RUB') {
+                return formatCurrency(priceInNominal);
+            } else {
+                // Fallback: показываем в валюте номинала
+                return `${priceInNominal.toFixed(2)} ${bondCurrency}`;
+            }
         }
-        const num = Number(price);
+        const num = Number(priceRub);
         if (isNaN(num)) {
             return '-';
         }
-        // Пример: 102.35%
-        return `${num.toFixed(2)}%`;
+        // Форматируем в рублях
+        return formatCurrency(num);
     }
 
     // Для акций и остальных инструментов оставляем форматирование в рублях

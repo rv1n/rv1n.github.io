@@ -505,12 +505,19 @@ def get_portfolio():
             # Рассчитываем изменение: разница между предыдущей и последней ценой
             # Для облигаций цены в истории хранятся в процентах, для акций - в рублях
             if latest_price is not None and previous_price is not None:
-                # Для облигаций переводим из процентов в рубли
+                # Для облигаций рассчитываем изменение
                 if instrument_type == 'BOND':
-                    latest_price_rub = (latest_price * bond_nominal) / 100
-                    previous_price_rub = (previous_price * bond_nominal) / 100
-                    price_change = latest_price_rub - previous_price_rub
-                    price_change_percent = (price_change / previous_price_rub * 100) if previous_price_rub > 0 else 0
+                    # Для облигаций процентное изменение рассчитывается ПРЯМО из процентов
+                    # (не через конвертацию в валюту номинала)
+                    price_change_percent = latest_price - previous_price
+                    
+                    # Изменение в деньгах: переводим проценты в цену в валюте номинала
+                    latest_price_in_nominal = (latest_price * bond_nominal) / 100
+                    previous_price_in_nominal = (previous_price * bond_nominal) / 100
+                    # Изменение в валюте номинала
+                    price_change_in_nominal = latest_price_in_nominal - previous_price_in_nominal
+                    # Пока что price_change в валюте номинала, конвертация в рубли будет ниже
+                    price_change = price_change_in_nominal
                 else:
                     price_change = latest_price - previous_price
                     price_change_percent = (price_change / previous_price * 100) if previous_price > 0 else 0
@@ -550,9 +557,8 @@ def get_portfolio():
             
             # Для облигаций переводим price_change в рубли с учетом валюты номинала
             if instrument_type == 'BOND':
-                # price_change уже рассчитан как разница в валюте номинала (строки 425-427)
+                # price_change уже рассчитан как разница в валюте номинала (строки 512-513)
                 # Теперь нужно применить конвертацию валюты, если валюта не RUB
-                price_change_in_nominal_currency = price_change
                 if bond_currency and bond_currency != 'SUR' and bond_currency != 'RUB':
                     try:
                         fx_rate_change = currency_service.get_rate_to_rub(bond_currency)
@@ -560,7 +566,7 @@ def get_portfolio():
                         fx_rate_change = 1.0
                 else:
                     fx_rate_change = 1.0
-                price_change_rub = price_change_in_nominal_currency * fx_rate_change
+                price_change_rub = price_change * fx_rate_change
             else:
                 price_change_rub = price_change
             
@@ -1579,12 +1585,97 @@ def get_price_history():
             # История для всех тикеров, сгруппированная по датам
             history = price_logger.get_price_history_grouped(**filter_params)
         
-        return jsonify({
+        # Для облигаций добавляем информацию о номинале и валюте из портфеля
+        # и конвертируем цену в рубли
+        # Создаем словарь с данными об облигациях из портфеля
+        bond_info = {}
+        # Получаем все облигации из портфеля
+        portfolio_items = db_session.query(Portfolio).all()
+        for item in portfolio_items:
+            # Проверяем, является ли инструмент облигацией
+            is_bond = False
+            if hasattr(item, 'instrument_type') and item.instrument_type:
+                if isinstance(item.instrument_type, InstrumentType):
+                    is_bond = item.instrument_type == InstrumentType.BOND
+                elif isinstance(item.instrument_type, str):
+                    is_bond = item.instrument_type == 'Облигация' or item.instrument_type == 'BOND'
+            
+            # Также проверяем по тикеру (облигации обычно начинаются с RU или SU и длинные)
+            if not is_bond and (item.ticker.startswith('RU') or item.ticker.startswith('SU')) and len(item.ticker) > 10:
+                is_bond = True
+            
+            if is_bond:
+                ticker_key = item.ticker.upper()  # Нормализуем тикер
+                bond_facevalue = item.bond_facevalue if hasattr(item, 'bond_facevalue') and item.bond_facevalue else 1000.0
+                bond_currency = item.bond_currency if hasattr(item, 'bond_currency') and item.bond_currency else 'SUR'
+                bond_info[ticker_key] = {
+                    'bond_facevalue': bond_facevalue,
+                    'bond_currency': bond_currency
+                }
+        
+        # Добавляем информацию о номинале и валюте к каждому элементу истории
+        # и конвертируем цену в рубли для облигаций
+        def process_history_item(item):
+            if item.get('instrument_type') == 'Облигация':
+                ticker = item.get('ticker', '').upper()  # Нормализуем тикер
+                if ticker in bond_info:
+                    bond_facevalue = bond_info[ticker]['bond_facevalue']
+                    bond_currency = bond_info[ticker]['bond_currency']
+                else:
+                    # Значения по умолчанию, если облигация не в портфеле
+                    bond_facevalue = 1000.0
+                    bond_currency = 'SUR'
+                
+                # Конвертируем проценты в цену в валюте номинала
+                price_percent = item.get('price', 0)
+                if price_percent:
+                    price_in_nominal_currency = (price_percent * bond_facevalue) / 100
+                else:
+                    price_in_nominal_currency = 0
+                
+                # Конвертируем в рубли, если валюта не RUB/SUR
+                if bond_currency and bond_currency != 'SUR' and bond_currency != 'RUB':
+                    try:
+                        fx_rate = currency_service.get_rate_to_rub(bond_currency)
+                        if fx_rate and fx_rate > 0:
+                            price_in_rub = price_in_nominal_currency * fx_rate
+                        else:
+                            # Если курс не получен или равен 0, используем цену как есть
+                            print(f"[WARNING] Некорректный курс для {bond_currency}: {fx_rate}, используем цену в валюте номинала")
+                            price_in_rub = price_in_nominal_currency
+                    except Exception as e:
+                        # Если не удалось получить курс, используем цену как есть
+                        print(f"[WARNING] Не удалось получить курс для {bond_currency}: {e}, используем цену в валюте номинала")
+                        price_in_rub = price_in_nominal_currency
+                else:
+                    price_in_rub = price_in_nominal_currency
+                
+                # Сохраняем оригинальную цену в процентах и добавляем цену в рублях
+                # Всегда добавляем price_rub для облигаций
+                item['price_rub'] = round(price_in_rub, 2) if price_in_rub else 0
+        
+        if isinstance(history, list):
+            # История для конкретного тикера
+            for item in history:
+                process_history_item(item)
+        elif isinstance(history, dict):
+            # Сгруппированная история
+            for date_key in history:
+                if isinstance(history[date_key], list):
+                    for item in history[date_key]:
+                        process_history_item(item)
+        
+        response = jsonify({
             'success': True,
             'history': history,
             'ticker': ticker,
             'filters': filter_params
         })
+        # Отключаем кэширование, чтобы всегда получать актуальные данные с конвертацией
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+        return response
         
     except Exception as e:
         return jsonify({
