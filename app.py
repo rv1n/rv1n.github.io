@@ -122,10 +122,16 @@ def check_and_log_prices():
 
     # В установленное время отдельная задача daily_price_logging сама пишет цены.
     # Чтобы не было двойной записи, периодическая проверка в этот момент ничего не делает.
+    # Используем окно ±1 минута для предотвращения конфликтов
     logging_hour, logging_minute = get_logging_time()
-    if now_moscow.hour == logging_hour and now_moscow.minute == logging_minute:
-        print(f"[{now_moscow}] Периодическая проверка пропущена (сработает ежедневное логирование в {logging_hour:02d}:{logging_minute:02d})")
-        return
+    current_minute = now_moscow.minute
+    current_hour = now_moscow.hour
+    
+    # Проверяем, не находимся ли мы в окне ±1 минута от времени ежедневного логирования
+    if current_hour == logging_hour:
+        if abs(current_minute - logging_minute) <= 1:
+            print(f"[{now_moscow}] Периодическая проверка пропущена (сработает ежедневное логирование в {logging_hour:02d}:{logging_minute:02d})")
+            return
     today_start = now_moscow.replace(hour=0, minute=0, second=0, microsecond=0)
     today_end = today_start + timedelta(days=1)
     
@@ -376,40 +382,125 @@ def get_portfolio():
             previous_price = None
 
             if change_days and change_days > 0:
-                # Для периода считаем "окном" от последней сохраненной цены назад на N дней.
-                # Это корректнее, чем от текущего времени, если логирование не каждый день.
-                latest_entry = db_session.query(PriceHistory).filter(
-                    PriceHistory.ticker == item.ticker
-                ).order_by(PriceHistory.logged_at.desc()).first()
-
-                if latest_entry:
-                    end_time = latest_entry.logged_at
-                    period_start = end_time - timedelta(days=change_days)
-
-                    history_entries = db_session.query(PriceHistory).filter(
+                # Для периода считаем изменение
+                # Если change_days = 1, используем специальную логику: последняя запись за сегодня vs последняя за вчера
+                if change_days == 1:
+                    # Специальная логика для "изменение за день"
+                    now_moscow = datetime.now(pytz.timezone('Europe/Moscow'))
+                    today_start = now_moscow.replace(hour=0, minute=0, second=0, microsecond=0)
+                    yesterday_start = today_start - timedelta(days=1)
+                    yesterday_end = today_start
+                    
+                    # Последняя запись за сегодня
+                    latest_entry_today = db_session.query(PriceHistory).filter(
                         PriceHistory.ticker == item.ticker,
-                        PriceHistory.logged_at >= period_start,
-                        PriceHistory.logged_at <= end_time
-                    ).order_by(PriceHistory.logged_at.asc()).all()
+                        PriceHistory.logged_at >= today_start
+                    ).order_by(PriceHistory.logged_at.desc()).first()
+                    
+                    # Последняя запись за вчера
+                    latest_entry_yesterday = db_session.query(PriceHistory).filter(
+                        PriceHistory.ticker == item.ticker,
+                        PriceHistory.logged_at >= yesterday_start,
+                        PriceHistory.logged_at < yesterday_end
+                    ).order_by(PriceHistory.logged_at.desc()).first()
+                    
+                    if latest_entry_today and latest_entry_yesterday:
+                        # Есть записи за сегодня и за вчера - сравниваем их
+                        latest_price = latest_entry_today.price
+                        previous_price = latest_entry_yesterday.price
+                    elif latest_entry_today:
+                        # Есть запись за сегодня, но нет за вчера - ищем любую предыдущую запись
+                        latest_price = latest_entry_today.price
+                        any_previous = db_session.query(PriceHistory).filter(
+                            PriceHistory.ticker == item.ticker,
+                            PriceHistory.logged_at < latest_entry_today.logged_at
+                        ).order_by(PriceHistory.logged_at.desc()).first()
+                        if any_previous:
+                            previous_price = any_previous.price
+                        else:
+                            previous_price = latest_price  # Нет предыдущей - изменение = 0
+                    elif latest_entry_yesterday:
+                        # Нет записи за сегодня, но есть за вчера
+                        latest_price = latest_entry_yesterday.price
+                        previous_price = latest_entry_yesterday.price  # Изменение = 0
+                    else:
+                        # Нет записей за сегодня и за вчера
+                        latest_price = None
+                        previous_price = None
+                else:
+                    # Для других периодов (неделя, месяц и т.д.) используем логику периода
+                    # Для периода считаем "окном" от последней сохраненной цены назад на N дней.
+                    latest_entry = db_session.query(PriceHistory).filter(
+                        PriceHistory.ticker == item.ticker
+                    ).order_by(PriceHistory.logged_at.desc()).first()
 
-                    if len(history_entries) >= 2:
-                        previous_price = history_entries[0].price
-                        latest_price = history_entries[-1].price
-                    elif len(history_entries) == 1:
-                        # Только одна запись за период — считаем, что изменения нет
-                        latest_price = history_entries[0].price
-                        previous_price = history_entries[0].price
+                    if latest_entry:
+                        end_time = latest_entry.logged_at
+                        period_start = end_time - timedelta(days=change_days)
+
+                        history_entries = db_session.query(PriceHistory).filter(
+                            PriceHistory.ticker == item.ticker,
+                            PriceHistory.logged_at >= period_start,
+                            PriceHistory.logged_at <= end_time
+                        ).order_by(PriceHistory.logged_at.asc()).all()
+
+                        if len(history_entries) >= 2:
+                            previous_price = history_entries[0].price
+                            latest_price = history_entries[-1].price
+                        elif len(history_entries) == 1:
+                            # Только одна запись за период — считаем, что изменения нет
+                            latest_price = history_entries[0].price
+                            previous_price = history_entries[0].price
+                        else:
+                            latest_price = None
+                            previous_price = None
+                    else:
+                        latest_price = None
+                        previous_price = None
             else:
-                last_two_entries = db_session.query(PriceHistory).filter(
-                    PriceHistory.ticker == item.ticker
-                ).order_by(PriceHistory.logged_at.desc()).limit(2).all()
-
-                if len(last_two_entries) >= 2:
-                    latest_price = last_two_entries[0].price
-                    previous_price = last_two_entries[1].price
-                elif len(last_two_entries) == 1:
-                    latest_price = last_two_entries[0].price
-                    previous_price = last_two_entries[0].price
+                # Для расчета изменения за день берем последнюю цену ЗА СЕГОДНЯ из истории
+                # и последнюю цену ЗА ВЧЕРА из истории
+                now_moscow = datetime.now(pytz.timezone('Europe/Moscow'))
+                today_start = now_moscow.replace(hour=0, minute=0, second=0, microsecond=0)
+                yesterday_start = today_start - timedelta(days=1)
+                yesterday_end = today_start
+                
+                # Последняя запись за сегодня
+                latest_entry_today = db_session.query(PriceHistory).filter(
+                    PriceHistory.ticker == item.ticker,
+                    PriceHistory.logged_at >= today_start
+                ).order_by(PriceHistory.logged_at.desc()).first()
+                
+                # Последняя запись за вчера
+                latest_entry_yesterday = db_session.query(PriceHistory).filter(
+                    PriceHistory.ticker == item.ticker,
+                    PriceHistory.logged_at >= yesterday_start,
+                    PriceHistory.logged_at < yesterday_end
+                ).order_by(PriceHistory.logged_at.desc()).first()
+                
+                if latest_entry_today and latest_entry_yesterday:
+                    # Есть записи за сегодня и за вчера - сравниваем их
+                    latest_price = latest_entry_today.price
+                    previous_price = latest_entry_yesterday.price
+                elif latest_entry_today:
+                    # Есть запись за сегодня, но нет за вчера - ищем любую предыдущую запись
+                    latest_price = latest_entry_today.price
+                    any_previous = db_session.query(PriceHistory).filter(
+                        PriceHistory.ticker == item.ticker,
+                        PriceHistory.logged_at < latest_entry_today.logged_at
+                    ).order_by(PriceHistory.logged_at.desc()).first()
+                    if any_previous:
+                        previous_price = any_previous.price
+                    else:
+                        previous_price = latest_price  # Нет предыдущей - изменение = 0
+                elif latest_entry_yesterday:
+                    # Нет записи за сегодня, но есть за вчера
+                    latest_price = latest_entry_yesterday.price
+                    previous_price = latest_entry_yesterday.price  # Изменение = 0
+                else:
+                    # Нет записей за сегодня и за вчера
+                    latest_price = None
+                    previous_price = None
 
             # Рассчитываем изменение: разница между предыдущей и последней ценой
             # Для облигаций цены в истории хранятся в процентах, для акций - в рублях
@@ -457,11 +548,11 @@ def get_portfolio():
             profit_loss = total_current_value - total_buy_cost
             profit_loss_percent = ((current_price_rub - avg_price_rub) / avg_price_rub * 100) if avg_price_rub > 0 else 0
             
-            # Для облигаций переводим price_change из процентов в рубли с учетом валюты номинала
+            # Для облигаций переводим price_change в рубли с учетом валюты номинала
             if instrument_type == 'BOND':
-                # price_change здесь считается как разница цен (latest - previous) в валюте номинала,
-                # умноженная на номинал и делённая на 100.
-                price_change_in_nominal_currency = (price_change * bond_nominal) / 100
+                # price_change уже рассчитан как разница в валюте номинала (строки 425-427)
+                # Теперь нужно применить конвертацию валюты, если валюта не RUB
+                price_change_in_nominal_currency = price_change
                 if bond_currency and bond_currency != 'SUR' and bond_currency != 'RUB':
                     try:
                         fx_rate_change = currency_service.get_rate_to_rub(bond_currency)

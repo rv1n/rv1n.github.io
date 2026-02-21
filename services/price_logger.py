@@ -7,6 +7,7 @@ from models.portfolio import Portfolio
 from models.price_history import PriceHistory
 from services.moex_service import MOEXService
 import pytz
+import threading
 
 
 class PriceLogger:
@@ -19,6 +20,7 @@ class PriceLogger:
     def __init__(self, moex_service: MOEXService):
         self.moex_service = moex_service
         self.moscow_tz = pytz.timezone('Europe/Moscow')
+        self._logging_lock = threading.Lock()  # Защита от одновременного выполнения
     
     def log_all_prices(self, force=False):
         """
@@ -30,10 +32,16 @@ class PriceLogger:
         Args:
             force: Если True, логирует цены даже если запись за сегодня уже есть
         """
-        moscow_time = datetime.now(self.moscow_tz)
-        print(f"[{moscow_time}] ===== НАЧАЛО ЛОГИРОВАНИЯ ЦЕН =====")
-        print(f"[{moscow_time}] Принудительное логирование: {force}")
+        # Защита от одновременного выполнения
+        if not self._logging_lock.acquire(blocking=False):
+            moscow_time = datetime.now(self.moscow_tz)
+            print(f"[{moscow_time}] Логирование уже выполняется, пропускаем дубликат")
+            return
+        
         try:
+            moscow_time = datetime.now(self.moscow_tz)
+            print(f"[{moscow_time}] ===== НАЧАЛО ЛОГИРОВАНИЯ ЦЕН =====")
+            print(f"[{moscow_time}] Принудительное логирование: {force}")
             from datetime import date, timedelta
             
             # Получаем все уникальные тикеры из портфеля
@@ -128,6 +136,23 @@ class PriceLogger:
                         price_change = 0
                         price_change_percent = 0
                     
+                    # Проверяем, нет ли уже записи для этого тикера в текущей минуте
+                    # Это предотвращает дублирование при одновременных вызовах
+                    now_moscow = datetime.now(self.moscow_tz)
+                    current_minute_start = now_moscow.replace(second=0, microsecond=0)
+                    current_minute_end = current_minute_start.replace(second=59, microsecond=999999)
+                    
+                    existing_in_minute = db_session.query(PriceHistory).filter(
+                        PriceHistory.ticker == ticker,
+                        PriceHistory.logged_at >= current_minute_start,
+                        PriceHistory.logged_at <= current_minute_end
+                    ).first()
+                    
+                    if existing_in_minute and not force:
+                        skipped_count += 1
+                        print(f"[{datetime.now(self.moscow_tz)}] Пропуск {ticker}: запись уже существует в текущей минуте")
+                        continue
+                    
                     # Создаем запись в истории
                     from models.portfolio import InstrumentType
                     instrument_type_enum = InstrumentType[used_instrument_type] if used_instrument_type in ['STOCK', 'BOND'] else InstrumentType.STOCK
@@ -168,6 +193,9 @@ class PriceLogger:
             import traceback
             traceback.print_exc()
             db_session.rollback()
+        finally:
+            # Всегда освобождаем lock
+            self._logging_lock.release()
     
     def get_price_history(self, ticker=None, days=None, date_from=None, date_to=None, limit=None):
         """

@@ -1,0 +1,108 @@
+================================================================================
+OpenWRT: Squid-прокси + nfqws2 (трафик через NFQUEUE в интернет)
+Использование с Windows через VMware NAT
+================================================================================
+
+--- ЧАСТЬ 1: Прокси на OpenWRT, Windows использует его ---
+
+1) Установка и базовая настройка Squid на OpenWRT
+-------------------------------------------------
+opkg update
+opkg install squid
+
+# Проверить UID пользователя Squid (запомнить для части 2)
+id proxy
+# или: id squid
+
+# Базовый конфиг: /etc/squid/squid.conf — разрешить доступ и слушать на всех интерфейсах
+# Пример минимально:
+# http_port 3128
+# acl localnet src 0.0.0.0/0
+# http_access allow localnet
+
+/etc/init.d/squid restart
+/etc/init.d/squid enable
+
+
+2) Узнать IP OpenWRT в сети VMware (NAT)
+----------------------------------------
+# На OpenWRT:
+ip addr
+# или: ifconfig
+# Записать IP интерфейса (eth0/br-lan), например 192.168.137.128
+
+
+3) Настройка прокси в Windows
+-----------------------------
+Параметры → Сеть и Интернет → Прокси:
+  Включить "Использовать прокси-сервер"
+  Адрес: <IP OpenWRT из п.2>, например 192.168.137.128
+  Порт: 3128
+
+
+--- ЧАСТЬ 2: Прокидывание трафика Squid через nfqws2 в интернет ---
+
+4) Установка nfqws2
+-------------------
+# Сборка/установка из goodbyedpi или своего репозитория на OpenWRT
+# Убедиться, что бинарник nfqws2 в PATH (например /usr/sbin/nfqws2)
+
+
+5) iptables: трафик Squid → NFQUEUE
+-----------------------------------
+# Подставить свой UID Squid (из п.1), очередь 0
+SQUID_UID=65534
+QUEUE=0
+
+# Удалить старое правило (если было)
+iptables -t mangle -D OUTPUT -m owner --uid-owner $SQUID_UID -j NFQUEUE --queue-num $QUEUE 2>/dev/null
+
+# Направить исходящий трафик Squid в nfqws2
+iptables -t mangle -A OUTPUT -m owner --uid-owner $SQUID_UID -j NFQUEUE --queue-num $QUEUE
+
+
+6) Запуск nfqws2
+----------------
+nfqws2 --queue-num 0
+
+# С опциями (если нужно):
+# nfqws2 --queue-num 0 --blacklist /etc/nfqws2-blacklist.txt
+
+
+--- Скрипт для автозапуска правил и nfqws2 (опционально) ---
+
+Создать /etc/init.d/nfqws2-squid:
+
+#!/bin/sh /etc/rc.common
+
+START=95
+STOP=10
+
+SQUID_UID=65534
+QUEUE=0
+
+start() {
+    iptables -t mangle -A OUTPUT -m owner --uid-owner $SQUID_UID -j NFQUEUE --queue-num $QUEUE 2>/dev/null
+    /usr/sbin/nfqws2 --queue-num $QUEUE &
+}
+
+stop() {
+    iptables -t mangle -D OUTPUT -m owner --uid-owner $SQUID_UID -j NFQUEUE --queue-num $QUEUE 2>/dev/null
+    killall nfqws2 2>/dev/null
+}
+
+Потом:
+chmod +x /etc/init.d/nfqws2-squid
+/etc/init.d/nfqws2-squid enable
+/etc/init.d/nfqws2-squid start
+
+
+--- Проверка ---
+
+На OpenWRT:
+  curl -x http://127.0.0.1:3128 http://example.com
+
+На Windows (прокси = IP OpenWRT:3128):
+  браузер или: curl -x http://<IP_OPENWRT>:3128 http://example.com
+
+================================================================================
