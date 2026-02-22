@@ -101,28 +101,66 @@ class MOEXService:
         if cached_data:
             return cached_data
         
-        # Формируем URL для запроса в зависимости от типа инструмента
-        market = 'bonds' if instrument_type == 'BOND' else 'shares'
-        url = f"{self.BASE_URL}/engines/stock/markets/{market}/securities/{ticker}.json"
+        # Универсальный подход: пробуем разные рынки, если первый не дал результата
+        # Список рынков для проверки: shares, bonds, currency/selt (драгоценные металлы), currency/indices (валютные индексы)
+        markets_to_try = []
         
-        # Параметры запроса: получаем данные о последней сделке
-        params = {
-            'iss.meta': 'off',  # Отключаем метаданные для ускорения
-            'iss.json': 'extended',  # Расширенный формат JSON
-            'securities.columns': 'SECID,LAST,OPEN,CHANGE,LASTTOPREVPRICE,VALTODAY',
-            'marketdata.columns': 'LAST,OPEN,CHANGE,LASTTOPREVPRICE,VALTODAY'
-        }
-        
-        # Для облигаций добавляем запрос marketdata_yields (содержит цену в процентах)
-        # и запрашиваем информацию о номинале и валюте номинала
         if instrument_type == 'BOND':
-            params['marketdata_yields.columns'] = 'SECID,PRICE,WAPRICE'
-            # FACEUNIT — валюта номинала (то, что на сайте отображается как "Валюта номинала")
-            params['securities.columns'] = 'SECID,LAST,OPEN,CHANGE,LASTTOPREVPRICE,VALTODAY,FACEVALUE,CURRENCYID,FACEUNIT'
+            markets_to_try.append(('stock', 'bonds'))
+        else:
+            markets_to_try.append(('stock', 'shares'))
         
-        data = self._make_request(url, params)
+        # Добавляем альтернативные рынки для поиска
+        markets_to_try.extend([
+            ('stock', 'shares'),  # Пробуем shares, если был BOND
+            ('stock', 'bonds'),  # Пробуем bonds, если был STOCK
+            ('currency', 'selt'),  # Драгоценные металлы (GOLD и т.д.)
+            ('currency', 'indices'),  # Валютные индексы (CNYM и т.д.)
+        ])
+        
+        # Убираем дубликаты, сохраняя порядок
+        seen = set()
+        unique_markets = []
+        for market in markets_to_try:
+            if market not in seen:
+                seen.add(market)
+                unique_markets.append(market)
+        
+        data = None
+        used_market = None
+        
+        # Пробуем каждый рынок, пока не найдем данные
+        for engine, market in unique_markets:
+            url = f"{self.BASE_URL}/engines/{engine}/markets/{market}/securities/{ticker}.json"
+            
+            # Параметры запроса: получаем данные о последней сделке
+            # Добавляем MARKETPRICE, CLOSEPRICE, WAPRICE для случаев, когда LAST null (ETF, драгоценные металлы)
+            params = {
+                'iss.meta': 'off',
+                'iss.json': 'extended',
+                'securities.columns': 'SECID,LAST,OPEN,CHANGE,LASTTOPREVPRICE,VALTODAY,PREVPRICE,PREVLEGALCLOSEPRICE',
+                'marketdata.columns': 'LAST,OPEN,CHANGE,LASTTOPREVPRICE,VALTODAY,MARKETPRICE,CLOSEPRICE,WAPRICE'
+            }
+            
+            # Для облигаций добавляем запрос marketdata_yields
+            if market == 'bonds':
+                params['marketdata_yields.columns'] = 'SECID,PRICE,WAPRICE'
+                params['securities.columns'] = 'SECID,LAST,OPEN,CHANGE,LASTTOPREVPRICE,VALTODAY,FACEVALUE,CURRENCYID,FACEUNIT'
+            
+            data = self._make_request(url, params)
+            
+            # Проверяем, есть ли данные
+            if data and len(data) >= 2:
+                data_dict = data[1]
+                # Проверяем, есть ли хотя бы securities или marketdata
+                if data_dict.get('securities') or data_dict.get('marketdata'):
+                    used_market = (engine, market)
+                    break
         
         if not data:
+            # Логируем только если это не стандартный рынок (чтобы не засорять логи)
+            if ticker in ['GOLD', 'CNYM'] or instrument_type not in ['STOCK', 'BOND']:
+                print(f"[MOEXService] Не удалось получить данные для {ticker} ни на одном из рынков: {[f'{e}/{m}' for e, m in unique_markets]}")
             return None
         
         try:
@@ -148,8 +186,8 @@ class MOEXService:
                         marketdata_dict = item
                         break
             
-            # Для облигаций проверяем marketdata_yields, если LAST пустой
-            if instrument_type == 'BOND' and (not marketdata_dict.get('LAST') or marketdata_dict.get('LAST') == ''):
+            # Для облигаций (только если использовался рынок bonds) проверяем marketdata_yields, если LAST пустой
+            if used_market and used_market[1] == 'bonds' and (not marketdata_dict.get('LAST') or marketdata_dict.get('LAST') == ''):
                 if marketdata_yields_table and isinstance(marketdata_yields_table, list):
                     # Берем последний элемент с данными
                     for item in reversed(marketdata_yields_table):
@@ -170,8 +208,25 @@ class MOEXService:
                     if isinstance(last_item, dict):
                         securities_dict = last_item
             
+            # Для некоторых инструментов (драгоценные металлы, валютные индексы) может не быть marketdata, используем securities
+            if (not marketdata_dict.get('LAST') or marketdata_dict.get('LAST') == '') and securities_dict.get('LAST'):
+                # Используем данные из securities, если marketdata пустой
+                marketdata_dict = securities_dict.copy()
+            
             # Получаем цену (приоритет marketdata, затем securities)
-            last_price = marketdata_dict.get('LAST') or securities_dict.get('LAST')
+            # Пробуем разные поля в порядке приоритета
+            last_price = (
+                marketdata_dict.get('LAST') or 
+                marketdata_dict.get('MARKETPRICE') or  # Рыночная цена (для ETF когда LAST null)
+                marketdata_dict.get('CLOSEPRICE') or  # Цена закрытия
+                marketdata_dict.get('WAPRICE') or     # Средневзвешенная цена
+                securities_dict.get('LAST') or
+                securities_dict.get('PREVPRICE') or   # Предыдущая цена закрытия
+                securities_dict.get('PREVLEGALCLOSEPRICE') or  # Предыдущая официальная цена закрытия
+                securities_dict.get('PRICE') or
+                securities_dict.get('WAPRICE') or
+                securities_dict.get('CLOSE')
+            )
             
             if last_price is None or last_price == '':
                 return None
@@ -224,8 +279,8 @@ class MOEXService:
                 'last_update': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             }
             
-            # Для облигаций добавляем информацию о номинале и валюте
-            if instrument_type == 'BOND':
+            # Для облигаций (только если использовался рынок bonds) добавляем информацию о номинале и валюте
+            if used_market and used_market[1] == 'bonds':
                 facevalue = securities_dict.get('FACEVALUE')
                 # FACEUNIT — валюта номинала (USD для RU000A105SG2 и т.п.)
                 face_unit = securities_dict.get('FACEUNIT')

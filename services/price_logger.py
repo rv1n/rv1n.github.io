@@ -114,7 +114,7 @@ class PriceLogger:
                             break
                     
                     if not quote_data:
-                        print(f"[{datetime.now(self.moscow_tz)}] Не удалось получить данные для {ticker}")
+                        print(f"[{datetime.now(self.moscow_tz)}] Не удалось получить данные для {ticker} (пробовали типы: {types_to_try})")
                         continue
                     
                     current_price = quote_data.get('price', 0)
