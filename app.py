@@ -1575,8 +1575,14 @@ def get_price_history():
         elif not date_from and not date_to:
             filter_params['days'] = 30  # По умолчанию 30 дней
         
+        # Устанавливаем ограничение по умолчанию, если не указано явно
         if limit:
             filter_params['limit'] = limit
+        else:
+            # По умолчанию ограничиваем до 500 записей для всех тикеров
+            # Для конкретного тикера ограничение не ставим, чтобы показать всю историю
+            if not ticker:
+                filter_params['limit'] = 500
         
         if ticker:
             # История для конкретного тикера

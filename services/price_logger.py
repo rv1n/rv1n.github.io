@@ -253,33 +253,78 @@ class PriceLogger:
     def get_price_history_grouped(self, days=None, date_from=None, date_to=None, limit=None):
         """
         Получить историю цен, сгруппированную по датам и тикерам
+        Для каждого тикера в каждый день оставляется только последняя запись
         
         Args:
             days: Количество дней истории (если не указаны date_from/date_to)
             date_from: Дата начала (формат: YYYY-MM-DD)
             date_to: Дата окончания (формат: YYYY-MM-DD)
+            limit: Максимальное количество записей (опционально)
             
         Returns:
             Словарь с историей цен, сгруппированной по датам
         """
         try:
+            # Увеличиваем лимит, чтобы получить больше данных для дедупликации
+            # После дедупликации останется меньше записей
+            query_limit = limit * 3 if limit else None
+            
             history = self.get_price_history(
                 ticker=None,
                 days=days,
                 date_from=date_from,
                 date_to=date_to,
-                limit=limit,
+                limit=query_limit,
             )
+            
+            # Дедуплицируем: для каждого тикера в каждый день оставляем только последнюю запись
+            # Используем словарь (date, ticker) -> последняя запись
+            deduplicated = {}
+            for item in history:
+                date = item['logged_at'].split(' ')[0]  # Только дата
+                ticker = item.get('ticker', '')
+                key = (date, ticker)
+                
+                # Если записи для этого ключа еще нет, или текущая запись новее - сохраняем её
+                if key not in deduplicated:
+                    deduplicated[key] = item
+                else:
+                    # Сравниваем время: если текущая запись новее, заменяем
+                    current_time = item.get('logged_at', '')
+                    existing_time = deduplicated[key].get('logged_at', '')
+                    if current_time > existing_time:
+                        deduplicated[key] = item
             
             # Группируем по датам
             grouped = {}
-            for item in history:
-                date = item['logged_at'].split(' ')[0]  # Только дата
-                
+            for (date, ticker), item in deduplicated.items():
                 if date not in grouped:
                     grouped[date] = []
-                
                 grouped[date].append(item)
+            
+            # Сортируем записи в каждой дате по времени (от новых к старым)
+            for date in grouped:
+                grouped[date].sort(key=lambda x: x.get('logged_at', ''), reverse=True)
+            
+            # Если был указан limit, ограничиваем общее количество записей
+            if limit:
+                total_items = sum(len(items) for items in grouped.values())
+                if total_items > limit:
+                    # Сортируем даты по убыванию и ограничиваем количество
+                    sorted_dates = sorted(grouped.keys(), reverse=True)
+                    remaining = limit
+                    result = {}
+                    for date in sorted_dates:
+                        if remaining <= 0:
+                            break
+                        items = grouped[date]
+                        if len(items) <= remaining:
+                            result[date] = items
+                            remaining -= len(items)
+                        else:
+                            result[date] = items[:remaining]
+                            break
+                    return result
             
             return grouped
             
