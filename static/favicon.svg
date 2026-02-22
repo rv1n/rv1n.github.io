@@ -1,9 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
-  <!-- Простой favicon с эмодзи 📈 без фона (прозрачный) -->
+  <!-- Простой favicon с эмодзи 💼 без фона (прозрачный) -->
   <text x="50" y="62"
         text-anchor="middle"
         dominant-baseline="middle"
         font-size="64">
-    📈
+    💼
   </text>
 </svg>

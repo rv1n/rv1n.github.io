@@ -135,17 +135,18 @@ class MOEXService:
             
             # Параметры запроса: получаем данные о последней сделке
             # Добавляем MARKETPRICE, CLOSEPRICE, WAPRICE для случаев, когда LAST null (ETF, драгоценные металлы)
+            # Добавляем DECIMALS для правильного форматирования цен
             params = {
                 'iss.meta': 'off',
                 'iss.json': 'extended',
-                'securities.columns': 'SECID,LAST,OPEN,CHANGE,LASTTOPREVPRICE,VALTODAY,PREVPRICE,PREVLEGALCLOSEPRICE',
+                'securities.columns': 'SECID,LAST,OPEN,CHANGE,LASTTOPREVPRICE,VALTODAY,PREVPRICE,PREVLEGALCLOSEPRICE,DECIMALS',
                 'marketdata.columns': 'LAST,OPEN,CHANGE,LASTTOPREVPRICE,VALTODAY,MARKETPRICE,CLOSEPRICE,WAPRICE'
             }
             
             # Для облигаций добавляем запрос marketdata_yields
             if market == 'bonds':
                 params['marketdata_yields.columns'] = 'SECID,PRICE,WAPRICE'
-                params['securities.columns'] = 'SECID,LAST,OPEN,CHANGE,LASTTOPREVPRICE,VALTODAY,FACEVALUE,CURRENCYID,FACEUNIT'
+                params['securities.columns'] = 'SECID,LAST,OPEN,CHANGE,LASTTOPREVPRICE,VALTODAY,FACEVALUE,CURRENCYID,FACEUNIT,DECIMALS'
             
             data = self._make_request(url, params)
             
@@ -179,12 +180,37 @@ class MOEXService:
             # Парсим marketdata (более актуальные данные)
             # Берем последний элемент массива, так как он содержит актуальные данные
             marketdata_dict = {}
+            marketdata_index = -1  # Индекс выбранной записи marketdata
             if marketdata_table and isinstance(marketdata_table, list):
-                # Ищем последний элемент с непустыми данными
-                for item in reversed(marketdata_table):
+                # Ищем последний элемент с непустыми данными и наибольшим объемом торгов
+                best_item = None
+                best_volume = 0
+                best_index = -1
+                for idx, item in enumerate(marketdata_table):
                     if isinstance(item, dict) and item.get('LAST') is not None:
-                        marketdata_dict = item
-                        break
+                        volume = item.get('VALTODAY') or item.get('VOLTODAY') or 0
+                        try:
+                            volume = int(float(volume)) if volume else 0
+                        except (ValueError, TypeError):
+                            volume = 0
+                        # Выбираем запись с наибольшим объемом торгов
+                        if volume > best_volume:
+                            best_item = item
+                            best_volume = volume
+                            best_index = idx
+                
+                # Если нашли запись с объемом, используем её, иначе берем последнюю с LAST
+                if best_item:
+                    marketdata_dict = best_item
+                    marketdata_index = best_index
+                else:
+                    # Fallback: берем последнюю запись с LAST
+                    for idx, item in enumerate(reversed(marketdata_table)):
+                        if isinstance(item, dict) and item.get('LAST') is not None:
+                            marketdata_dict = item
+                            # Вычисляем оригинальный индекс
+                            marketdata_index = len(marketdata_table) - 1 - idx
+                            break
             
             # Для облигаций (только если использовался рынок bonds) проверяем marketdata_yields, если LAST пустой
             if used_market and used_market[1] == 'bonds' and (not marketdata_dict.get('LAST') or marketdata_dict.get('LAST') == ''):
@@ -200,13 +226,33 @@ class MOEXService:
                                 break
             
             # Парсим securities (резервные данные)
+            # Пытаемся найти запись, соответствующую выбранной записи marketdata
             securities_dict = {}
+            decimals = None  # Количество знаков после запятой
             if securities_table and isinstance(securities_table, list):
-                # Берем последний элемент
-                if len(securities_table) > 0:
+                # Если нашли индекс в marketdata, пытаемся использовать соответствующий индекс в securities
+                if marketdata_index >= 0 and marketdata_index < len(securities_table):
+                    matching_item = securities_table[marketdata_index]
+                    if isinstance(matching_item, dict):
+                        securities_dict = matching_item
+                        # Получаем DECIMALS из соответствующей записи
+                        if 'DECIMALS' in matching_item:
+                            try:
+                                decimals = int(matching_item['DECIMALS'])
+                            except (ValueError, TypeError):
+                                decimals = None
+                
+                # Если не нашли соответствие, используем последний элемент
+                if not securities_dict and len(securities_table) > 0:
                     last_item = securities_table[-1]
                     if isinstance(last_item, dict):
                         securities_dict = last_item
+                        # Получаем DECIMALS из последней записи
+                        if 'DECIMALS' in last_item:
+                            try:
+                                decimals = int(last_item['DECIMALS'])
+                            except (ValueError, TypeError):
+                                decimals = None
             
             # Для некоторых инструментов (драгоценные металлы, валютные индексы) может не быть marketdata, используем securities
             if (not marketdata_dict.get('LAST') or marketdata_dict.get('LAST') == '') and securities_dict.get('LAST'):
@@ -214,19 +260,36 @@ class MOEXService:
                 marketdata_dict = securities_dict.copy()
             
             # Получаем цену (приоритет marketdata, затем securities)
-            # Пробуем разные поля в порядке приоритета
-            last_price = (
-                marketdata_dict.get('LAST') or 
-                marketdata_dict.get('MARKETPRICE') or  # Рыночная цена (для ETF когда LAST null)
-                marketdata_dict.get('CLOSEPRICE') or  # Цена закрытия
-                marketdata_dict.get('WAPRICE') or     # Средневзвешенная цена
-                securities_dict.get('LAST') or
-                securities_dict.get('PREVPRICE') or   # Предыдущая цена закрытия
-                securities_dict.get('PREVLEGALCLOSEPRICE') or  # Предыдущая официальная цена закрытия
-                securities_dict.get('PRICE') or
-                securities_dict.get('WAPRICE') or
-                securities_dict.get('CLOSE')
-            )
+            # Если decimals > 2, предпочитаем LAST (более точная цена), иначе WAPRICE
+            # Это нужно, потому что WAPRICE может быть округлен до 2 знаков, даже если decimals > 2
+            if decimals is not None and decimals > 2:
+                # Для активов с высокой точностью (3+ знака) используем LAST в приоритете
+                last_price = (
+                    marketdata_dict.get('LAST') or 
+                    marketdata_dict.get('WAPRICE') or     # Средневзвешенная цена
+                    marketdata_dict.get('MARKETPRICE') or  # Рыночная цена (для ETF когда LAST null)
+                    marketdata_dict.get('CLOSEPRICE') or  # Цена закрытия
+                    securities_dict.get('LAST') or
+                    securities_dict.get('PREVPRICE') or   # Предыдущая цена закрытия
+                    securities_dict.get('PREVLEGALCLOSEPRICE') or  # Предыдущая официальная цена закрытия
+                    securities_dict.get('PRICE') or
+                    securities_dict.get('WAPRICE') or
+                    securities_dict.get('CLOSE')
+                )
+            else:
+                # Для активов с 2 знаками или меньше используем WAPRICE (средневзвешенная цена)
+                last_price = (
+                    marketdata_dict.get('WAPRICE') or     # Средневзвешенная цена (предпочтительнее для точности)
+                    marketdata_dict.get('LAST') or 
+                    marketdata_dict.get('MARKETPRICE') or  # Рыночная цена (для ETF когда LAST null)
+                    marketdata_dict.get('CLOSEPRICE') or  # Цена закрытия
+                    securities_dict.get('LAST') or
+                    securities_dict.get('PREVPRICE') or   # Предыдущая цена закрытия
+                    securities_dict.get('PREVLEGALCLOSEPRICE') or  # Предыдущая официальная цена закрытия
+                    securities_dict.get('PRICE') or
+                    securities_dict.get('WAPRICE') or
+                    securities_dict.get('CLOSE')
+                )
             
             if last_price is None or last_price == '':
                 return None
@@ -271,13 +334,23 @@ class MOEXService:
             except (ValueError, TypeError):
                 volume = 0
             
+            # Округляем цену в зависимости от decimals
+            # Если decimals указан, округляем до этого количества знаков, иначе до 2
+            price_rounding = decimals if decimals is not None else 2
+            # Ограничиваем максимальное количество знаков до 5
+            price_rounding = min(price_rounding, 5)
+            
             result = {
-                'price': round(last_price, 2),
-                'change': round(change, 2),
+                'price': round(last_price, price_rounding),
+                'change': round(change, price_rounding),
                 'change_percent': round(change_percent, 2),
                 'volume': volume,
                 'last_update': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             }
+            
+            # Добавляем DECIMALS, если он был получен
+            if decimals is not None:
+                result['decimals'] = decimals
             
             # Для облигаций (только если использовался рынок bonds) добавляем информацию о номинале и валюте
             if used_market and used_market[1] == 'bonds':

@@ -257,9 +257,31 @@ def get_portfolio():
         change_days = request.args.get('change_days', type=int)
 
         portfolio_items = db_session.query(Portfolio).all()
-        result = []
+        
+        # Проверяем на дубликаты и удаляем их
+        # Группируем по тикеру и оставляем только первую запись для каждого тикера
+        seen_tickers = {}
+        items_to_delete = []
+        unique_items = []
         
         for item in portfolio_items:
+            ticker_upper = item.ticker.upper()
+            if ticker_upper not in seen_tickers:
+                seen_tickers[ticker_upper] = item
+                unique_items.append(item)
+            else:
+                # Дубликат - помечаем для удаления
+                items_to_delete.append(item)
+        
+        # Удаляем дубликаты из базы данных
+        if items_to_delete:
+            for duplicate in items_to_delete:
+                db_session.delete(duplicate)
+            db_session.commit()
+        
+        result = []
+        
+        for item in unique_items:
             # Определяем тип инструмента
             instrument_type = item.instrument_type.name if hasattr(item, 'instrument_type') and item.instrument_type else 'STOCK'
             
@@ -309,9 +331,12 @@ def get_portfolio():
                     bond_facevalue = 1000.0
                     bond_currency = 'SUR'
             
+            # Получаем decimals для форматирования цен
+            price_decimals = None
             if current_price_data:
                 current_price = current_price_data.get('price', 0)
                 last_update = current_price_data.get('last_update', '')
+                price_decimals = current_price_data.get('decimals')  # Количество знаков после запятой
                 # Обновляем номинал и валюту из API, если они есть
                 if instrument_type == 'BOND' and current_price_data.get('facevalue'):
                     bond_facevalue = current_price_data.get('facevalue', bond_facevalue or 1000.0)
@@ -364,11 +389,13 @@ def get_portfolio():
             # Рассчитываем среднюю цену из релевантных покупок
             # ВАЖНО: цены в транзакциях сохраняются как ввел пользователь (в рублях)
             # НЕ переводим цены из транзакций - они уже в рублях
+            total_cost_from_transactions = None
+            total_buy_quantity = 0
             if relevant_buy_transactions:
                 # Цены в транзакциях уже в рублях (как ввел пользователь)
-                total_cost = sum(price * quantity for price, quantity in relevant_buy_transactions)
+                total_cost_from_transactions = sum(price * quantity for price, quantity in relevant_buy_transactions)
                 total_buy_quantity = sum(quantity for _, quantity in relevant_buy_transactions)
-                calculated_avg_price = total_cost / total_buy_quantity if total_buy_quantity > 0 else item.average_buy_price
+                calculated_avg_price = total_cost_from_transactions / total_buy_quantity if total_buy_quantity > 0 else item.average_buy_price
             else:
                 # Если нет релевантных транзакций, используем цену из портфеля
                 calculated_avg_price = item.average_buy_price
@@ -551,7 +578,21 @@ def get_portfolio():
                 avg_price_rub = calculated_avg_price
             
             total_current_value = item.quantity * current_price_rub
-            total_buy_cost = item.quantity * avg_price_rub
+            
+            # Используем реальную сумму из транзакций для точности (избегаем ошибок округления)
+            # Если количество в портфеле равно количеству из транзакций - используем total_cost напрямую
+            # Иначе пропорционально пересчитываем
+            if total_cost_from_transactions is not None and total_buy_quantity > 0:
+                if abs(item.quantity - total_buy_quantity) < 0.01:  # Практически равны (с учетом округления)
+                    total_buy_cost = total_cost_from_transactions
+                else:
+                    # Пропорционально пересчитываем стоимость покупки для текущего количества
+                    # (если были продажи, часть бумаг уже продана)
+                    total_buy_cost = (total_cost_from_transactions / total_buy_quantity) * item.quantity
+            else:
+                # Если нет транзакций, используем расчет через среднюю цену
+                total_buy_cost = item.quantity * avg_price_rub
+            
             profit_loss = total_current_value - total_buy_cost
             profit_loss_percent = ((current_price_rub - avg_price_rub) / avg_price_rub * 100) if avg_price_rub > 0 else 0
             
@@ -592,7 +633,8 @@ def get_portfolio():
                 'profit_loss': profit_loss,
                 'profit_loss_percent': profit_loss_percent,
                 'last_update': last_update,
-                'date_added': item.date_added.isoformat() if item.date_added else None
+                'date_added': item.date_added.isoformat() if item.date_added else None,
+                'price_decimals': price_decimals  # Количество знаков после запятой для форматирования цен
             }
             
             # Добавляем информацию о номинале и валюте для облигаций
@@ -779,10 +821,12 @@ def delete_portfolio_item(item_id):
     try:
         item = db_session.query(Portfolio).filter_by(id=item_id).first()
         if not item:
+            # Позиция уже удалена (возможно, автоматически при пересчете после транзакции)
+            # Возвращаем успех, чтобы не показывать ошибку пользователю
             return jsonify({
-                'success': False,
-                'error': 'Позиция не найдена'
-            }), 404
+                'success': True,
+                'message': 'Позиция уже была удалена'
+            })
         
         ticker = item.ticker
         db_session.delete(item)
@@ -1207,6 +1251,24 @@ def add_transaction():
         except (KeyError, AttributeError):
             instrument_type = InstrumentType.STOCK
         
+        # Проверка на дубликаты: ищем идентичную транзакцию за последние 5 секунд
+        # Это предотвращает создание дубликатов при двойном клике или повторной отправке формы
+        time_window = transaction_date - timedelta(seconds=5)
+        duplicate = db_session.query(Transaction).filter(
+            Transaction.ticker == data['ticker'].upper(),
+            Transaction.operation_type == operation_type,
+            Transaction.price == price,
+            Transaction.quantity == quantity,
+            Transaction.date >= time_window,
+            Transaction.date <= transaction_date + timedelta(seconds=5)
+        ).first()
+        
+        if duplicate:
+            return jsonify({
+                'success': False,
+                'error': 'Похожая транзакция уже была создана недавно. Возможно, произошла повторная отправка формы.'
+            }), 400
+        
         # Создание новой транзакции
         transaction = Transaction(
             date=transaction_date,
@@ -1241,6 +1303,9 @@ def add_transaction():
                 balance.balance -= total
         
         db_session.commit()
+        
+        # Пересчитываем портфель для этого тикера после добавления транзакции
+        recalculate_portfolio_for_ticker(data['ticker'].upper())
         
         return jsonify({
             'success': True,
@@ -1355,7 +1420,17 @@ def recalculate_portfolio_for_ticker(ticker):
         ).order_by(Transaction.date.asc()).all()
         
         # Находим позицию в портфеле
-        portfolio_item = db_session.query(Portfolio).filter_by(ticker=ticker.upper()).first()
+        # Проверяем на дубликаты: если есть несколько записей для одного тикера, удаляем лишние
+        portfolio_items = db_session.query(Portfolio).filter_by(ticker=ticker.upper()).all()
+        portfolio_item = None
+        if len(portfolio_items) > 1:
+            # Есть дубликаты - оставляем первую запись, остальные удаляем
+            portfolio_item = portfolio_items[0]
+            for duplicate in portfolio_items[1:]:
+                db_session.delete(duplicate)
+            db_session.commit()
+        elif len(portfolio_items) == 1:
+            portfolio_item = portfolio_items[0]
         
         # Проходим по транзакциям в хронологическом порядке и отслеживаем количество
         # Если количество становится 0 или отрицательным, это означает полную продажу
@@ -1398,10 +1473,12 @@ def recalculate_portfolio_for_ticker(ticker):
         total_quantity = current_quantity
         
         if total_quantity <= 0:
-            # Если количество <= 0, удаляем позицию из портфеля
-            if portfolio_item:
-                db_session.delete(portfolio_item)
-                db_session.commit()
+            # Если количество <= 0, удаляем все позиции для этого тикера из портфеля
+            # (на случай, если есть дубликаты)
+            portfolio_items_to_delete = db_session.query(Portfolio).filter_by(ticker=ticker.upper()).all()
+            for item_to_delete in portfolio_items_to_delete:
+                db_session.delete(item_to_delete)
+            db_session.commit()
             return True
         
         # Рассчитываем среднюю цену покупки только из релевантных транзакций покупки
