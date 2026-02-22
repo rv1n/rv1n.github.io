@@ -86,6 +86,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     setupEventListeners();
     startPriceLogMonitoring(); // Запускаем мониторинг новых записей цен
     loadCurrencyRates(); // Загружаем курсы валют для отображения
+    setupStickyTableHeader(); // Настраиваем фиксацию шапки таблицы
 });
 
 /**
@@ -272,6 +273,8 @@ async function loadPortfolio(silent = false) {
                 if (loading) loading.style.display = 'none';
                 if (table) table.style.display = 'table';
             }
+            // Настраиваем фиксацию шапки после отображения таблицы
+            setTimeout(setupStickyTableHeader, 100);
         } else {
             if (!silent) {
                 showError(data.error || 'Ошибка загрузки портфеля');
@@ -4638,6 +4641,63 @@ async function saveLoggingTime() {
         console.error('Ошибка сохранения времени логирования:', error);
         alert('Ошибка соединения с сервером');
     }
+}
+
+/**
+ * Настройка фиксации шапки таблицы при прокрутке
+ */
+function setupStickyTableHeader() {
+    const table = document.getElementById('portfolio-table');
+    const thead = table ? table.querySelector('thead') : null;
+    
+    if (!table || !thead) {
+        // Если таблица еще не загружена, попробуем позже
+        setTimeout(setupStickyTableHeader, 500);
+        return;
+    }
+    
+    // Используем scroll для фиксации шапки
+    let ticking = false;
+    
+    function updateStickyHeader() {
+        const tableRect = table.getBoundingClientRect();
+        const theadRect = thead.getBoundingClientRect();
+        
+        // Если таблица видна и шапка уходит вверх
+        if (tableRect.top < 0 && theadRect.top < 0) {
+            thead.style.position = 'fixed';
+            thead.style.top = '0';
+            thead.style.left = tableRect.left + 'px';
+            thead.style.width = tableRect.width + 'px';
+            thead.style.zIndex = '1000';
+            thead.style.background = '#1e3a5f';
+            thead.classList.add('sticky-scrolled'); // Добавляем класс для скругления снизу
+        } else if (tableRect.top >= 0) {
+            // Таблица в начале - возвращаем обычное положение
+            thead.style.position = 'sticky';
+            thead.style.left = 'auto';
+            thead.style.width = 'auto';
+            thead.classList.remove('sticky-scrolled'); // Убираем класс
+        }
+        
+        ticking = false;
+    }
+    
+    window.addEventListener('scroll', () => {
+        if (!ticking) {
+            window.requestAnimationFrame(updateStickyHeader);
+            ticking = true;
+        }
+    }, { passive: true });
+    
+    // Также обновляем при изменении размера окна
+    window.addEventListener('resize', () => {
+        if (thead.style.position === 'fixed') {
+            const tableRect = table.getBoundingClientRect();
+            thead.style.left = tableRect.left + 'px';
+            thead.style.width = tableRect.width + 'px';
+        }
+    }, { passive: true });
 }
 
 // Обработчик клика вне модального окна удален - закрытие только по крестику и Esc

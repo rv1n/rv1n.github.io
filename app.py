@@ -20,6 +20,7 @@ import atexit
 import pytz
 import os
 import shutil
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your-secret-key-here'
@@ -281,6 +282,62 @@ def get_portfolio():
         
         result = []
         
+        # Оптимизация: загружаем все транзакции одним запросом
+        all_tickers = [item.ticker.upper() for item in unique_items]
+        all_transactions_dict = {}
+        if all_tickers:
+            all_transactions_list = db_session.query(Transaction).filter(
+                Transaction.ticker.in_(all_tickers)
+            ).order_by(Transaction.date.asc()).all()
+            
+            # Группируем транзакции по тикерам
+            for trans in all_transactions_list:
+                ticker_upper = trans.ticker.upper()
+                if ticker_upper not in all_transactions_dict:
+                    all_transactions_dict[ticker_upper] = []
+                all_transactions_dict[ticker_upper].append(trans)
+        
+        # Оптимизация: загружаем историю цен для расчета изменений одним запросом
+        price_history_cache = {}
+        now_moscow = datetime.now(pytz.timezone('Europe/Moscow'))
+        today_start = now_moscow.replace(hour=0, minute=0, second=0, microsecond=0)
+        yesterday_start = today_start - timedelta(days=1)
+        yesterday_end = today_start
+        
+        # Загружаем последние записи за сегодня и вчера для всех тикеров (для change_days=1 или не задан)
+        if not change_days or change_days == 1:
+            today_entries = db_session.query(PriceHistory).filter(
+                PriceHistory.ticker.in_(all_tickers),
+                PriceHistory.logged_at >= today_start
+            ).order_by(PriceHistory.ticker, PriceHistory.logged_at.desc()).all()
+            
+            yesterday_entries = db_session.query(PriceHistory).filter(
+                PriceHistory.ticker.in_(all_tickers),
+                PriceHistory.logged_at >= yesterday_start,
+                PriceHistory.logged_at < yesterday_end
+            ).order_by(PriceHistory.ticker, PriceHistory.logged_at.desc()).all()
+            
+            # Группируем по тикерам (берем только первую запись для каждого тикера)
+            seen_today = set()
+            seen_yesterday = set()
+            for entry in today_entries:
+                ticker_upper = entry.ticker.upper()
+                if ticker_upper not in seen_today:
+                    if ticker_upper not in price_history_cache:
+                        price_history_cache[ticker_upper] = {'today': None, 'yesterday': None}
+                    price_history_cache[ticker_upper]['today'] = entry
+                    seen_today.add(ticker_upper)
+            
+            for entry in yesterday_entries:
+                ticker_upper = entry.ticker.upper()
+                if ticker_upper not in seen_yesterday:
+                    if ticker_upper not in price_history_cache:
+                        price_history_cache[ticker_upper] = {'today': None, 'yesterday': None}
+                    price_history_cache[ticker_upper]['yesterday'] = entry
+                    seen_yesterday.add(ticker_upper)
+        
+        # Подготавливаем данные для параллельных запросов
+        items_data = []
         for item in unique_items:
             # Определяем тип инструмента
             instrument_type = item.instrument_type.name if hasattr(item, 'instrument_type') and item.instrument_type else 'STOCK'
@@ -290,24 +347,68 @@ def get_portfolio():
                 # Вероятно, это облигация (тикеры облигаций обычно длинные и начинаются с RU или SU)
                 instrument_type = 'BOND'
             
-            # Получаем актуальную цену с MOEX
-            # Если для первого типа инструмента данных нет (например, тикер облигации помечен как STOCK),
-            # пробуем альтернативный тип, чтобы гарантировать получение цены
-            current_price_data = None
             types_to_try = [instrument_type]
             if instrument_type == 'STOCK':
                 types_to_try.append('BOND')
             elif instrument_type == 'BOND':
                 types_to_try.append('STOCK')
             
+            items_data.append({
+                'item': item,
+                'instrument_type': instrument_type,
+                'types_to_try': types_to_try
+            })
+        
+        # Параллельно получаем цены и информацию о лотах для всех элементов
+        price_data_cache = {}
+        security_info_cache = {}
+        
+        def fetch_price_data(data):
+            """Получить данные о цене для одного элемента"""
+            item = data['item']
+            types_to_try = data['types_to_try']
+            current_price_data = None
             for itype in types_to_try:
                 current_price_data = moex_service.get_current_price(item.ticker, itype)
                 if current_price_data:
                     break
-            
-            # Получаем информацию о размере лота
-            lotsize = 1  # По умолчанию 1
+            return item.ticker, current_price_data
+        
+        def fetch_security_info(data):
+            """Получить информацию о лотах для одного элемента"""
+            item = data['item']
+            instrument_type = data['instrument_type']
             security_info = moex_service.get_security_info(item.ticker, instrument_type)
+            return item.ticker, security_info
+        
+        # Выполняем запросы параллельно
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            # Запросы цен
+            price_futures = {executor.submit(fetch_price_data, data): data for data in items_data}
+            # Запросы информации о лотах
+            security_futures = {executor.submit(fetch_security_info, data): data for data in items_data}
+            
+            # Собираем результаты цен
+            for future in as_completed(price_futures):
+                ticker, price_data = future.result()
+                price_data_cache[ticker] = price_data
+            
+            # Собираем результаты информации о лотах
+            for future in as_completed(security_futures):
+                ticker, security_info = future.result()
+                security_info_cache[ticker] = security_info
+        
+        # Обрабатываем каждый элемент с использованием кэшированных данных
+        for data in items_data:
+            item = data['item']
+            instrument_type = data['instrument_type']
+            
+            # Получаем актуальную цену с MOEX из кэша
+            current_price_data = price_data_cache.get(item.ticker)
+            
+            # Получаем информацию о размере лота из кэша
+            lotsize = 1  # По умолчанию 1
+            security_info = security_info_cache.get(item.ticker)
             if security_info and security_info.get('trading_params'):
                 lotsize = security_info['trading_params'].get('lotsize', 1)
             
@@ -354,9 +455,8 @@ def get_portfolio():
             # Вычисляем среднюю цену покупки из истории транзакций
             # Используем ту же логику, что и в recalculate_portfolio_for_ticker
             # Учитываем только те покупки, которые не были полностью проданы
-            all_transactions = db_session.query(Transaction).filter(
-                Transaction.ticker == item.ticker
-            ).order_by(Transaction.date.asc()).all()
+            # Используем кэшированные транзакции
+            all_transactions = all_transactions_dict.get(item.ticker.upper(), [])
             
             # Применяем FIFO для определения релевантных покупок
             current_quantity = 0
@@ -412,24 +512,10 @@ def get_portfolio():
                 # Для периода считаем изменение
                 # Если change_days = 1, используем специальную логику: последняя запись за сегодня vs последняя за вчера
                 if change_days == 1:
-                    # Специальная логика для "изменение за день"
-                    now_moscow = datetime.now(pytz.timezone('Europe/Moscow'))
-                    today_start = now_moscow.replace(hour=0, minute=0, second=0, microsecond=0)
-                    yesterday_start = today_start - timedelta(days=1)
-                    yesterday_end = today_start
-                    
-                    # Последняя запись за сегодня
-                    latest_entry_today = db_session.query(PriceHistory).filter(
-                        PriceHistory.ticker == item.ticker,
-                        PriceHistory.logged_at >= today_start
-                    ).order_by(PriceHistory.logged_at.desc()).first()
-                    
-                    # Последняя запись за вчера
-                    latest_entry_yesterday = db_session.query(PriceHistory).filter(
-                        PriceHistory.ticker == item.ticker,
-                        PriceHistory.logged_at >= yesterday_start,
-                        PriceHistory.logged_at < yesterday_end
-                    ).order_by(PriceHistory.logged_at.desc()).first()
+                    # Используем кэшированные данные истории цен
+                    ticker_history = price_history_cache.get(item.ticker.upper(), {})
+                    latest_entry_today = ticker_history.get('today')
+                    latest_entry_yesterday = ticker_history.get('yesterday')
                     
                     if latest_entry_today and latest_entry_yesterday:
                         # Есть записи за сегодня и за вчера - сравниваем их
@@ -485,25 +571,10 @@ def get_portfolio():
                         latest_price = None
                         previous_price = None
             else:
-                # Для расчета изменения за день берем последнюю цену ЗА СЕГОДНЯ из истории
-                # и последнюю цену ЗА ВЧЕРА из истории
-                now_moscow = datetime.now(pytz.timezone('Europe/Moscow'))
-                today_start = now_moscow.replace(hour=0, minute=0, second=0, microsecond=0)
-                yesterday_start = today_start - timedelta(days=1)
-                yesterday_end = today_start
-                
-                # Последняя запись за сегодня
-                latest_entry_today = db_session.query(PriceHistory).filter(
-                    PriceHistory.ticker == item.ticker,
-                    PriceHistory.logged_at >= today_start
-                ).order_by(PriceHistory.logged_at.desc()).first()
-                
-                # Последняя запись за вчера
-                latest_entry_yesterday = db_session.query(PriceHistory).filter(
-                    PriceHistory.ticker == item.ticker,
-                    PriceHistory.logged_at >= yesterday_start,
-                    PriceHistory.logged_at < yesterday_end
-                ).order_by(PriceHistory.logged_at.desc()).first()
+                # Для расчета изменения за день используем кэшированные данные
+                ticker_history = price_history_cache.get(item.ticker.upper(), {})
+                latest_entry_today = ticker_history.get('today')
+                latest_entry_yesterday = ticker_history.get('yesterday')
                 
                 if latest_entry_today and latest_entry_yesterday:
                     # Есть записи за сегодня и за вчера - сравниваем их
