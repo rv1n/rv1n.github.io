@@ -1374,6 +1374,7 @@ header h1 {
     overflow-x: auto; /* Горизонтальная прокрутка для таблицы */
     -webkit-overflow-scrolling: touch; /* Плавная прокрутка на iOS */
     padding-bottom: 80px; /* дополнительное место снизу для полного отображения сэндвич-меню */
+    position: relative; /* Для правильной работы sticky */
 }
 
 .portfolio-table-container h2 {
@@ -1412,7 +1413,14 @@ header h1 {
     color: white;
     position: sticky;
     top: 0;
-    z-index: 10;
+    z-index: 100;
+    display: table-header-group;
+}
+
+.portfolio-table thead tr {
+    position: sticky;
+    top: 0;
+    z-index: 100;
 }
 
 .portfolio-table th {
@@ -1424,10 +1432,10 @@ header h1 {
     letter-spacing: 0.5px;
     white-space: nowrap;
     vertical-align: top; /* выравниваем все заголовки по верхнему краю */
+    background: #1e3a5f;
     position: sticky;
     top: 0;
-    background: #1e3a5f;
-    z-index: 10;
+    z-index: 100;
 }
 
 /* Выбор периода для колонки "Изменение" */

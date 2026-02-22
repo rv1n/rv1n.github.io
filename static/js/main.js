@@ -43,6 +43,40 @@ let portfolioSortState = {
 let currentChangeDays = 1;
 
 /**
+ * Безопасный парсинг JSON ответа с обработкой ошибок сервера
+ * @param {Response} response - Объект Response от fetch
+ * @returns {Promise<Object|null>} - Распарсенный JSON или null при ошибке
+ */
+async function safeJsonResponse(response) {
+    // Проверяем статус ответа
+    if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`Ошибка сервера ${response.status}:`, errorText.substring(0, 200));
+        return null;
+    }
+    
+    // Проверяем Content-Type перед парсингом JSON
+    const contentType = response.headers.get('content-type');
+    if (!contentType || !contentType.includes('application/json')) {
+        const text = await response.text();
+        console.error('Сервер вернул не JSON:', contentType, text.substring(0, 200));
+        return null;
+    }
+    
+    try {
+        return await response.json();
+    } catch (error) {
+        if (error instanceof SyntaxError) {
+            const text = await response.text();
+            console.error('Ошибка парсинга JSON:', error.message, text.substring(0, 200));
+        } else {
+            console.error('Ошибка при обработке ответа:', error);
+        }
+        return null;
+    }
+}
+
+/**
  * Инициализация приложения при загрузке страницы
  */
 document.addEventListener('DOMContentLoaded', async function() {
@@ -212,7 +246,17 @@ async function loadPortfolio(silent = false) {
         }
 
         const response = await fetch(url);
-        const data = await response.json();
+        const data = await safeJsonResponse(response);
+        
+        if (!data) {
+            // Ошибка уже залогирована в safeJsonResponse
+            if (!silent) {
+                showError('Ошибка соединения с сервером. Сервер временно недоступен.');
+                if (loading) loading.style.display = 'none';
+                if (table) table.style.display = 'table';
+            }
+            return;
+        }
         
         if (data.success) {
             // Сохраняем данные портфеля и сводки для последующего использования
@@ -237,6 +281,8 @@ async function loadPortfolio(silent = false) {
         console.error('Ошибка загрузки портфеля:', error);
         if (!silent) {
             showError('Ошибка соединения с сервером');
+            if (loading) loading.style.display = 'none';
+            if (table) table.style.display = 'table';
         }
     }
 }
@@ -974,7 +1020,12 @@ async function updateAllCategoryViews() {
     try {
         // Загружаем актуальные данные с сервера (один запрос для обеих вкладок)
         const response = await fetch('/api/portfolio');
-        const data = await response.json();
+        const data = await safeJsonResponse(response);
+        
+        if (!data) {
+            // Ошибка уже залогирована в safeJsonResponse
+            return;
+        }
         
         if (data.success && data.portfolio) {
             // Обновляем сохраненные данные
@@ -1004,7 +1055,12 @@ async function updateAllCategoryViews() {
 async function updateAllAssetTypeViews() {
     try {
         const response = await fetch('/api/portfolio');
-        const data = await response.json();
+        const data = await safeJsonResponse(response);
+        
+        if (!data) {
+            // Ошибка уже залогирована в safeJsonResponse
+            return;
+        }
         
         if (data.success && data.portfolio) {
             // Обновляем сохраненные данные портфеля
@@ -2629,7 +2685,12 @@ async function updateHistoryTickerFilter() {
     
     try {
         const response = await fetch('/api/portfolio');
-        const data = await response.json();
+        const data = await safeJsonResponse(response);
+        
+        if (!data) {
+            // Ошибка уже залогирована в safeJsonResponse
+            return; // Не обновляем фильтр при ошибке сервера
+        }
         
         if (data.success && data.portfolio) {
             // Получаем уникальные тикеры
@@ -2652,7 +2713,12 @@ async function updateHistoryTickerFilter() {
             tickerFilter.value = currentValue;
         }
     } catch (error) {
-        console.error('Ошибка обновления фильтра тикеров:', error);
+        // Обрабатываем ошибки сети или парсинга JSON
+        if (error instanceof SyntaxError) {
+            console.error('Ошибка парсинга JSON (сервер вернул не JSON):', error.message);
+        } else {
+            console.error('Ошибка обновления фильтра тикеров:', error);
+        }
     }
 }
 
