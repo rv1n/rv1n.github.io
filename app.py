@@ -1735,6 +1735,25 @@ def get_price_history():
         if ticker:
             # История для конкретного тикера
             history = price_logger.get_price_history(ticker=ticker, **filter_params)
+
+            # Даже если по ошибке за один день записалось несколько значений,
+            # для отображения и расчетов оставляем только ПОСЛЕДНЮЮ запись
+            # за каждый день (в том числе за сегодня).
+            deduplicated = []
+            seen_dates = set()
+
+            for item in history:
+                # logged_at в формате "YYYY-MM-DD HH:MM:SS"
+                logged_at = item.get('logged_at', '')
+                date_part = logged_at.split(' ')[0] if logged_at else ''
+
+                # history уже отсортирован от новых к старым, поэтому
+                # первая встреченная дата — самая свежая запись за этот день.
+                if date_part and date_part not in seen_dates:
+                    deduplicated.append(item)
+                    seen_dates.add(date_part)
+
+            history = deduplicated
         else:
             # История для всех тикеров, сгруппированная по датам
             history = price_logger.get_price_history_grouped(**filter_params)

@@ -148,7 +148,10 @@ class PriceLogger:
                         PriceHistory.logged_at <= current_minute_end
                     ).first()
                     
-                    if existing_in_minute and not force:
+                    # Даже при принудительном логировании (force=True) не создаем
+                    # несколько записей в одну и ту же минуту, чтобы избежать
+                    # визуальных дублей в истории цен.
+                    if existing_in_minute:
                         skipped_count += 1
                         print(f"[{datetime.now(self.moscow_tz)}] Пропуск {ticker}: запись уже существует в текущей минуте")
                         continue

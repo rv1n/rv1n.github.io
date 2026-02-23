@@ -137,7 +137,8 @@ header h1 {
     max-height: calc(100vh - 140px); /* если пунктов больше высоты экрана — появится внутренняя прокрутка */
     overflow-y: auto;
     display: none;
-    z-index: 1000;
+    /* Поверх шапки таблицы (у шапки z-index около 1000–1001) */
+    z-index: 2100;
 }
 
 .dropdown-menu.open {
