@@ -5,12 +5,17 @@
     box-sizing: border-box;
 }
 
+html, body {
+    height: 100%;
+}
+
 body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
     background: #ffffff;
     min-height: 100vh;
     padding: 0;
     color: #333;
+    overflow: hidden; /* Убираем общую прокрутку страницы */
 }
 
 .container {
@@ -20,9 +25,11 @@ body {
     background: white;
     border-radius: 0;
     box-shadow: none;
-    padding: 20px 24px 80px; /* добавляем «активное» поле снизу до низа окна */
+    padding: 20px 24px 20px;
     box-sizing: border-box;
     min-height: 100vh;
+    display: flex;
+    flex-direction: column; /* Верхняя часть фиксирована, нижняя растягивается */
 }
 
 header {
@@ -1372,7 +1379,10 @@ header h1 {
 /* Таблица портфеля */
 .portfolio-table-container {
     margin-top: 30px;
-    padding-bottom: 80px; /* дополнительное место снизу для полного отображения сэндвич-меню */
+    padding-bottom: 0;
+    flex: 1; /* Занимает всё оставшееся пространство под шапкой */
+    display: flex;
+    flex-direction: column;
 }
 
 #table-view {
@@ -1842,10 +1852,10 @@ header h1 {
 }
 
 .pie-chart-legend {
-    display: flex;
-    flex-direction: column;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 12px;
-    max-width: 300px;
+    max-width: 520px;
 }
 
 .pie-legend-item {
