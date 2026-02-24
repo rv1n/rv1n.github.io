@@ -91,26 +91,27 @@ document.addEventListener('DOMContentLoaded', async function() {
 });
 
 /**
- * Динамическая высота блока с таблицей портфеля
+ * Динамическая высота прокручиваемых блоков (таблица портфеля, история, категории и т.д.)
  * Нижняя граница = нижняя граница окна браузера (минус небольшой отступ)
  */
 function setupPortfolioTableHeight() {
-    const wrapper = document.querySelector('.portfolio-table-wrapper');
-    if (!wrapper) return;
+    const wrappers = document.querySelectorAll('.portfolio-table-wrapper, .transactions-content, .categories-content, .price-history-content, #chart-view, #server-view, #ticker-sber-view, #ticker-ru-view');
+    if (!wrappers.length) return;
 
     const updateHeight = () => {
-        const rect = wrapper.getBoundingClientRect();
         const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+        const bottomPadding = 16; // небольшой запас снизу
 
-        // небольшой запас снизу (для отступа контента от нижнего края)
-        const bottomPadding = 16;
+        wrappers.forEach(wrapper => {
+            const rect = wrapper.getBoundingClientRect();
+            const availableHeight = viewportHeight - rect.top - bottomPadding;
 
-        const availableHeight = viewportHeight - rect.top - bottomPadding;
-        if (availableHeight > 100) {
-            wrapper.style.maxHeight = `${availableHeight}px`;
-        } else {
-            wrapper.style.maxHeight = 'none';
-        }
+            if (availableHeight > 100) {
+                wrapper.style.maxHeight = `${availableHeight}px`;
+            } else {
+                wrapper.style.maxHeight = 'none';
+            }
+        });
     };
 
     updateHeight();
