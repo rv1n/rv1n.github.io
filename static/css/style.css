@@ -1330,8 +1330,8 @@ header h1 {
     padding: 0;
     font-size: 0;
     min-width: auto;
-    width: 40px;
-    height: 40px;
+    width: 24px;
+    height: 24px;
     white-space: nowrap;
     flex-shrink: 0;
     display: flex;
@@ -1349,8 +1349,8 @@ header h1 {
 .btn-sell::before {
     content: '';
     position: absolute;
-    width: 18px;
-    height: 18px;
+    width: 12px;
+    height: 12px;
     background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>');
     background-size: contain;
     background-repeat: no-repeat;
@@ -1381,9 +1381,11 @@ header h1 {
 
 .portfolio-table-wrapper {
     overflow-x: auto; /* Горизонтальная прокрутка для таблицы */
+    overflow-y: auto; /* Вертикальная прокрутка только для строк таблицы */
     -webkit-overflow-scrolling: touch; /* Плавная прокрутка на iOS */
     width: 100%;
-    max-height: none; /* Убираем ограничение высоты */
+    /* Высоту задаём динамически через JS в зависимости от нижней границы окна браузера */
+    max-height: none;
 }
 
 .portfolio-table-container h2 {

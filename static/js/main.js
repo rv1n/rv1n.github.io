@@ -87,7 +87,37 @@ document.addEventListener('DOMContentLoaded', async function() {
     startPriceLogMonitoring(); // Запускаем мониторинг новых записей цен
     loadCurrencyRates(); // Загружаем курсы валют для отображения
     setupStickyTableHeader(); // Настраиваем фиксацию шапки таблицы
+    setupPortfolioTableHeight(); // Подгоняем высоту таблицы под нижнюю границу окна
 });
+
+/**
+ * Динамическая высота блока с таблицей портфеля
+ * Нижняя граница = нижняя граница окна браузера (минус небольшой отступ)
+ */
+function setupPortfolioTableHeight() {
+    const wrapper = document.querySelector('.portfolio-table-wrapper');
+    if (!wrapper) return;
+
+    const updateHeight = () => {
+        const rect = wrapper.getBoundingClientRect();
+        const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+
+        // небольшой запас снизу (для отступа контента от нижнего края)
+        const bottomPadding = 16;
+
+        const availableHeight = viewportHeight - rect.top - bottomPadding;
+        if (availableHeight > 100) {
+            wrapper.style.maxHeight = `${availableHeight}px`;
+        } else {
+            wrapper.style.maxHeight = 'none';
+        }
+    };
+
+    updateHeight();
+
+    window.addEventListener('resize', updateHeight);
+    window.addEventListener('orientationchange', updateHeight);
+}
 
 /**
  * Настройка обработчиков событий
@@ -921,7 +951,8 @@ function updateSummary(summary) {
     const cashBalanceEl = document.getElementById('cash-balance');
     
     if (totalValueEl) {
-        totalValueEl.textContent = formatCurrency(summary.total_value);
+        // Для общей стоимости в верхней панели ограничиваемся двумя знаками после запятой
+        totalValueEl.textContent = formatCurrency(summary.total_value, 2);
     }
     
     if (totalCountEl) {
@@ -938,7 +969,8 @@ function updateSummary(summary) {
     }
     
     if (totalPnlEl) {
-        totalPnlEl.textContent = `${summary.total_pnl >= 0 ? '+' : ''}${formatCurrency(summary.total_pnl)}`;
+        // Для общей прибыли/убытка в верхней панели также используем максимум два знака
+        totalPnlEl.textContent = `${summary.total_pnl >= 0 ? '+' : ''}${formatCurrency(summary.total_pnl, 2)}`;
         totalPnlEl.className = `summary-value ${summary.total_pnl >= 0 ? 'profit' : 'loss'}`;
     }
     
