@@ -24,6 +24,7 @@ function closeMainMenu() {
     menu.classList.remove('open');
 }
 let categoriesChanged = false; // Флаг изменения категорий
+let heightListenersAttached = false; // Флаг, чтобы не навешивать обработчики повторно
 let currentPortfolioData = null; // Текущие данные портфеля
 let currentChartType = localStorage.getItem('chartType') || 'pie'; // Текущий тип диаграммы (pie/bar)
 let currentAssetTypeChartType = localStorage.getItem('assetTypeChartType') || 'pie'; // Текущий тип диаграммы видов активов (pie/bar)
@@ -95,10 +96,10 @@ document.addEventListener('DOMContentLoaded', async function() {
  * Нижняя граница = нижняя граница окна браузера (минус небольшой отступ)
  */
 function setupPortfolioTableHeight() {
-    const wrappers = document.querySelectorAll('.portfolio-table-wrapper, .transactions-content, .categories-content, .price-history-content, #chart-view, #server-view, #ticker-sber-view, #ticker-ru-view');
-    if (!wrappers.length) return;
-
     const updateHeight = () => {
+        const wrappers = document.querySelectorAll('.portfolio-table-wrapper, .transactions-content, .categories-content, .price-history-content, #chart-view, #server-view, #ticker-sber-view, #ticker-ru-view');
+        if (!wrappers.length) return;
+
         const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
         const bottomPadding = 16; // небольшой запас снизу
 
@@ -116,8 +117,11 @@ function setupPortfolioTableHeight() {
 
     updateHeight();
 
-    window.addEventListener('resize', updateHeight);
-    window.addEventListener('orientationchange', updateHeight);
+    if (!heightListenersAttached) {
+        window.addEventListener('resize', updateHeight);
+        window.addEventListener('orientationchange', updateHeight);
+        heightListenersAttached = true;
+    }
 }
 
 /**
@@ -1961,6 +1965,10 @@ function switchView(viewType) {
 
         loadTickerDebug('RU000A105SG2', 'ticker-ru-content', 'BOND');
     }
+
+    // После переключения представления пересчитываем высоту прокручиваемых блоков,
+    // чтобы нижняя граница сразу соответствовала окну
+    setupPortfolioTableHeight();
 }
 
 /**
