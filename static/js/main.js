@@ -83,7 +83,9 @@ async function safeJsonResponse(response) {
 document.addEventListener('DOMContentLoaded', async function() {
     await loadCategoriesList(); // Загружаем список категорий из API
     await loadAssetTypesList(); // Загружаем список видов активов из API
-    loadPortfolio();
+    // При первом открытии страницы загружаем портфель БЕЗ обращения к API MOEX,
+    // используя только сохранённые в БД данные (use_cached=1).
+    loadPortfolio(false, true);
     setupEventListeners();
     startPriceLogMonitoring(); // Запускаем мониторинг новых записей цен
     loadCurrencyRates(); // Загружаем курсы валют для отображения
@@ -261,8 +263,9 @@ function manualRefresh() {
 /**
  * Загрузка данных портфеля с сервера
  * @param {boolean} silent - Если true, не показывать индикатор загрузки
+ * @param {boolean} useCachedPrices - Если true, не дергать MOEX API, использовать кэшированные цены
  */
-async function loadPortfolio(silent = false) {
+async function loadPortfolio(silent = false, useCachedPrices = false) {
     const loading = document.getElementById('loading');
     const table = document.getElementById('portfolio-table');
     const errorMessage = document.getElementById('error-message');
@@ -277,8 +280,15 @@ async function loadPortfolio(silent = false) {
         
         // Формируем URL с учетом выбранного периода изменения цен
         let url = '/api/portfolio';
+        const params = [];
         if (currentChangeDays && currentChangeDays > 0) {
-            url += `?change_days=${currentChangeDays}`;
+            params.push(`change_days=${currentChangeDays}`);
+        }
+        if (useCachedPrices) {
+            params.push('use_cached=1');
+        }
+        if (params.length > 0) {
+            url += `?${params.join('&')}`;
         }
 
         const response = await fetch(url);
@@ -322,6 +332,124 @@ async function loadPortfolio(silent = false) {
             if (loading) loading.style.display = 'none';
             if (table) table.style.display = 'table';
         }
+    }
+}
+
+/**
+ * Точечное обновление одной позиции портфеля по тикеру
+ * (не перерисовывает всю таблицу).
+ * Использует свежие данные с сервера, но обновляет только нужную строку,
+ * сводку и связанные графики.
+ * @param {string} ticker
+ */
+async function refreshSinglePortfolioPosition(ticker) {
+    if (!ticker) return;
+    
+    const tbody = document.getElementById('portfolio-tbody');
+    const errorMessage = document.getElementById('error-message');
+    if (!tbody) return;
+    
+    try {
+        if (errorMessage) {
+            errorMessage.style.display = 'none';
+        }
+        
+        // Получаем актуальные данные портфеля с сервера
+        let url = '/api/portfolio';
+        const params = [];
+        if (currentChangeDays && currentChangeDays > 0) {
+            params.push(`change_days=${currentChangeDays}`);
+        }
+        if (params.length > 0) {
+            url += `?${params.join('&')}`;
+        }
+        
+        const response = await fetch(url);
+        const data = await safeJsonResponse(response);
+        if (!data || !data.success) {
+            console.warn('Не удалось обновить позицию портфеля точечно, данные:', data);
+            return;
+        }
+        
+        // Обновляем глобальные данные портфеля
+        currentPortfolioData = {
+            portfolio: data.portfolio,
+            summary: data.summary
+        };
+        
+        // Учитываем текущий фильтр по виду актива
+        const typeFilter = document.getElementById('portfolio-type-filter');
+        const selectedType = typeFilter ? typeFilter.value : '';
+        let filteredPortfolio = currentPortfolioData.portfolio;
+        if (selectedType) {
+            filteredPortfolio = filteredPortfolio.filter(item => (item.asset_type || '') === selectedType);
+        }
+        
+        // Если после операции портфель (с учётом фильтра) пуст — показываем сообщение как раньше
+        if (filteredPortfolio.length === 0) {
+            const message = selectedType ? 
+                `Нет активов вида "${selectedType}"` : 
+                'Портфель пуст. Добавьте первую позицию.';
+            tbody.innerHTML = `<tr><td colspan="9" style="text-align: center; padding: 40px; color: #7f8c8d;">${message}</td></tr>`;
+            previousPrices = {};
+            
+            const emptySummary = calculateSummaryFromPortfolio([]);
+            if (data.summary && data.summary.cash_balance !== undefined) {
+                emptySummary.cash_balance = data.summary.cash_balance;
+            }
+            updateSummary(emptySummary);
+            updateCategoryChart(currentPortfolioData.portfolio);
+            updatePortfolioSortIndicators();
+            return;
+        }
+        
+        // Пересчитываем сводку и обновляем верхнюю панель
+        const filteredSummary = calculateSummaryFromPortfolio(filteredPortfolio);
+        if (data.summary && data.summary.cash_balance !== undefined) {
+            filteredSummary.cash_balance = data.summary.cash_balance;
+        }
+        const totalPortfolioValue = filteredSummary.total_value || 0;
+        updateSummary(filteredSummary);
+        
+        // Обновляем диаграмму категорий
+        updateCategoryChart(currentPortfolioData.portfolio);
+        
+        // Находим обновлённую позицию (с учётом фильтра) и соответствующую строку
+        const tickerUpper = ticker.toUpperCase();
+        const updatedItem = filteredPortfolio.find(
+            item => (item.ticker || '').toUpperCase() === tickerUpper
+        );
+        const existingRow = tbody.querySelector(`tr[data-ticker="${tickerUpper}"]`) ||
+                            tbody.querySelector(`tr[data-ticker="${ticker}"]`);
+        
+        if (updatedItem) {
+            // Создаём новую строку для позиции
+            const newRow = createPortfolioRow(updatedItem, totalPortfolioValue);
+            
+            if (existingRow) {
+                tbody.replaceChild(newRow, existingRow);
+            } else {
+                tbody.appendChild(newRow);
+            }
+            
+            // Обновляем спарклайн только для этого тикера
+            const container = document.querySelector(`.sparkline-container[data-ticker="${updatedItem.ticker}"]`);
+            if (container) {
+                await renderSparkline(container, updatedItem.ticker, updatedItem.instrument_type === 'Облигация');
+            }
+            
+            // Перепривязываем обработчики кнопок продажи (для новой строки)
+            attachSellButtonHandlers();
+        } else if (existingRow) {
+            // Позиция исчезла из портфеля (например, полностью продана) — удаляем строку
+            existingRow.remove();
+        }
+        
+        // Обновляем индикаторы сортировки (колонка и направление не меняются)
+        updatePortfolioSortIndicators();
+        
+    } catch (error) {
+        console.error('Ошибка точечного обновления позиции портфеля:', error);
     }
 }
 
@@ -643,6 +771,13 @@ function attachSellButtonHandlers() {
  */
 function createPortfolioRow(item, totalPortfolioValue = 0) {
     const row = document.createElement('tr');
+    // Сохраняем тикер и id позиции в data-атрибутах для точечного обновления строки
+    if (item && item.ticker) {
+        row.dataset.ticker = String(item.ticker).toUpperCase();
+    }
+    if (item && item.id !== undefined) {
+        row.dataset.portfolioId = String(item.id);
+    }
     
     // Определение классов для прибыли/убытка
     const pnlClass = item.profit_loss >= 0 ? 'profit' : 'loss';
@@ -1376,9 +1511,12 @@ async function handleBuy(e) {
             // Рассчитываем количество бумаг: лоты * размер лота
             const quantity = lots * lotsize;
             
-            // Форматируем дату для отправки на сервер (YYYY-MM-DD HH:MM:SS)
-            const dateObj = new Date(buyDate);
-            const formattedDate = `${buyDate} 00:00:00`;
+            // Форматируем дату/время для отправки на сервер.
+            // Если пользователь не менял дату, в поле уже стоит сегодняшняя дата,
+            // поэтому добавляем текущее время, а не 00:00:00.
+            const now = new Date();
+            const timePart = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+            const formattedDate = `${buyDate} ${timePart}`;
             
             // 1. Создаём транзакцию покупки
             const transactionData = {
@@ -1414,43 +1552,17 @@ async function handleBuy(e) {
                 updateSummary(currentPortfolioData.summary);
             }
             
-            // 2. Обновляем портфель
-            const formData = {
-                ticker: ticker,
-                company_name: companyName,
-                quantity: quantity,
-                average_buy_price: price,
-                instrument_type: instrumentType
-            };
+            // Портфель уже пересчитывается на сервере (recalculate_portfolio_for_ticker),
+            // поэтому здесь достаточно точечно обновить строку портфеля.
             
-            const response = await fetch('/api/portfolio', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(formData)
-            });
+            // Закрываем модальное окно
+            closeBuyModal();
             
-            const data = await response.json();
+            // Обновляем только строку портфеля для данного тикера
+            await refreshSinglePortfolioPosition(ticker);
             
-            if (data.success) {
-                // Закрываем модальное окно
-                closeBuyModal();
-                
-                // Перезагрузка портфеля
-                loadPortfolio();
-                
-                // Логируем результат в консоль вместо всплывающего окна
-                if (data.updated) {
-                    console.log(`Покупка оформлена. Тикер: ${ticker}, куплено: ${lots} ${lots === 1 ? 'лот' : 'лотов'} (${quantity} ${quantity === 1 ? 'бумага' : 'бумаг'}) по ${parseFloat(price).toFixed(5)} ₽. Новое количество: ${data.new_quantity.toFixed(2)}, средняя цена: ${parseFloat(data.new_average_price).toFixed(5)} ₽`);
-                } else {
-                    console.log(`Покупка оформлена. Тикер: ${ticker}, куплено: ${lots} ${lots === 1 ? 'лот' : 'лотов'} (${quantity} ${quantity === 1 ? 'бумага' : 'бумаг'}) по ${parseFloat(price).toFixed(5)} ₽, сумма: ${(quantity * price).toFixed(2)} ₽`);
-                }
-            } else {
-                console.error('Ошибка при обновлении портфеля:', data.error);
-                restoreButton();
-                return;
-            }
+            // Логируем результат в консоль вместо всплывающего окна
+            console.log(`Покупка оформлена. Тикер: ${ticker}, куплено: ${lots} ${lots === 1 ? 'лот' : 'лотов'} (${quantity} ${quantity === 1 ? 'бумага' : 'бумаг'}) по ${parseFloat(price).toFixed(5)} ₽, сумма: ${(quantity * price).toFixed(2)} ₽`);
         } catch (error) {
             console.error('Ошибка покупки:', error);
             restoreButton();
@@ -3420,12 +3532,12 @@ async function handleSell(e) {
             updateSummary(currentPortfolioData.summary);
         }
         
-        // Портфель автоматически пересчитывается при добавлении транзакции
-        // Просто перезагружаем портфель, чтобы получить актуальные данные
+        // Портфель автоматически пересчитывается при добавлении транзакции.
+        // Обновляем только строку в портфеле (или удаляем её, если позиция закрыта).
         
         // Закрываем модальное окно и обновляем данные
         closeSellModal();
-        loadPortfolio();
+        await refreshSinglePortfolioPosition(ticker);
         
         // Логируем результат в консоль
         const totalSum = (quantity * price).toFixed(2);

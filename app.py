@@ -256,6 +256,8 @@ def get_portfolio():
     try:
         # Период для расчета изменения цены (в днях). Если не задан - используем "последние две записи".
         change_days = request.args.get('change_days', type=int)
+        # Флаг: использовать только кэшированные данные (без прямых запросов к MOEX API)
+        use_cached = request.args.get('use_cached', default=0, type=int) == 1
 
         portfolio_items = db_session.query(Portfolio).all()
         
@@ -359,44 +361,53 @@ def get_portfolio():
                 'types_to_try': types_to_try
             })
         
-        # Параллельно получаем цены и информацию о лотах для всех элементов
+        # Параллельно получаем цены и информацию о лотах для всех элементов,
+        # если явно не запрещено дергать MOEX API.
         price_data_cache = {}
         security_info_cache = {}
         
-        def fetch_price_data(data):
-            """Получить данные о цене для одного элемента"""
-            item = data['item']
-            types_to_try = data['types_to_try']
-            current_price_data = None
-            for itype in types_to_try:
-                current_price_data = moex_service.get_current_price(item.ticker, itype)
-                if current_price_data:
-                    break
-            return item.ticker, current_price_data
-        
-        def fetch_security_info(data):
-            """Получить информацию о лотах для одного элемента"""
-            item = data['item']
-            instrument_type = data['instrument_type']
-            security_info = moex_service.get_security_info(item.ticker, instrument_type)
-            return item.ticker, security_info
-        
-        # Выполняем запросы параллельно
-        with ThreadPoolExecutor(max_workers=10) as executor:
-            # Запросы цен
-            price_futures = {executor.submit(fetch_price_data, data): data for data in items_data}
-            # Запросы информации о лотах
-            security_futures = {executor.submit(fetch_security_info, data): data for data in items_data}
+        if not use_cached:
+            def fetch_price_data(data):
+                """Получить данные о цене для одного элемента"""
+                item = data['item']
+                types_to_try = data['types_to_try']
+                current_price_data = None
+                for itype in types_to_try:
+                    current_price_data = moex_service.get_current_price(item.ticker, itype)
+                    if current_price_data:
+                        break
+                return item.ticker, current_price_data
             
-            # Собираем результаты цен
-            for future in as_completed(price_futures):
-                ticker, price_data = future.result()
-                price_data_cache[ticker] = price_data
+            def fetch_security_info(data):
+                """Получить информацию о лотах для одного элемента"""
+                item = data['item']
+                instrument_type = data['instrument_type']
+                security_info = moex_service.get_security_info(item.ticker, instrument_type)
+                return item.ticker, security_info
             
-            # Собираем результаты информации о лотах
-            for future in as_completed(security_futures):
-                ticker, security_info = future.result()
-                security_info_cache[ticker] = security_info
+            # Выполняем запросы параллельно
+            with ThreadPoolExecutor(max_workers=10) as executor:
+                # Запросы цен
+                price_futures = {executor.submit(fetch_price_data, data): data for data in items_data}
+                # Запросы информации о лотах
+                security_futures = {executor.submit(fetch_security_info, data): data for data in items_data}
+                
+                # Собираем результаты цен
+                for future in as_completed(price_futures):
+                    ticker, price_data = future.result()
+                    price_data_cache[ticker] = price_data
+                
+                # Собираем результаты информации о лотах
+                for future in as_completed(security_futures):
+                    ticker, security_info = future.result()
+                    security_info_cache[ticker] = security_info
+        else:
+            # Режим без запросов к MOEX: используем только кэш/историю и базу.
+            # Для всех тикеров заполняем кэши пустыми значениями.
+            for data in items_data:
+                item = data['item']
+                price_data_cache[item.ticker] = None
+                security_info_cache[item.ticker] = None
         
         # Обрабатываем каждый элемент с использованием кэшированных данных
         for data in items_data:
@@ -1322,23 +1333,7 @@ def add_transaction():
         except (KeyError, AttributeError):
             instrument_type = InstrumentType.STOCK
         
-        # Проверка на дубликаты: ищем идентичную транзакцию за последние 5 секунд
-        # Это предотвращает создание дубликатов при двойном клике или повторной отправке формы
-        time_window = transaction_date - timedelta(seconds=5)
-        duplicate = db_session.query(Transaction).filter(
-            Transaction.ticker == data['ticker'].upper(),
-            Transaction.operation_type == operation_type,
-            Transaction.price == price,
-            Transaction.quantity == quantity,
-            Transaction.date >= time_window,
-            Transaction.date <= transaction_date + timedelta(seconds=5)
-        ).first()
-        
-        if duplicate:
-            return jsonify({
-                'success': False,
-                'error': 'Похожая транзакция уже была создана недавно. Возможно, произошла повторная отправка формы.'
-            }), 400
+        # Проверку на дубликаты отключили по запросу: одинаковые транзакции разрешены.
         
         # Создание новой транзакции
         transaction = Transaction(
