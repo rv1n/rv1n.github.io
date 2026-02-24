@@ -750,8 +750,8 @@ function createPortfolioRow(item, totalPortfolioValue = 0) {
                 ${currentValueLines}
             </div>
         </td>
-        <td class="${pnlClass}">
-            <div style="display: flex; flex-direction: column; align-items: flex-start;">
+        <td class="${pnlClass}" style="text-align: center;">
+            <div style="display: flex; flex-direction: column; align-items: center;">
                 <span>${pnlValueText}</span>
                 <span style="font-size: 0.85em; color: #7f8c8d;">${pnlPercentText}</span>
             </div>
@@ -982,7 +982,8 @@ function updateSummary(summary) {
     
     const priceChange = summary.total_price_change || 0;
     if (totalPriceChangeEl) {
-        totalPriceChangeEl.textContent = `${priceChange >= 0 ? '+' : ''}${formatCurrency(priceChange)}`;
+        // В верхней панели "Изменение за день" тоже ограничиваемся двумя знаками
+        totalPriceChangeEl.textContent = `${priceChange >= 0 ? '+' : ''}${formatCurrency(priceChange, 2)}`;
         totalPriceChangeEl.className = `summary-value ${priceChange >= 0 ? 'profit' : 'loss'}`;
     }
     
