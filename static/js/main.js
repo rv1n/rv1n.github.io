@@ -1890,9 +1890,22 @@ function switchView(viewType) {
         if (btnTransactions) btnTransactions.classList.remove('active');
         if (btnCategories) btnCategories.classList.add('active');
         // Загружаем категории при переключении
-        // Сначала загружаем список категорий, затем данные портфеля
+        // Сначала загружаем список категорий, затем используем уже загруженный портфель,
+        // а к /api/portfolio обращаемся только если данных еще нет
         loadCategoriesList().then(() => {
-            loadCategories();
+            if (currentPortfolioData && currentPortfolioData.portfolio) {
+                // Используем кэш портфеля для построения таблицы категорий
+                const uniqueTickers = {};
+                currentPortfolioData.portfolio.forEach(item => {
+                    if (!uniqueTickers[item.ticker]) {
+                        uniqueTickers[item.ticker] = item;
+                    }
+                });
+                renderCategories(Object.values(uniqueTickers));
+            } else {
+                // Если по какой-то причине портфель еще не загружен, сделаем один запрос
+                loadCategories();
+            }
         });
     } else if (viewType === 'server') {
         tableView.style.display = 'none';
