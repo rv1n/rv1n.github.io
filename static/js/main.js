@@ -896,9 +896,11 @@ function createPortfolioRow(item, totalPortfolioValue = 0) {
                 <span style="font-size: 0.85em; color: #7f8c8d;">${pnlPercentText}</span>
             </div>
         </td>
-        <td class="${changeClass}">
-            ${item.price_change >= 0 ? '+' : ''}${formatPrice(item.price_change, item.price_decimals)} 
-            (${item.price_change_percent >= 0 ? '+' : ''}${formatPercent(Math.abs(item.price_change_percent), 2)})
+        <td class="${changeClass}" style="text-align: center;">
+            <div style="display: flex; flex-direction: column; align-items: center; gap: 2px;">
+                <span>${item.price_change >= 0 ? '+' : ''}${formatPrice(item.price_change, item.price_decimals)} (${item.price_change_percent >= 0 ? '+' : ''}${formatPercent(Math.abs(item.price_change_percent), 2)})</span>
+                <span style="font-size: 0.8em; color: #7f8c8d; white-space: nowrap;">${formatPrice(effectivePrice - item.price_change, 2)} → ${formatPrice(effectivePrice, 2)}</span>
+            </div>
         </td>
         <td class="sparkline-cell">
             <div class="sparkline-container" data-ticker="${item.ticker}"></div>
@@ -3438,6 +3440,16 @@ function openSellModal(portfolioId, ticker, companyName, availableQuantity, avai
         }
     }
     
+    // Устанавливаем сегодняшнюю дату по умолчанию
+    const sellDateInput = document.getElementById('sell-date');
+    if (sellDateInput) {
+        const today = new Date();
+        const year = today.getFullYear();
+        const month = String(today.getMonth() + 1).padStart(2, '0');
+        const day = String(today.getDate()).padStart(2, '0');
+        sellDateInput.value = `${year}-${month}-${day}`;
+    }
+    
     // Устанавливаем текущую цену как цену продажи по умолчанию
     document.getElementById('sell-price').value = currentPrice.toFixed(5);
     
@@ -3485,6 +3497,7 @@ async function handleSell(e) {
     const lotsize = parseFloat(document.getElementById('sell-lotsize').value) || 1;
     const availableQuantity = parseFloat(document.getElementById('sell-available-quantity').value);
     const availableLots = availableQuantity / lotsize;
+    const sellDate = document.getElementById('sell-date').value;
     
     // Рассчитываем количество бумаг: лоты * размер лота
     const quantity = lots * lotsize;
@@ -3502,12 +3515,17 @@ async function handleSell(e) {
     
     try {
         // 1. Создаём транзакцию продажи
+        const now = new Date();
+        const timePart = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+        const formattedSellDate = `${sellDate} ${timePart}`;
+        
         const transactionData = {
             ticker: ticker,
             company_name: companyName,
             operation_type: 'Продажа',
             price: price,
             quantity: quantity, // Сохраняем количество бумаг (лоты * размер лота)
+            date: formattedSellDate,
             notes: `Продажа через кнопку портфеля: ${lots} ${lots === 1 ? 'лот' : 'лотов'} (${quantity} ${quantity === 1 ? 'бумага' : 'бумаг'})`
         };
         
