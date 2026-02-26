@@ -1,7 +1,7 @@
 """
 Модель для хранения баланса свободных денег от продаж активов
 """
-from sqlalchemy import Column, Integer, Float
+from sqlalchemy import Column, Integer, Float, ForeignKey
 from models.database import Base
 
 
@@ -14,7 +14,8 @@ class CashBalance(Base):
     """
     __tablename__ = 'cash_balance'
     
-    id = Column(Integer, primary_key=True, default=1)  # Всегда одна запись с id=1
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=True)
     balance = Column(Float, default=0.0, nullable=False)  # Баланс в рублях
     
     def __repr__(self):

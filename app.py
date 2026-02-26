@@ -42,22 +42,24 @@ init_db()
 
 # Создаём пользователя admin по умолчанию, если пользователей нет
 def init_default_user():
-    existing = db_session.query(User).first()
-    if not existing:
-        admin = User(username='admin')
-        admin.set_password('admin')
-        db_session.add(admin)
-        db_session.commit()
+    for username, password in [('admin', 'admin'), ('dev', 'dev')]:
+        if not db_session.query(User).filter_by(username=username).first():
+            user = User(username=username)
+            user.set_password(password)
+            db_session.add(user)
+    db_session.commit()
 
 init_default_user()
 
-# Миграция: добавляем новые колонки, если их ещё нет
+# Миграция: добавляем новые колонки и пересоздаём таблицы при необходимости
 def migrate_portfolio_columns():
     from sqlalchemy import text
     with db_session.bind.connect() as conn:
+        # --- Простые ALTER TABLE для portfolio ---
         for col, col_type in [
             ('current_price', 'REAL'),
             ('current_price_updated_at', 'DATETIME'),
+            ('lotsize', 'INTEGER'),
         ]:
             try:
                 conn.execute(text(f'ALTER TABLE portfolio ADD COLUMN {col} {col_type}'))
@@ -65,11 +67,102 @@ def migrate_portfolio_columns():
             except Exception:
                 pass  # Колонка уже существует
 
+        # --- Пересоздание portfolio: убрать UNIQUE(ticker), добавить user_id ---
+        cols = [row[1] for row in conn.execute(text('PRAGMA table_info(portfolio)')).fetchall()]
+        if 'user_id' not in cols:
+            conn.execute(text('''
+                CREATE TABLE portfolio_new (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    ticker VARCHAR(20) NOT NULL,
+                    user_id INTEGER REFERENCES users(id),
+                    company_name VARCHAR(200) NOT NULL,
+                    quantity REAL NOT NULL,
+                    average_buy_price REAL NOT NULL,
+                    category VARCHAR(100),
+                    asset_type VARCHAR(100),
+                    instrument_type VARCHAR(20) NOT NULL DEFAULT 'STOCK',
+                    bond_facevalue REAL,
+                    bond_currency VARCHAR(10),
+                    current_price REAL,
+                    current_price_updated_at DATETIME,
+                    lotsize INTEGER,
+                    date_added DATETIME,
+                    UNIQUE (ticker, user_id)
+                )
+            '''))
+            conn.execute(text('''
+                INSERT INTO portfolio_new
+                    (id, ticker, user_id, company_name, quantity, average_buy_price,
+                     category, asset_type, instrument_type, bond_facevalue, bond_currency,
+                     current_price, current_price_updated_at, lotsize, date_added)
+                SELECT id, ticker, 1, company_name, quantity, average_buy_price,
+                       category, asset_type, instrument_type, bond_facevalue, bond_currency,
+                       current_price, current_price_updated_at, lotsize, date_added
+                FROM portfolio
+            '''))
+            conn.execute(text('DROP TABLE portfolio'))
+            conn.execute(text('ALTER TABLE portfolio_new RENAME TO portfolio'))
+            conn.commit()
+
+        # --- Пересоздание categories: убрать UNIQUE(name), добавить user_id ---
+        cols = [row[1] for row in conn.execute(text('PRAGMA table_info(categories)')).fetchall()]
+        if 'user_id' not in cols:
+            conn.execute(text('''
+                CREATE TABLE categories_new (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name VARCHAR(100) NOT NULL,
+                    user_id INTEGER REFERENCES users(id),
+                    date_created DATETIME,
+                    UNIQUE (name, user_id)
+                )
+            '''))
+            conn.execute(text('''
+                INSERT INTO categories_new (id, name, user_id, date_created)
+                SELECT id, name, 1, date_created FROM categories
+            '''))
+            conn.execute(text('DROP TABLE categories'))
+            conn.execute(text('ALTER TABLE categories_new RENAME TO categories'))
+            conn.commit()
+
+        # --- Пересоздание asset_types: убрать UNIQUE(name), добавить user_id ---
+        cols = [row[1] for row in conn.execute(text('PRAGMA table_info(asset_types)')).fetchall()]
+        if 'user_id' not in cols:
+            conn.execute(text('''
+                CREATE TABLE asset_types_new (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name VARCHAR(100) NOT NULL,
+                    user_id INTEGER REFERENCES users(id),
+                    date_created DATETIME,
+                    UNIQUE (name, user_id)
+                )
+            '''))
+            conn.execute(text('''
+                INSERT INTO asset_types_new (id, name, user_id, date_created)
+                SELECT id, name, 1, date_created FROM asset_types
+            '''))
+            conn.execute(text('DROP TABLE asset_types'))
+            conn.execute(text('ALTER TABLE asset_types_new RENAME TO asset_types'))
+            conn.commit()
+
+        # --- ALTER TABLE для transactions ---
+        cols = [row[1] for row in conn.execute(text('PRAGMA table_info(transactions)')).fetchall()]
+        if 'user_id' not in cols:
+            conn.execute(text('ALTER TABLE transactions ADD COLUMN user_id INTEGER REFERENCES users(id)'))
+            conn.execute(text('UPDATE transactions SET user_id = 1'))
+            conn.commit()
+
+        # --- ALTER TABLE для cash_balance ---
+        cols = [row[1] for row in conn.execute(text('PRAGMA table_info(cash_balance)')).fetchall()]
+        if 'user_id' not in cols:
+            conn.execute(text('ALTER TABLE cash_balance ADD COLUMN user_id INTEGER REFERENCES users(id)'))
+            conn.execute(text('UPDATE cash_balance SET user_id = 1'))
+            conn.commit()
+
 migrate_portfolio_columns()
 
-# Инициализация категорий при первом запуске
+# Инициализация категорий при первом запуске (для каждого пользователя)
 def init_categories():
-    """Инициализация категорий при первом запуске"""
+    """Инициализация категорий по умолчанию для каждого пользователя"""
     from models.category import Category
     default_categories = [
         'Нефть и газ',
@@ -83,25 +176,26 @@ def init_categories():
         'Строительные компании и недвижимость',
         'Транспорт'
     ]
-    
-    for cat_name in default_categories:
-        existing = db_session.query(Category).filter_by(name=cat_name).first()
-        if not existing:
-            new_category = Category(name=cat_name)
-            db_session.add(new_category)
-    
+
+    users = db_session.query(User).all()
+    for user in users:
+        existing_names = {c.name for c in db_session.query(Category).filter_by(user_id=user.id).all()}
+        for cat_name in default_categories:
+            if cat_name not in existing_names:
+                db_session.add(Category(name=cat_name, user_id=user.id))
     db_session.commit()
 
 init_categories()
 
-# Инициализация баланса свободных денег
+# Инициализация баланса свободных денег (для каждого пользователя)
 def init_cash_balance():
-    """Инициализация баланса свободных денег (если еще не создан)"""
-    balance = db_session.query(CashBalance).filter(CashBalance.id == 1).first()
-    if not balance:
-        balance = CashBalance(id=1, balance=0.0)
-        db_session.add(balance)
-        db_session.commit()
+    """Инициализация баланса свободных денег (если еще не создан для пользователя)"""
+    users = db_session.query(User).all()
+    for user in users:
+        existing = db_session.query(CashBalance).filter_by(user_id=user.id).first()
+        if not existing:
+            db_session.add(CashBalance(user_id=user.id, balance=0.0))
+    db_session.commit()
 
 init_cash_balance()
 
@@ -345,7 +439,7 @@ def get_portfolio():
         # Флаг: использовать только кэшированные данные (без прямых запросов к MOEX API)
         use_cached = request.args.get('use_cached', default=0, type=int) == 1
 
-        portfolio_items = db_session.query(Portfolio).all()
+        portfolio_items = db_session.query(Portfolio).filter(Portfolio.user_id == current_user.id).all()
         
         # Проверяем на дубликаты и удаляем их
         # Группируем по тикеру и оставляем только первую запись для каждого тикера
@@ -375,7 +469,8 @@ def get_portfolio():
         all_transactions_dict = {}
         if all_tickers:
             all_transactions_list = db_session.query(Transaction).filter(
-                Transaction.ticker.in_(all_tickers)
+                Transaction.ticker.in_(all_tickers),
+                Transaction.user_id == current_user.id
             ).order_by(Transaction.date.asc()).all()
             
             # Группируем транзакции по тикерам
@@ -529,7 +624,10 @@ def get_portfolio():
                         }
                     else:
                         price_data_cache[item.ticker] = None
-                security_info_cache[item.ticker] = None
+                # В cached-режиме берём lotsize из сохранённого в Portfolio
+                security_info_cache[item.ticker] = {
+                    'trading_params': {'lotsize': item.lotsize or 1}
+                } if item.lotsize else None
         
         # Обрабатываем каждый элемент с использованием кэшированных данных
         for data in items_data:
@@ -580,11 +678,13 @@ def get_portfolio():
                         item.bond_facevalue = bond_facevalue
                         item.bond_currency = bond_currency
                         db_session.commit()
-                # Сохраняем свежую цену в БД, чтобы при перезагрузке страницы
+                # Сохраняем свежую цену и lotsize в БД, чтобы при перезагрузке страницы
                 # (use_cached=1) использовались актуальные данные
                 if not use_cached and current_price and current_price > 0:
                     item.current_price = current_price
                     item.current_price_updated_at = datetime.now()
+                    if lotsize and lotsize > 0:
+                        item.lotsize = lotsize
                     db_session.commit()
             else:
                 # Если цена не получена от MOEX — берём сохранённую в БД
@@ -829,10 +929,10 @@ def get_portfolio():
             weighted_percent = sum(item['price_change_percent'] * item['total_cost'] for item in result if item['price_change'] != 0)
             total_price_change_percent = weighted_percent / total_value_for_change if total_value_for_change > 0 else 0
         
-        # Получаем баланс свободных денег
-        balance = db_session.query(CashBalance).filter(CashBalance.id == 1).first()
+        # Получаем баланс свободных денег текущего пользователя
+        balance = db_session.query(CashBalance).filter_by(user_id=current_user.id).first()
         if not balance:
-            balance = CashBalance(id=1, balance=0.0)
+            balance = CashBalance(user_id=current_user.id, balance=0.0)
             db_session.add(balance)
             db_session.commit()
         
@@ -884,8 +984,8 @@ def add_portfolio_item():
                 'error': 'Неверные данные: тикер, количество и цена должны быть положительными'
             }), 400
         
-        # Проверяем, есть ли уже такой тикер
-        existing = db_session.query(Portfolio).filter_by(ticker=ticker).first()
+        # Проверяем, есть ли уже такой тикер у текущего пользователя
+        existing = db_session.query(Portfolio).filter_by(ticker=ticker, user_id=current_user.id).first()
         
         if existing:
             # Если тикер уже есть - рассчитываем среднюю цену покупки
@@ -917,6 +1017,7 @@ def add_portfolio_item():
             # Создаем новую позицию
             new_item = Portfolio(
                 ticker=ticker,
+                user_id=current_user.id,
                 company_name=company_name or ticker,
                 category=category or None,
                 asset_type=asset_type or None,
@@ -947,7 +1048,7 @@ def update_portfolio_item(item_id):
     Обновить позицию в портфеле
     """
     try:
-        item = db_session.query(Portfolio).filter_by(id=item_id).first()
+        item = db_session.query(Portfolio).filter_by(id=item_id, user_id=current_user.id).first()
         if not item:
             return jsonify({
                 'success': False,
@@ -986,7 +1087,7 @@ def delete_portfolio_item(item_id):
     Удалить позицию из портфеля
     """
     try:
-        item = db_session.query(Portfolio).filter_by(id=item_id).first()
+        item = db_session.query(Portfolio).filter_by(id=item_id, user_id=current_user.id).first()
         if not item:
             # Позиция уже удалена (возможно, автоматически при пересчете после транзакции)
             # Возвращаем успех, чтобы не показывать ошибку пользователю
@@ -1054,8 +1155,10 @@ def update_category():
                 'error': 'Тикер не указан'
             }), 400
         
-        # Обновляем категорию для всех записей с этим тикером
-        portfolio_items = db_session.query(Portfolio).filter(Portfolio.ticker == ticker).all()
+        # Обновляем категорию для всех записей с этим тикером у текущего пользователя
+        portfolio_items = db_session.query(Portfolio).filter(
+            Portfolio.ticker == ticker, Portfolio.user_id == current_user.id
+        ).all()
         
         if not portfolio_items:
             return jsonify({
@@ -1099,7 +1202,9 @@ def get_ticker_info(ticker):
         
         # Пытаемся определить тип инструмента
         # 1) По записи в портфеле (если есть)
-        portfolio_item = db_session.query(Portfolio).filter(Portfolio.ticker == ticker).first()
+        portfolio_item = db_session.query(Portfolio).filter(
+            Portfolio.ticker == ticker, Portfolio.user_id == current_user.id
+        ).first()
         instrument_type = None
         if portfolio_item and getattr(portfolio_item, 'instrument_type', None):
             # Enum InstrumentType: используем .name (STOCK/BOND)
@@ -1336,7 +1441,7 @@ def get_transactions():
     - date_to: фильтр по дате до (YYYY-MM-DD) (опционально)
     """
     try:
-        query = db_session.query(Transaction)
+        query = db_session.query(Transaction).filter(Transaction.user_id == current_user.id)
         
         # Фильтр по тикеру
         ticker = request.args.get('ticker')
@@ -1444,6 +1549,7 @@ def add_transaction():
         transaction = Transaction(
             date=transaction_date,
             ticker=data['ticker'].upper(),
+            user_id=current_user.id,
             company_name=data.get('company_name', ''),
             operation_type=operation_type,
             price=price,
@@ -1455,10 +1561,10 @@ def add_transaction():
         
         db_session.add(transaction)
         
-        # Обновляем баланс свободных денег
-        balance = db_session.query(CashBalance).filter(CashBalance.id == 1).first()
+        # Обновляем баланс свободных денег текущего пользователя
+        balance = db_session.query(CashBalance).filter_by(user_id=current_user.id).first()
         if not balance:
-            balance = CashBalance(id=1, balance=0.0)
+            balance = CashBalance(user_id=current_user.id, balance=0.0)
             db_session.add(balance)
         
         if operation_type == TransactionType.SELL:
@@ -1476,7 +1582,7 @@ def add_transaction():
         db_session.commit()
         
         # Пересчитываем портфель для этого тикера после добавления транзакции
-        recalculate_portfolio_for_ticker(data['ticker'].upper())
+        recalculate_portfolio_for_ticker(data['ticker'].upper(), user_id=current_user.id)
         
         return jsonify({
             'success': True,
@@ -1499,7 +1605,10 @@ def update_transaction(transaction_id):
     Обновить существующую транзакцию
     """
     try:
-        transaction = db_session.query(Transaction).filter(Transaction.id == transaction_id).first()
+        transaction = db_session.query(Transaction).filter(
+            Transaction.id == transaction_id,
+            Transaction.user_id == current_user.id
+        ).first()
         
         if not transaction:
             return jsonify({
@@ -1556,11 +1665,11 @@ def update_transaction(transaction_id):
         db_session.commit()
         
         # Пересчитываем портфель для нового тикера
-        recalculate_portfolio_for_ticker(new_ticker)
+        recalculate_portfolio_for_ticker(new_ticker, user_id=current_user.id)
         
         # Если тикер изменился, пересчитываем и для старого тикера
         if old_ticker != new_ticker:
-            recalculate_portfolio_for_ticker(old_ticker)
+            recalculate_portfolio_for_ticker(old_ticker, user_id=current_user.id)
         
         return jsonify({
             'success': True,
@@ -1577,7 +1686,7 @@ def update_transaction(transaction_id):
         }), 500
 
 
-def recalculate_portfolio_for_ticker(ticker):
+def recalculate_portfolio_for_ticker(ticker, user_id=None):
     """
     Пересчитать портфель для указанного тикера на основе всех транзакций
     Учитывает только те транзакции покупки, которые не были полностью проданы.
@@ -1586,13 +1695,17 @@ def recalculate_portfolio_for_ticker(ticker):
     """
     try:
         # Получаем все транзакции для тикера, отсортированные по дате (от старых к новым)
-        all_transactions = db_session.query(Transaction).filter(
-            Transaction.ticker == ticker.upper()
-        ).order_by(Transaction.date.asc()).all()
+        txn_query = db_session.query(Transaction).filter(Transaction.ticker == ticker.upper())
+        if user_id is not None:
+            txn_query = txn_query.filter(Transaction.user_id == user_id)
+        all_transactions = txn_query.order_by(Transaction.date.asc()).all()
         
         # Находим позицию в портфеле
         # Проверяем на дубликаты: если есть несколько записей для одного тикера, удаляем лишние
-        portfolio_items = db_session.query(Portfolio).filter_by(ticker=ticker.upper()).all()
+        pf_query = db_session.query(Portfolio).filter_by(ticker=ticker.upper())
+        if user_id is not None:
+            pf_query = pf_query.filter(Portfolio.user_id == user_id)
+        portfolio_items = pf_query.all()
         portfolio_item = None
         if len(portfolio_items) > 1:
             # Есть дубликаты - оставляем первую запись, остальные удаляем
@@ -1645,9 +1758,10 @@ def recalculate_portfolio_for_ticker(ticker):
         
         if total_quantity <= 0:
             # Если количество <= 0, удаляем все позиции для этого тикера из портфеля
-            # (на случай, если есть дубликаты)
-            portfolio_items_to_delete = db_session.query(Portfolio).filter_by(ticker=ticker.upper()).all()
-            for item_to_delete in portfolio_items_to_delete:
+            del_query = db_session.query(Portfolio).filter_by(ticker=ticker.upper())
+            if user_id is not None:
+                del_query = del_query.filter(Portfolio.user_id == user_id)
+            for item_to_delete in del_query.all():
                 db_session.delete(item_to_delete)
             db_session.commit()
             return True
@@ -1677,6 +1791,7 @@ def recalculate_portfolio_for_ticker(ticker):
             if last_transaction and relevant_buy_transactions:
                 new_item = Portfolio(
                     ticker=ticker.upper(),
+                    user_id=user_id,
                     company_name=last_transaction.company_name or ticker.upper(),
                     quantity=total_quantity,
                     average_buy_price=average_buy_price,
@@ -1699,7 +1814,10 @@ def delete_transaction(transaction_id):
     Удалить транзакцию и пересчитать портфель
     """
     try:
-        transaction = db_session.query(Transaction).filter(Transaction.id == transaction_id).first()
+        transaction = db_session.query(Transaction).filter(
+            Transaction.id == transaction_id,
+            Transaction.user_id == current_user.id
+        ).first()
         
         if not transaction:
             return jsonify({
@@ -1713,9 +1831,9 @@ def delete_transaction(transaction_id):
         total = transaction.total
         
         # Обновляем баланс свободных денег (откатываем влияние транзакции)
-        balance = db_session.query(CashBalance).filter(CashBalance.id == 1).first()
+        balance = db_session.query(CashBalance).filter_by(user_id=current_user.id).first()
         if not balance:
-            balance = CashBalance(id=1, balance=0.0)
+            balance = CashBalance(user_id=current_user.id, balance=0.0)
             db_session.add(balance)
         
         # Откатываем влияние удаляемой транзакции
@@ -1732,7 +1850,7 @@ def delete_transaction(transaction_id):
         db_session.commit()
         
         # Пересчитываем портфель для этого тикера
-        recalculate_portfolio_for_ticker(ticker)
+        recalculate_portfolio_for_ticker(ticker, user_id=current_user.id)
         
         return jsonify({
             'success': True,
@@ -1755,9 +1873,9 @@ def get_cash_balance():
     Получить текущий баланс свободных денег от продаж
     """
     try:
-        balance = db_session.query(CashBalance).filter(CashBalance.id == 1).first()
+        balance = db_session.query(CashBalance).filter_by(user_id=current_user.id).first()
         if not balance:
-            balance = CashBalance(id=1, balance=0.0)
+            balance = CashBalance(user_id=current_user.id, balance=0.0)
             db_session.add(balance)
             db_session.commit()
         
@@ -1860,10 +1978,9 @@ def get_price_history():
         
         # Для облигаций добавляем информацию о номинале и валюте из портфеля
         # и конвертируем цену в рубли
-        # Создаем словарь с данными об облигациях из портфеля
+        # Создаем словарь с данными об облигациях из портфеля текущего пользователя
         bond_info = {}
-        # Получаем все облигации из портфеля
-        portfolio_items = db_session.query(Portfolio).all()
+        portfolio_items = db_session.query(Portfolio).filter(Portfolio.user_id == current_user.id).all()
         for item in portfolio_items:
             # Проверяем, является ли инструмент облигацией
             is_bond = False
@@ -2114,7 +2231,7 @@ def get_categories():
     Получить список всех категорий
     """
     try:
-        categories = db_session.query(Category).order_by(Category.name).all()
+        categories = db_session.query(Category).filter_by(user_id=current_user.id).order_by(Category.name).all()
         return jsonify({
             'success': True,
             'categories': [cat.to_dict() for cat in categories]
@@ -2141,15 +2258,15 @@ def create_category():
                 'error': 'Название категории не может быть пустым'
             }), 400
         
-        # Проверяем, не существует ли уже такая категория
-        existing = db_session.query(Category).filter_by(name=name).first()
+        # Проверяем, не существует ли уже такая категория у текущего пользователя
+        existing = db_session.query(Category).filter_by(name=name, user_id=current_user.id).first()
         if existing:
             return jsonify({
                 'success': False,
                 'error': 'Категория с таким названием уже существует'
             }), 400
         
-        new_category = Category(name=name)
+        new_category = Category(name=name, user_id=current_user.id)
         db_session.add(new_category)
         db_session.commit()
         
@@ -2172,7 +2289,7 @@ def update_category_item(category_id):
     Обновить категорию
     """
     try:
-        category = db_session.query(Category).filter_by(id=category_id).first()
+        category = db_session.query(Category).filter_by(id=category_id, user_id=current_user.id).first()
         if not category:
             return jsonify({
                 'success': False,
@@ -2188,8 +2305,10 @@ def update_category_item(category_id):
                 'error': 'Название категории не может быть пустым'
             }), 400
         
-        # Проверяем, не существует ли уже категория с таким названием
-        existing = db_session.query(Category).filter_by(name=new_name).filter(Category.id != category_id).first()
+        # Проверяем, не существует ли уже категория с таким названием у текущего пользователя
+        existing = db_session.query(Category).filter_by(
+            name=new_name, user_id=current_user.id
+        ).filter(Category.id != category_id).first()
         if existing:
             return jsonify({
                 'success': False,
@@ -2200,8 +2319,10 @@ def update_category_item(category_id):
         category.name = new_name
         db_session.commit()
         
-        # Обновляем все позиции портфеля, которые использовали старую категорию
-        db_session.query(Portfolio).filter_by(category=old_name).update({'category': new_name})
+        # Обновляем все позиции портфеля текущего пользователя
+        db_session.query(Portfolio).filter_by(
+            category=old_name, user_id=current_user.id
+        ).update({'category': new_name})
         db_session.commit()
         
         return jsonify({
@@ -2223,7 +2344,7 @@ def delete_category(category_id):
     Удалить категорию
     """
     try:
-        category = db_session.query(Category).filter_by(id=category_id).first()
+        category = db_session.query(Category).filter_by(id=category_id, user_id=current_user.id).first()
         if not category:
             return jsonify({
                 'success': False,
@@ -2232,8 +2353,10 @@ def delete_category(category_id):
         
         category_name = category.name
         
-        # Удаляем категорию из всех позиций портфеля
-        db_session.query(Portfolio).filter_by(category=category_name).update({'category': None})
+        # Удаляем категорию из позиций портфеля текущего пользователя
+        db_session.query(Portfolio).filter_by(
+            category=category_name, user_id=current_user.id
+        ).update({'category': None})
         
         # Удаляем саму категорию
         db_session.delete(category)
@@ -2259,7 +2382,7 @@ def get_asset_types():
     Получить список всех видов активов
     """
     try:
-        asset_types = db_session.query(AssetType).order_by(AssetType.name).all()
+        asset_types = db_session.query(AssetType).filter_by(user_id=current_user.id).order_by(AssetType.name).all()
         return jsonify({
             'success': True,
             'asset_types': [at.to_dict() for at in asset_types]
@@ -2286,15 +2409,15 @@ def create_asset_type():
                 'error': 'Название вида актива не может быть пустым'
             }), 400
         
-        # Проверяем, не существует ли уже такой вид актива
-        existing = db_session.query(AssetType).filter_by(name=name).first()
+        # Проверяем, не существует ли уже такой вид актива у текущего пользователя
+        existing = db_session.query(AssetType).filter_by(name=name, user_id=current_user.id).first()
         if existing:
             return jsonify({
                 'success': False,
                 'error': 'Вид актива с таким названием уже существует'
             }), 400
         
-        new_asset_type = AssetType(name=name)
+        new_asset_type = AssetType(name=name, user_id=current_user.id)
         db_session.add(new_asset_type)
         db_session.commit()
         
@@ -2317,7 +2440,7 @@ def update_asset_type_item(asset_type_id):
     Обновить вид актива
     """
     try:
-        asset_type = db_session.query(AssetType).filter_by(id=asset_type_id).first()
+        asset_type = db_session.query(AssetType).filter_by(id=asset_type_id, user_id=current_user.id).first()
         if not asset_type:
             return jsonify({
                 'success': False,
@@ -2333,8 +2456,10 @@ def update_asset_type_item(asset_type_id):
                 'error': 'Название вида актива не может быть пустым'
             }), 400
         
-        # Проверяем, не существует ли уже вид актива с таким названием
-        existing = db_session.query(AssetType).filter_by(name=new_name).filter(AssetType.id != asset_type_id).first()
+        # Проверяем, не существует ли уже вид актива с таким названием у текущего пользователя
+        existing = db_session.query(AssetType).filter_by(
+            name=new_name, user_id=current_user.id
+        ).filter(AssetType.id != asset_type_id).first()
         if existing:
             return jsonify({
                 'success': False,
@@ -2345,8 +2470,10 @@ def update_asset_type_item(asset_type_id):
         asset_type.name = new_name
         db_session.commit()
         
-        # Обновляем все позиции портфеля, которые использовали старый вид актива
-        db_session.query(Portfolio).filter_by(asset_type=old_name).update({'asset_type': new_name})
+        # Обновляем все позиции портфеля текущего пользователя
+        db_session.query(Portfolio).filter_by(
+            asset_type=old_name, user_id=current_user.id
+        ).update({'asset_type': new_name})
         db_session.commit()
         
         return jsonify({
@@ -2368,7 +2495,7 @@ def delete_asset_type(asset_type_id):
     Удалить вид актива
     """
     try:
-        asset_type = db_session.query(AssetType).filter_by(id=asset_type_id).first()
+        asset_type = db_session.query(AssetType).filter_by(id=asset_type_id, user_id=current_user.id).first()
         if not asset_type:
             return jsonify({
                 'success': False,
@@ -2377,8 +2504,10 @@ def delete_asset_type(asset_type_id):
         
         asset_type_name = asset_type.name
         
-        # Удаляем вид актива из всех позиций портфеля
-        db_session.query(Portfolio).filter_by(asset_type=asset_type_name).update({'asset_type': None})
+        # Удаляем вид актива из позиций портфеля текущего пользователя
+        db_session.query(Portfolio).filter_by(
+            asset_type=asset_type_name, user_id=current_user.id
+        ).update({'asset_type': None})
         
         # Удаляем сам вид актива
         db_session.delete(asset_type)

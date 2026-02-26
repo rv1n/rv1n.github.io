@@ -196,7 +196,7 @@ function setupEventListeners() {
         changePeriodSelect.addEventListener('change', () => {
             const days = parseInt(changePeriodSelect.value, 10);
             currentChangeDays = !isNaN(days) && days > 0 ? days : 1;
-            loadPortfolio(true); // тихое обновление портфеля при смене периода
+            loadPortfolio(true, true); // тихое обновление, только пересчёт периода — без запросов к MOEX
 
             // Обновляем подпись в верхней панели "Изменение за ..."
             const labelSpan = document.getElementById('summary-change-period-label');
@@ -1651,7 +1651,7 @@ async function handleEditPosition(e) {
         
         if (data.success) {
             closeEditModal();
-            loadPortfolio();
+            loadPortfolio(true, true);
             console.log('Позиция успешно обновлена');
         } else {
             console.error('Ошибка обновления позиции:', data.error);
@@ -1673,7 +1673,7 @@ async function deletePosition(id, ticker) {
         const data = await response.json();
         
         if (data.success) {
-            loadPortfolio();
+            loadPortfolio(true, true);
             console.log(`Позиция ${ticker} успешно удалена`);
         } else {
             console.error('Ошибка удаления позиции:', data.error);
@@ -3344,7 +3344,7 @@ async function handleEditTransaction(event) {
             // Обновляем портфель, так как редактирование транзакции влияет на количество и среднюю цену
             const tableView = document.getElementById('table-view');
             if (tableView && tableView.style.display !== 'none') {
-                await loadPortfolio();
+                await loadPortfolio(true, true);
             }
         } else {
             console.error('Ошибка обновления транзакции:', data.error);
@@ -3425,7 +3425,12 @@ function openSellModal(portfolioId, ticker, companyName, availableQuantity, avai
     const lotsHint = document.getElementById('sell-lots-hint');
     if (lotsHint) {
         if (lotsize > 1) {
-            lotsHint.textContent = `1 лот = ${lotsize} ${lotsize === 1 ? 'бумага' : 'бумаг'}`;
+            const hasFullLotHint = availableLots >= 1;
+            if (hasFullLotHint) {
+                lotsHint.textContent = `1 лот = ${lotsize} бумаг · продажа только целыми лотами`;
+            } else {
+                lotsHint.textContent = `1 лот = ${lotsize} бумаг · остаток менее лота, доступна продажа всего остатка`;
+            }
             lotsHint.style.display = 'block';
         } else {
             lotsHint.style.display = 'none';
@@ -3446,10 +3451,22 @@ function openSellModal(portfolioId, ticker, companyName, availableQuantity, avai
     document.getElementById('sell-price').value = currentPrice.toFixed(5);
     
     // Устанавливаем максимальное количество лотов для продажи
-    // ВАЖНО: не округляем вниз, чтобы можно было продать «хвосты» вроде 0.01 лота
     const lotsInput = document.getElementById('sell-lots');
     lotsInput.max = availableLots;
     lotsInput.value = '';
+
+    // Для инструментов с лотами > 1 — только целые лоты (если хватает на целый лот).
+    // Если у позиции остался хвост < 1 лота — разрешаем продать его целиком (дробные лоты).
+    const hasFullLot = availableLots >= 1;
+    if (lotsize > 1 && hasFullLot) {
+        lotsInput.min = '1';
+        lotsInput.step = '1';
+        lotsInput.max = Math.floor(availableLots);
+    } else {
+        lotsInput.min = '0.01';
+        lotsInput.step = '0.01';
+        lotsInput.max = availableLots;
+    }
     
     // Очищаем остальные поля
     document.getElementById('sell-total').value = '';
@@ -3496,12 +3513,19 @@ async function handleSell(e) {
     
     // Валидация количества
     if (lots <= 0) {
-        console.warn('Количество лотов должно быть больше 0');
+        alert('Количество лотов должно быть больше 0');
+        return;
+    }
+
+    // Для инструментов с несколькими бумагами в лоте — только целые лоты.
+    // Исключение: если в позиции остался хвост < 1 лота, позволяем продать его целиком.
+    if (lotsize > 1 && availableLots >= 1 && !Number.isInteger(lots)) {
+        alert(`Для этого инструмента продажа возможна только целым числом лотов.\n1 лот = ${lotsize} бумаг`);
         return;
     }
     
     if (quantity > availableQuantity) {
-        console.warn(`Недостаточно бумаг для продажи. Доступно: ${availableQuantity} (${formatNumber(availableLots)} ${availableLots === 1 ? 'лот' : 'лотов'}), указано: ${quantity} (${lots} ${lots === 1 ? 'лот' : 'лотов'})`);
+        alert(`Недостаточно бумаг для продажи. Доступно: ${formatNumber(availableLots)} ${availableLots === 1 ? 'лот' : 'лотов'} (${formatNumber(availableQuantity)} бумаг)`);
         return;
     }
     
@@ -4179,7 +4203,7 @@ function editCategory(categoryId, categoryName) {
  * Удаление категории
  */
 async function deleteCategory(categoryId, categoryName) {
-    // Раньше здесь было подтверждение через confirm, теперь удаляем без дополнительного запроса
+    if (!confirm(`Удалить категорию «${categoryName}»?`)) return;
     try {
         const response = await fetch(`/api/categories/${categoryId}`, {
             method: 'DELETE'
@@ -4478,7 +4502,7 @@ function editAssetType(assetTypeId, assetTypeName) {
  * Удаление вида актива
  */
 async function deleteAssetType(assetTypeId, assetTypeName) {
-    // Раньше здесь было подтверждение через confirm, теперь удаляем без дополнительного запроса
+    if (!confirm(`Удалить вид актива «${assetTypeName}»?`)) return;
     try {
         const response = await fetch(`/api/asset-types/${assetTypeId}`, {
             method: 'DELETE'

@@ -1,7 +1,7 @@
 """
 Модель портфеля для хранения информации об активах
 """
-from sqlalchemy import Column, Integer, String, Float, DateTime, Enum
+from sqlalchemy import Column, Integer, String, Float, DateTime, Enum, ForeignKey, UniqueConstraint
 from datetime import datetime
 from models.database import Base
 import enum
@@ -30,9 +30,11 @@ class Portfolio(Base):
         date_added: Дата добавления в портфель
     """
     __tablename__ = 'portfolio'
-    
+    __table_args__ = (UniqueConstraint('ticker', 'user_id', name='uq_portfolio_ticker_user'),)
+
     id = Column(Integer, primary_key=True, autoincrement=True)
-    ticker = Column(String(20), nullable=False, unique=True)  # unique=True для автоматического усреднения цены
+    ticker = Column(String(20), nullable=False)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=True)
     company_name = Column(String(200), nullable=False)
     quantity = Column(Float, nullable=False)
     average_buy_price = Column(Float, nullable=False)
@@ -43,6 +45,7 @@ class Portfolio(Base):
     bond_currency = Column(String(10), nullable=True)  # Валюта номинала облигации (SUR, USD, EUR и т.д.)
     current_price = Column(Float, nullable=True)      # Последняя известная цена (сохраняется при запросе к MOEX)
     current_price_updated_at = Column(DateTime, nullable=True)  # Время последнего обновления цены
+    lotsize = Column(Integer, nullable=True)          # Размер лота (сохраняется при запросе к MOEX)
     date_added = Column(DateTime, default=datetime.now)
     
     def __repr__(self):

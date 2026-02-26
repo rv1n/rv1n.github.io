@@ -1,7 +1,7 @@
 """
 Модель для хранения истории покупок/продаж инструментов
 """
-from sqlalchemy import Column, Integer, String, Float, DateTime, Enum
+from sqlalchemy import Column, Integer, String, Float, DateTime, Enum, ForeignKey
 from models.database import Base
 from models.portfolio import InstrumentType
 from datetime import datetime
@@ -23,6 +23,7 @@ class Transaction(Base):
     __tablename__ = 'transactions'
     
     id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=True)
     date = Column(DateTime, default=datetime.now, nullable=False, index=True)
     ticker = Column(String(20), nullable=False, index=True)
     company_name = Column(String(200))
