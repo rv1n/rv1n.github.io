@@ -357,6 +357,13 @@ header h1 {
     font-weight: bold;
 }
 
+.summary-count {
+    font-size: 1.2em;
+    font-weight: bold;
+    color: #7f8c8d;
+    margin-top: 8px;
+}
+
 /* Курсы валют в хедере */
 .header-currency-rates {
     display: flex;
