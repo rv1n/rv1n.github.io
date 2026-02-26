@@ -27,6 +27,7 @@ def init_db():
     from models.asset_type import AssetType
     from models.cash_balance import CashBalance
     from models.settings import Settings
+    from models.user import User
     Base.metadata.create_all(bind=engine)
     
     # Создаем настройки по умолчанию, если их еще нет

@@ -1,7 +1,8 @@
 """
 Главный файл Flask приложения для отслеживания котировок MOEX
 """
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, render_template, jsonify, request, send_file, redirect, url_for, flash
+from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from models.database import init_db, db_session
 from models.portfolio import Portfolio, InstrumentType
 from models.price_history import PriceHistory
@@ -10,6 +11,7 @@ from models.category import Category
 from models.asset_type import AssetType
 from models.cash_balance import CashBalance
 from models.settings import Settings
+from models.user import User
 from services.moex_service import MOEXService
 from services.price_logger import PriceLogger
 from services.currency_service import CurrencyService
@@ -23,10 +25,47 @@ import shutil
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'your-secret-key-here'
+app.config['SECRET_KEY'] = 'your-secret-key-here-change-in-production'
+
+# Инициализация Flask-Login
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'login'
+login_manager.login_message = 'Необходимо войти для доступа к приложению'
+
+@login_manager.user_loader
+def load_user(user_id):
+    return db_session.get(User, int(user_id))
 
 # Инициализация БД
 init_db()
+
+# Создаём пользователя admin по умолчанию, если пользователей нет
+def init_default_user():
+    existing = db_session.query(User).first()
+    if not existing:
+        admin = User(username='admin')
+        admin.set_password('admin')
+        db_session.add(admin)
+        db_session.commit()
+
+init_default_user()
+
+# Миграция: добавляем новые колонки, если их ещё нет
+def migrate_portfolio_columns():
+    from sqlalchemy import text
+    with db_session.bind.connect() as conn:
+        for col, col_type in [
+            ('current_price', 'REAL'),
+            ('current_price_updated_at', 'DATETIME'),
+        ]:
+            try:
+                conn.execute(text(f'ALTER TABLE portfolio ADD COLUMN {col} {col_type}'))
+                conn.commit()
+            except Exception:
+                pass  # Колонка уже существует
+
+migrate_portfolio_columns()
 
 # Инициализация категорий при первом запуске
 def init_categories():
@@ -214,10 +253,57 @@ def ensure_scheduler_running():
     if not scheduler.running:
         start_scheduler()
 
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if current_user.is_authenticated:
+        return redirect(url_for('index'))
+    error = None
+    if request.method == 'POST':
+        username = request.form.get('username', '').strip()
+        password = request.form.get('password', '')
+        user = db_session.query(User).filter_by(username=username).first()
+        if user and user.check_password(password):
+            login_user(user, remember=True)
+            return redirect(url_for('index'))
+        error = 'Неверный логин или пароль'
+    return render_template('login.html', error=error)
+
+
+@app.route('/logout')
+@login_required
+def logout():
+    logout_user()
+    return redirect(url_for('login'))
+
+
+@app.route('/api/change-password', methods=['POST'])
+@login_required
+def change_password():
+    data = request.get_json()
+    current_password = data.get('current_password', '')
+    new_password = data.get('new_password', '')
+    if not current_user.check_password(current_password):
+        return jsonify({'success': False, 'error': 'Неверный текущий пароль'}), 400
+    if len(new_password) < 4:
+        return jsonify({'success': False, 'error': 'Пароль должен быть не менее 4 символов'}), 400
+    current_user.set_password(new_password)
+    db_session.commit()
+    return jsonify({'success': True})
+
+
 @app.route('/')
+@login_required
 def index():
     """Главная страница с портфелем"""
     return render_template('index.html')
+
+
+@app.before_request
+def require_login():
+    """Защита всех маршрутов, кроме login и статических файлов"""
+    open_endpoints = {'login', 'static'}
+    if not current_user.is_authenticated and request.endpoint not in open_endpoints:
+        return redirect(url_for('login'))
 
 
 @app.route('/favicon.ico')
@@ -402,11 +488,47 @@ def get_portfolio():
                     ticker, security_info = future.result()
                     security_info_cache[ticker] = security_info
         else:
-            # Режим без запросов к MOEX: используем только кэш/историю и базу.
-            # Для всех тикеров заполняем кэши пустыми значениями.
+            # Режим без запросов к MOEX: берём последнюю цену из таблицы price_history.
+            if all_tickers:
+                # Получаем последние записи для всех тикеров одним запросом
+                from sqlalchemy import func
+                subq = db_session.query(
+                    PriceHistory.ticker,
+                    func.max(PriceHistory.logged_at).label('max_logged_at')
+                ).filter(
+                    PriceHistory.ticker.in_(all_tickers)
+                ).group_by(PriceHistory.ticker).subquery()
+
+                latest_history = db_session.query(PriceHistory).join(
+                    subq,
+                    (PriceHistory.ticker == subq.c.ticker) &
+                    (PriceHistory.logged_at == subq.c.max_logged_at)
+                ).all()
+
+                latest_history_map = {e.ticker.upper(): e for e in latest_history}
+            else:
+                latest_history_map = {}
+
             for data in items_data:
                 item = data['item']
-                price_data_cache[item.ticker] = None
+                # Приоритет: сохранённая цена из портфеля (обновляется при каждом запросе к MOEX)
+                if hasattr(item, 'current_price') and item.current_price:
+                    price_data_cache[item.ticker] = {
+                        'price': item.current_price,
+                        'last_update': item.current_price_updated_at.isoformat() if item.current_price_updated_at else '',
+                        'decimals': None,
+                    }
+                else:
+                    # Fallback: последняя запись из price_history
+                    entry = latest_history_map.get(item.ticker.upper())
+                    if entry:
+                        price_data_cache[item.ticker] = {
+                            'price': entry.price,
+                            'last_update': entry.logged_at.isoformat(),
+                            'decimals': None,
+                        }
+                    else:
+                        price_data_cache[item.ticker] = None
                 security_info_cache[item.ticker] = None
         
         # Обрабатываем каждый элемент с использованием кэшированных данных
@@ -458,10 +580,20 @@ def get_portfolio():
                         item.bond_facevalue = bond_facevalue
                         item.bond_currency = bond_currency
                         db_session.commit()
+                # Сохраняем свежую цену в БД, чтобы при перезагрузке страницы
+                # (use_cached=1) использовались актуальные данные
+                if not use_cached and current_price and current_price > 0:
+                    item.current_price = current_price
+                    item.current_price_updated_at = datetime.now()
+                    db_session.commit()
             else:
-                # Если цена не получена, используем среднюю цену покупки как fallback
-                current_price = item.average_buy_price if hasattr(item, 'average_buy_price') else 0
-                last_update = ''
+                # Если цена не получена от MOEX — берём сохранённую в БД
+                if hasattr(item, 'current_price') and item.current_price:
+                    current_price = item.current_price
+                    last_update = item.current_price_updated_at.isoformat() if item.current_price_updated_at else ''
+                else:
+                    current_price = item.average_buy_price if hasattr(item, 'average_buy_price') else 0
+                    last_update = ''
             
             # Вычисляем среднюю цену покупки из истории транзакций
             # Используем ту же логику, что и в recalculate_portfolio_for_ticker
@@ -512,104 +644,57 @@ def get_portfolio():
                 calculated_avg_price = item.average_buy_price
             
             # Получаем данные истории цен для расчета изменения
-            # Если задан change_days > 0 — берем цены за период и считаем изменение между
-            # самой старой и самой новой записью. Иначе — между двумя последними записями.
+            # latest_price = current_price (та же цена, что отображается в "Текущая стоимость")
+            # previous_price = самая ранняя запись в истории за выбранный период
             bond_nominal = bond_facevalue if bond_facevalue else 1000.0
 
-            latest_price = None
+            # Конечная точка — текущая цена актива (в тех же единицах, что и история:
+            # проценты для облигаций, рубли для акций)
+            latest_price = current_price if current_price_data else None
             previous_price = None
 
             if change_days and change_days > 0:
-                # Для периода считаем изменение
-                # Если change_days = 1, используем специальную логику: последняя запись за сегодня vs последняя за вчера
                 if change_days == 1:
-                    # Используем кэшированные данные истории цен
+                    # День: предыдущая цена — последняя запись за сегодня (из кэша)
                     ticker_history = price_history_cache.get(item.ticker.upper(), {})
                     latest_entry_today = ticker_history.get('today')
-                    latest_entry_yesterday = ticker_history.get('yesterday')
-                    
-                    if latest_entry_today and latest_entry_yesterday:
-                        # Есть записи за сегодня и за вчера - сравниваем их
-                        latest_price = latest_entry_today.price
-                        previous_price = latest_entry_yesterday.price
-                    elif latest_entry_today:
-                        # Есть запись за сегодня, но нет за вчера - ищем любую предыдущую запись
-                        latest_price = latest_entry_today.price
+
+                    if latest_entry_today:
+                        previous_price = latest_entry_today.price
+                    else:
+                        # Нет сегодняшней — любая последняя доступная запись
                         any_previous = db_session.query(PriceHistory).filter(
-                            PriceHistory.ticker == item.ticker,
-                            PriceHistory.logged_at < latest_entry_today.logged_at
+                            PriceHistory.ticker == item.ticker
                         ).order_by(PriceHistory.logged_at.desc()).first()
-                        if any_previous:
-                            previous_price = any_previous.price
-                        else:
-                            previous_price = latest_price  # Нет предыдущей - изменение = 0
-                    elif latest_entry_yesterday:
-                        # Нет записи за сегодня, но есть за вчера
-                        latest_price = latest_entry_yesterday.price
-                        previous_price = latest_entry_yesterday.price  # Изменение = 0
-                    else:
-                        # Нет записей за сегодня и за вчера
-                        latest_price = None
-                        previous_price = None
+                        previous_price = any_previous.price if any_previous else latest_price
                 else:
-                    # Для других периодов (неделя, месяц и т.д.) используем логику периода
-                    # Для периода считаем "окном" от последней сохраненной цены назад на N дней.
-                    latest_entry = db_session.query(PriceHistory).filter(
-                        PriceHistory.ticker == item.ticker
-                    ).order_by(PriceHistory.logged_at.desc()).first()
+                    # Неделя, месяц и т.д.: предыдущая цена — самая старая запись за период
+                    period_start = datetime.now() - timedelta(days=change_days)
+                    oldest_entry = db_session.query(PriceHistory).filter(
+                        PriceHistory.ticker == item.ticker,
+                        PriceHistory.logged_at >= period_start
+                    ).order_by(PriceHistory.logged_at.asc()).first()
 
-                    if latest_entry:
-                        end_time = latest_entry.logged_at
-                        period_start = end_time - timedelta(days=change_days)
-
-                        history_entries = db_session.query(PriceHistory).filter(
-                            PriceHistory.ticker == item.ticker,
-                            PriceHistory.logged_at >= period_start,
-                            PriceHistory.logged_at <= end_time
-                        ).order_by(PriceHistory.logged_at.asc()).all()
-
-                        if len(history_entries) >= 2:
-                            previous_price = history_entries[0].price
-                            latest_price = history_entries[-1].price
-                        elif len(history_entries) == 1:
-                            # Только одна запись за период — считаем, что изменения нет
-                            latest_price = history_entries[0].price
-                            previous_price = history_entries[0].price
-                        else:
-                            latest_price = None
-                            previous_price = None
+                    if oldest_entry:
+                        previous_price = oldest_entry.price
                     else:
-                        latest_price = None
-                        previous_price = None
+                        # Нет записей за период — берём самую свежую доступную
+                        any_entry = db_session.query(PriceHistory).filter(
+                            PriceHistory.ticker == item.ticker
+                        ).order_by(PriceHistory.logged_at.desc()).first()
+                        previous_price = any_entry.price if any_entry else latest_price
             else:
-                # Для расчета изменения за день используем кэшированные данные
+                # Без периода — дневное изменение (аналогично change_days == 1)
                 ticker_history = price_history_cache.get(item.ticker.upper(), {})
                 latest_entry_today = ticker_history.get('today')
-                latest_entry_yesterday = ticker_history.get('yesterday')
-                
-                if latest_entry_today and latest_entry_yesterday:
-                    # Есть записи за сегодня и за вчера - сравниваем их
-                    latest_price = latest_entry_today.price
-                    previous_price = latest_entry_yesterday.price
-                elif latest_entry_today:
-                    # Есть запись за сегодня, но нет за вчера - ищем любую предыдущую запись
-                    latest_price = latest_entry_today.price
-                    any_previous = db_session.query(PriceHistory).filter(
-                        PriceHistory.ticker == item.ticker,
-                        PriceHistory.logged_at < latest_entry_today.logged_at
-                    ).order_by(PriceHistory.logged_at.desc()).first()
-                    if any_previous:
-                        previous_price = any_previous.price
-                    else:
-                        previous_price = latest_price  # Нет предыдущей - изменение = 0
-                elif latest_entry_yesterday:
-                    # Нет записи за сегодня, но есть за вчера
-                    latest_price = latest_entry_yesterday.price
-                    previous_price = latest_entry_yesterday.price  # Изменение = 0
+
+                if latest_entry_today:
+                    previous_price = latest_entry_today.price
                 else:
-                    # Нет записей за сегодня и за вчера
-                    latest_price = None
-                    previous_price = None
+                    any_previous = db_session.query(PriceHistory).filter(
+                        PriceHistory.ticker == item.ticker
+                    ).order_by(PriceHistory.logged_at.desc()).first()
+                    previous_price = any_previous.price if any_previous else latest_price
 
             # Рассчитываем изменение: разница между предыдущей и последней ценой
             # Для облигаций цены в истории хранятся в процентах, для акций - в рублях
@@ -1161,6 +1246,26 @@ def get_server_status():
         })
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/download-db', methods=['GET'])
+def download_db():
+    """Скачать файл базы данных portfolio.db"""
+    import tempfile
+    app_path = os.path.abspath(os.path.dirname(__file__))
+    db_path = os.path.join(app_path, 'portfolio.db')
+    if not os.path.exists(db_path):
+        return jsonify({'success': False, 'error': 'База данных не найдена'}), 404
+    # Копируем во временный файл, чтобы обойти блокировку SQLite
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.db')
+    tmp.close()
+    shutil.copy2(db_path, tmp.name)
+    return send_file(
+        tmp.name,
+        as_attachment=True,
+        download_name='portfolio.db',
+        mimetype='application/octet-stream'
+    )
 
 
 @app.route('/api/validate-ticker/<ticker>', methods=['GET'])
@@ -1782,15 +1887,20 @@ def get_price_history():
                 }
         
         # Добавляем информацию о номинале и валюте к каждому элементу истории
-        # и конвертируем цену в рубли для облигаций
+        # и конвертируем цену в рубли для облигаций.
+        # Признак облигации определяем по тикеру (bond_info), а не по instrument_type
+        # в истории — старые записи могут хранить неверный тип.
         def process_history_item(item):
-            if item.get('instrument_type') == 'Облигация':
-                ticker = item.get('ticker', '').upper()  # Нормализуем тикер
+            ticker = item.get('ticker', '').upper()
+            is_bond = (
+                item.get('instrument_type') == 'Облигация'
+                or ticker in bond_info
+            )
+            if is_bond:
                 if ticker in bond_info:
                     bond_facevalue = bond_info[ticker]['bond_facevalue']
                     bond_currency = bond_info[ticker]['bond_currency']
                 else:
-                    # Значения по умолчанию, если облигация не в портфеле
                     bond_facevalue = 1000.0
                     bond_currency = 'SUR'
                 

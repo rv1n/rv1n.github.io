@@ -7,6 +7,7 @@ from models.database import Base
 import enum
 
 
+
 class InstrumentType(enum.Enum):
     """Типы финансовых инструментов"""
     STOCK = "Акция"
@@ -40,6 +41,8 @@ class Portfolio(Base):
     instrument_type = Column(Enum(InstrumentType), nullable=False, default=InstrumentType.STOCK)  # Тип инструмента
     bond_facevalue = Column(Float, nullable=True)  # Номинал облигации (для облигаций)
     bond_currency = Column(String(10), nullable=True)  # Валюта номинала облигации (SUR, USD, EUR и т.д.)
+    current_price = Column(Float, nullable=True)      # Последняя известная цена (сохраняется при запросе к MOEX)
+    current_price_updated_at = Column(DateTime, nullable=True)  # Время последнего обновления цены
     date_added = Column(DateTime, default=datetime.now)
     
     def __repr__(self):

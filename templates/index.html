@@ -28,11 +28,41 @@
                         <span id="rate-cny">CNY: -</span>
                     </div>
                 </div>
-                <button id="refresh-btn" class="btn btn-refresh" onclick="manualRefresh()" title="Обновить котировки">
-                    🔄 Обновить котировки
-                </button>
+                <div style="display: flex; gap: 8px; align-items: center;">
+                    <button id="refresh-btn" class="btn btn-header-icon" onclick="manualRefresh()" title="Обновить котировки">🔄</button>
+                    <button class="btn btn-header-icon" onclick="openChangePasswordModal()" title="Сменить пароль">🔑</button>
+                    <a href="/logout" class="btn btn-header-icon" title="Выйти" style="text-decoration: none;">🚪</a>
+                </div>
             </div>
         </header>
+
+    <!-- Модальное окно смены пароля -->
+    <div id="change-password-modal" class="modal" style="display: none;">
+        <div class="modal-content" style="max-width: 380px;">
+            <span class="close" onclick="closeChangePasswordModal()">&times;</span>
+            <h2>🔑 Смена пароля</h2>
+            <form id="change-password-form">
+                <div class="form-group">
+                    <label for="cp-current">Текущий пароль *</label>
+                    <input type="password" id="cp-current" required>
+                </div>
+                <div class="form-group">
+                    <label for="cp-new">Новый пароль *</label>
+                    <input type="password" id="cp-new" required minlength="4">
+                </div>
+                <div class="form-group">
+                    <label for="cp-confirm">Подтвердите новый пароль *</label>
+                    <input type="password" id="cp-confirm" required minlength="4">
+                </div>
+                <div id="cp-error" style="color: #e74c3c; font-size: 0.88rem; margin-bottom: 10px; display: none;"></div>
+                <div id="cp-success" style="color: #27ae60; font-size: 0.88rem; margin-bottom: 10px; display: none;">Пароль успешно изменён</div>
+                <div class="modal-buttons">
+                    <button type="submit" class="btn btn-primary">Сохранить</button>
+                    <button type="button" class="btn btn-secondary" onclick="closeChangePasswordModal()">Отмена</button>
+                </div>
+            </form>
+        </div>
+    </div>
 
         <!-- Сводка портфеля -->
         <div class="portfolio-summary" id="portfolio-summary">
@@ -282,7 +312,12 @@
             <!-- Мониторинг сервера -->
             <div id="server-view" class="portfolio-view" style="display: none;">
                 <div class="server-status-container">
-                    <h3>Мониторинг сервера</h3>
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;">
+                        <h3 style="margin: 0;">Мониторинг сервера</h3>
+                        <a href="/api/download-db" class="btn btn-secondary" download="portfolio.db" style="text-decoration: none;">
+                            ⬇️ Скачать базу данных
+                        </a>
+                    </div>
                     <div id="server-status-content" class="server-status-content">
                         Загрузка данных о сервере...
                     </div>
@@ -654,21 +689,22 @@
             <span class="close" onclick="closeManageCategoriesModal()">&times;</span>
             <h2>⚙️ Управление категориями и видами</h2>
             
-            <!-- Вкладки для переключения между категориями и видами -->
-            <div style="display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 2px solid #ecf0f1;">
-                <button id="tab-categories" class="tab-button active" onclick="switchManageTab('categories')" style="padding: 10px 20px; border: none; background: none; cursor: pointer; border-bottom: 2px solid #667eea; margin-bottom: -2px;">
-                    Категории
-                </button>
-                <button id="tab-asset-types" class="tab-button" onclick="switchManageTab('asset-types')" style="padding: 10px 20px; border: none; background: none; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px;">
-                    Виды активов
-                </button>
+            <!-- Вкладки и кнопка добавления в одной строке -->
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; border-bottom: 2px solid #ecf0f1;">
+                <div style="display: flex; gap: 10px;">
+                    <button id="tab-categories" class="tab-button active" onclick="switchManageTab('categories')" style="padding: 10px 20px; border: none; background: none; cursor: pointer; border-bottom: 2px solid #667eea; margin-bottom: -2px;">
+                        Категории
+                    </button>
+                    <button id="tab-asset-types" class="tab-button" onclick="switchManageTab('asset-types')" style="padding: 10px 20px; border: none; background: none; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px;">
+                        Виды активов
+                    </button>
+                </div>
+                <button id="add-category-btn" class="btn btn-buy" title="Добавить категорию" style="transform: scale(0.75);"></button>
+                <button id="add-asset-type-btn" class="btn btn-buy" title="Добавить вид актива" style="display: none; transform: scale(0.75);"></button>
             </div>
             
             <!-- Контейнер для категорий -->
-                <div id="categories-tab-content">
-            <div style="margin-bottom: 20px; display: flex; justify-content: flex-end;">
-                    <button id="add-category-btn" class="btn btn-buy" title="Добавить категорию"></button>
-                </div>
+            <div id="categories-tab-content">
                 <div id="categories-list-container">
                     <table class="categories-table" style="width: 100%;">
                         <thead>
@@ -690,9 +726,6 @@
             
             <!-- Контейнер для видов активов -->
             <div id="asset-types-tab-content" style="display: none;">
-                <div style="margin-bottom: 20px; display: flex; justify-content: flex-end;">
-                    <button id="add-asset-type-btn" class="btn btn-buy" title="Добавить вид актива"></button>
-                </div>
                 <div id="asset-types-list-container">
                     <table class="categories-table" style="width: 100%;">
                         <thead>

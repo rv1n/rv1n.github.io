@@ -111,6 +111,35 @@ header h1 {
     box-shadow: none;
 }
 
+.btn-header-icon {
+    background: #1e3a5f;
+    color: white;
+    width: 38px;
+    height: 38px;
+    padding: 0;
+    font-size: 1.1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.2s, transform 0.15s, box-shadow 0.15s;
+}
+
+.btn-header-icon:hover {
+    background: #2c5282;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(30, 58, 95, 0.3);
+}
+
+.btn-header-icon:disabled {
+    background: #95a5a6;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
 /* Кнопка меню (сэндвич) и выпадающее меню */
 .menu-wrapper {
     position: relative;
@@ -1626,6 +1655,34 @@ header h1 {
 
 .neutral {
     color: #7f8c8d;
+}
+
+/* Строка таблицы в состоянии загрузки (покупка/продажа) */
+tr.row-loading {
+    position: relative;
+    pointer-events: none;
+}
+
+tr.row-loading td {
+    opacity: 0.4;
+}
+
+tr.row-loading td:first-child::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 22px;
+    height: 22px;
+    border: 3px solid #c0cfe0;
+    border-top-color: #1e3a5f;
+    border-radius: 50%;
+    animation: row-spin 0.7s linear infinite;
+}
+
+@keyframes row-spin {
+    to { transform: translate(-50%, -50%) rotate(360deg); }
 }
 
 /* Модальное окно */

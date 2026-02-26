@@ -81,6 +81,7 @@ async function safeJsonResponse(response) {
  * Инициализация приложения при загрузке страницы
  */
 document.addEventListener('DOMContentLoaded', async function() {
+    initTodayDate(); // Сразу отображаем сегодняшнюю дату
     await loadCategoriesList(); // Загружаем список категорий из API
     await loadAssetTypesList(); // Загружаем список видов активов из API
     // При первом открытии страницы загружаем портфель БЕЗ обращения к API MOEX,
@@ -249,14 +250,15 @@ function manualRefresh() {
     const refreshBtn = document.getElementById('refresh-btn');
     if (refreshBtn) {
         refreshBtn.disabled = true;
-        refreshBtn.textContent = '🔄 Обновление...';
+        refreshBtn.textContent = '⏳';
     }
     
     loadPortfolio(false).finally(() => {
         if (refreshBtn) {
             refreshBtn.disabled = false;
-            refreshBtn.textContent = '🔄 Обновить котировки';
+            refreshBtn.textContent = '🔄';
         }
+        updateLastUpdateTime();
     });
 }
 
@@ -313,7 +315,6 @@ async function loadPortfolio(silent = false, useCachedPrices = false) {
             
             // Отображаем данные
             displayPortfolio(currentPortfolioData.portfolio, currentPortfolioData.summary);
-            updateLastUpdateTime();
             if (!silent) {
                 if (loading) loading.style.display = 'none';
                 if (table) table.style.display = 'table';
@@ -342,6 +343,23 @@ async function loadPortfolio(silent = false, useCachedPrices = false) {
  * сводку и связанные графики.
  * @param {string} ticker
  */
+/**
+ * Показывает/скрывает индикатор загрузки на строке портфеля
+ */
+function setRowLoading(ticker, loading) {
+    const tbody = document.getElementById('portfolio-tbody');
+    if (!tbody || !ticker) return;
+    const tickerUpper = String(ticker).toUpperCase();
+    const row = tbody.querySelector(`tr[data-ticker="${tickerUpper}"]`) ||
+                tbody.querySelector(`tr[data-ticker="${ticker}"]`);
+    if (!row) return;
+    if (loading) {
+        row.classList.add('row-loading');
+    } else {
+        row.classList.remove('row-loading');
+    }
+}
+
 async function refreshSinglePortfolioPosition(ticker) {
     if (!ticker) return;
     
@@ -495,6 +513,7 @@ async function checkForNewPriceLogs() {
             if (latestTimestamp > lastPriceLogCheck) {
                 console.log('Обнаружена новая запись цен, обновляем портфель');
                 lastPriceLogCheck = latestTimestamp;
+                updateLastUpdateTime();
                 
                 // Обновляем портфель, если находимся на вкладке "Мой портфель"
                 const tableView = document.getElementById('table-view');
@@ -844,7 +863,7 @@ function createPortfolioRow(item, totalPortfolioValue = 0) {
         : null;
     const portfolioPercentLine = formatPercent(portfolioPercent, 2);
     
-    const pnlValueText = `${item.profit_loss >= 0 ? '+' : ''}${formatCurrency(item.profit_loss)}`;
+    const pnlValueText = `${item.profit_loss >= 0 ? '+' : ''}${formatCurrency(item.profit_loss, 2)}`;
     const pnlPercentText = `${item.profit_loss_percent >= 0 ? '+' : ''}${formatPercent(Math.abs(item.profit_loss_percent), 2)}`;
     
     // Формируем три строки для колонки "Текущая стоимость"
@@ -898,7 +917,7 @@ function createPortfolioRow(item, totalPortfolioValue = 0) {
         </td>
         <td class="${changeClass}" style="text-align: center;">
             <div style="display: flex; flex-direction: column; align-items: center; gap: 2px;">
-                <span>${item.price_change >= 0 ? '+' : ''}${formatPrice(item.price_change, item.price_decimals)} (${item.price_change_percent >= 0 ? '+' : ''}${formatPercent(Math.abs(item.price_change_percent), 2)})</span>
+                <span>${item.price_change >= 0 ? '+' : ''}${formatPrice(item.price_change, 2)} (${item.price_change_percent >= 0 ? '+' : ''}${formatPercent(Math.abs(item.price_change_percent), 2)})</span>
                 <span style="font-size: 0.8em; color: #7f8c8d; white-space: nowrap;">${formatPrice(effectivePrice - item.price_change, 2)} → ${formatPrice(effectivePrice, 2)}</span>
             </div>
         </td>
@@ -1560,6 +1579,8 @@ async function handleBuy(e) {
             // Закрываем модальное окно
             closeBuyModal();
             
+            // Показываем загрузку на строке портфеля
+            setRowLoading(ticker, true);
             // Обновляем только строку портфеля для данного тикера
             await refreshSinglePortfolioPosition(ticker);
             
@@ -1667,23 +1688,28 @@ async function deletePosition(id, ticker) {
  */
 function updateLastUpdateTime() {
     const now = new Date();
-    const dateString = now.toLocaleDateString('ru-RU');
     const timeString = now.toLocaleTimeString('ru-RU', {
         hour: '2-digit',
         minute: '2-digit',
         second: '2-digit'
     });
-    const todayEl = document.getElementById('today-date');
+    localStorage.setItem('lastUpdateTime', timeString);
     const lastUpdateEl = document.getElementById('last-update-time');
-
-    // Обновляем дату "Сегодня"
-    if (todayEl) {
-        todayEl.textContent = dateString;
-    }
-
-    // Обновляем время последнего обновления таблицы
     if (lastUpdateEl) {
         lastUpdateEl.textContent = timeString;
+    }
+}
+
+function initTodayDate() {
+    const todayEl = document.getElementById('today-date');
+    if (todayEl) {
+        todayEl.textContent = new Date().toLocaleDateString('ru-RU');
+    }
+    // Восстанавливаем сохранённое время последнего обновления
+    const saved = localStorage.getItem('lastUpdateTime');
+    const lastUpdateEl = document.getElementById('last-update-time');
+    if (lastUpdateEl && saved) {
+        lastUpdateEl.textContent = saved;
     }
 }
 
@@ -1801,38 +1827,27 @@ function formatHistoryPrice(item) {
     if (!item) return '-';
 
     const price = item.price;
-    const instrumentType = item.instrument_type; // 'Акция' или 'Облигация'
+    const instrumentType = item.instrument_type;
 
-    if (instrumentType === 'Облигация') {
-        // Для облигаций используем цену в рублях, которая уже конвертирована на сервере
-        const priceRub = item.price_rub;
-        
-        if (priceRub === null || priceRub === undefined || priceRub === 0) {
-            // Если price_rub не задан, конвертируем сами (fallback)
-            const pricePercent = item.price;
-            if (pricePercent === null || pricePercent === undefined) {
-                return '-';
-            }
-            const bondFacevalue = item.bond_facevalue || 1000.0;
-            const bondCurrency = item.bond_currency || 'SUR';
-            const priceInNominal = (Number(pricePercent) * bondFacevalue) / 100;
-            // Если валюта не рубли, не можем конвертировать на клиенте - показываем как есть
-            if (bondCurrency === 'SUR' || bondCurrency === 'RUB') {
-                return formatCurrency(priceInNominal);
-            } else {
-                // Fallback: показываем в валюте номинала
-                return `${priceInNominal.toFixed(2)} ${bondCurrency}`;
-            }
-        }
-        const num = Number(priceRub);
-        if (isNaN(num)) {
-            return '-';
-        }
-        // Форматируем в рублях
-        return formatCurrency(num);
+    // Используем price_rub если оно есть (сервер его добавляет для облигаций,
+    // в том числе для старых записей с неверным instrument_type)
+    if (item.price_rub !== null && item.price_rub !== undefined && item.price_rub > 0) {
+        return formatCurrency(Number(item.price_rub));
     }
 
-    // Для акций и остальных инструментов оставляем форматирование в рублях
+    if (instrumentType === 'Облигация') {
+        // Fallback: конвертируем на клиенте если price_rub не пришёл
+        if (price === null || price === undefined) return '-';
+        const bondFacevalue = item.bond_facevalue || 1000.0;
+        const bondCurrency = item.bond_currency || 'SUR';
+        const priceInNominal = (Number(price) * bondFacevalue) / 100;
+        if (bondCurrency === 'SUR' || bondCurrency === 'RUB') {
+            return formatCurrency(priceInNominal);
+        }
+        return `${priceInNominal.toFixed(2)} ${bondCurrency}`;
+    }
+
+    // Акции и прочие инструменты
     return formatCurrency(price);
 }
 
@@ -1976,6 +1991,8 @@ function switchView(viewType) {
         if (btnHistory) btnHistory.classList.add('active');
         if (btnTransactions) btnTransactions.classList.remove('active');
         if (btnCategories) btnCategories.classList.remove('active');
+        // Мгновенно заполняем фильтр тикеров из уже загруженных данных портфеля
+        updateHistoryTickerFilter();
         // Загружаем историю цен при переключении
         loadPriceHistory();
     } else if (viewType === 'transactions') {
@@ -2706,8 +2723,6 @@ async function loadPriceHistory() {
         
         if (data.success) {
             renderPriceHistory(data.history, ticker);
-            // Обновляем список тикеров в фильтре
-            updateHistoryTickerFilter();
         } else {
             contentContainer.innerHTML = `<p style="text-align: center; color: #e74c3c; padding: 40px;">Ошибка: ${data.error}</p>`;
         }
@@ -2849,49 +2864,27 @@ function formatDate(dateString) {
 }
 
 /**
- * Обновление фильтра тикеров
+ * Обновление фильтра тикеров — использует уже загруженные данные портфеля
  */
-async function updateHistoryTickerFilter() {
+function updateHistoryTickerFilter() {
     const tickerFilter = document.getElementById('history-ticker-filter');
     if (!tickerFilter) return;
-    
-    try {
-        const response = await fetch('/api/portfolio');
-        const data = await safeJsonResponse(response);
-        
-        if (!data) {
-            // Ошибка уже залогирована в safeJsonResponse
-            return; // Не обновляем фильтр при ошибке сервера
-        }
-        
-        if (data.success && data.portfolio) {
-            // Получаем уникальные тикеры
-            const uniqueTickers = [...new Set(data.portfolio.map(item => item.ticker))];
-            
-            // Сохраняем текущий выбор
-            const currentValue = tickerFilter.value;
-            
-            // Очищаем и заполняем заново
-            tickerFilter.innerHTML = '<option value="">Все тикеры</option>';
-            
-            uniqueTickers.sort().forEach(ticker => {
-                const option = document.createElement('option');
-                option.value = ticker;
-                option.textContent = ticker;
-                tickerFilter.appendChild(option);
-            });
-            
-            // Восстанавливаем выбор
-            tickerFilter.value = currentValue;
-        }
-    } catch (error) {
-        // Обрабатываем ошибки сети или парсинга JSON
-        if (error instanceof SyntaxError) {
-            console.error('Ошибка парсинга JSON (сервер вернул не JSON):', error.message);
-        } else {
-            console.error('Ошибка обновления фильтра тикеров:', error);
-        }
-    }
+
+    const portfolio = currentPortfolioData && currentPortfolioData.portfolio;
+    if (!portfolio || portfolio.length === 0) return;
+
+    const uniqueTickers = [...new Set(portfolio.map(item => item.ticker))].sort();
+    const currentValue = tickerFilter.value;
+
+    tickerFilter.innerHTML = '<option value="">Все тикеры</option>';
+    uniqueTickers.forEach(ticker => {
+        const option = document.createElement('option');
+        option.value = ticker;
+        option.textContent = ticker;
+        tickerFilter.appendChild(option);
+    });
+
+    tickerFilter.value = currentValue;
 }
 
 /**
@@ -3128,14 +3121,12 @@ function renderTransactions(transactions) {
     transactions.forEach(transaction => {
         const row = document.createElement('tr');
         
-        // Форматируем дату
+        // Форматируем дату (без времени)
         const date = new Date(transaction.date);
-        const dateStr = date.toLocaleString('ru-RU', {
+        const dateStr = date.toLocaleDateString('ru-RU', {
             year: 'numeric',
             month: '2-digit',
-            day: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit'
+            day: '2-digit'
         });
         
         // Определяем класс для типа операции
@@ -3367,6 +3358,8 @@ async function handleEditTransaction(event) {
  * Удаление транзакции
  */
 async function deleteTransaction(transactionId) {
+    if (!confirm('Удалить эту операцию? Действие нельзя отменить.')) return;
+
     try {
         const response = await fetch(`/api/transactions/${transactionId}`, {
             method: 'DELETE'
@@ -3375,19 +3368,18 @@ async function deleteTransaction(transactionId) {
         const data = await response.json();
         
         if (data.success) {
+            // Обновляем список транзакций
             loadTransactions();
             console.log('Транзакция успешно удалена');
-            
-            // Обновляем баланс из ответа сервера
-            if (data.cash_balance !== undefined && currentPortfolioData) {
-                currentPortfolioData.summary.cash_balance = data.cash_balance;
-                updateSummary(currentPortfolioData.summary);
-            }
-            
-            // Обновляем портфель, так как удаление транзакции влияет на количество и среднюю цену
+
+            // Перезагружаем портфель (тихо, с кэшированными ценами) —
+            // это обновит currentPortfolioData и сводку независимо от активной вкладки
+            await loadPortfolio(true, true);
+
+            // Если открыта вкладка портфеля — показываем актуальную таблицу
             const tableView = document.getElementById('table-view');
             if (tableView && tableView.style.display !== 'none') {
-                await loadPortfolio();
+                await loadPortfolio(false, false);
             }
         } else {
             console.error('Ошибка удаления транзакции:', data.error);
@@ -3555,6 +3547,9 @@ async function handleSell(e) {
         
         // Закрываем модальное окно и обновляем данные
         closeSellModal();
+        
+        // Показываем загрузку на строке портфеля
+        setRowLoading(ticker, true);
         await refreshSinglePortfolioPosition(ticker);
         
         // Логируем результат в консоль
@@ -4374,17 +4369,23 @@ function switchManageTab(tab) {
     const assetTypesTab = document.getElementById('tab-asset-types');
     const categoriesContent = document.getElementById('categories-tab-content');
     const assetTypesContent = document.getElementById('asset-types-tab-content');
+    const addCategoryBtn = document.getElementById('add-category-btn');
+    const addAssetTypeBtn = document.getElementById('add-asset-type-btn');
     
     if (tab === 'categories') {
         if (categoriesTab) categoriesTab.classList.add('active');
         if (assetTypesTab) assetTypesTab.classList.remove('active');
         if (categoriesContent) categoriesContent.style.display = 'block';
         if (assetTypesContent) assetTypesContent.style.display = 'none';
+        if (addCategoryBtn) addCategoryBtn.style.display = '';
+        if (addAssetTypeBtn) addAssetTypeBtn.style.display = 'none';
     } else if (tab === 'asset-types') {
         if (categoriesTab) categoriesTab.classList.remove('active');
         if (assetTypesTab) assetTypesTab.classList.add('active');
         if (categoriesContent) categoriesContent.style.display = 'none';
         if (assetTypesContent) assetTypesContent.style.display = 'block';
+        if (addCategoryBtn) addCategoryBtn.style.display = 'none';
+        if (addAssetTypeBtn) addAssetTypeBtn.style.display = '';
         loadManageAssetTypes();
     }
 }
@@ -4886,3 +4887,61 @@ function setupStickyTableHeader() {
 }
 
 // Обработчик клика вне модального окна удален - закрытие только по крестику и Esc
+
+/**
+ * РЎРјРµРЅР° РїР°СЂРѕР»СЏ
+ */
+function openChangePasswordModal() {
+    const modal = document.getElementById('change-password-modal');
+    if (!modal) return;
+    document.getElementById('change-password-form').reset();
+    document.getElementById('cp-error').style.display = 'none';
+    document.getElementById('cp-success').style.display = 'none';
+    modal.style.display = 'flex';
+}
+
+function closeChangePasswordModal() {
+    const modal = document.getElementById('change-password-modal');
+    if (modal) modal.style.display = 'none';
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    const form = document.getElementById('change-password-form');
+    if (!form) return;
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const current = document.getElementById('cp-current').value;
+        const newPwd = document.getElementById('cp-new').value;
+        const confirm = document.getElementById('cp-confirm').value;
+        const errorEl = document.getElementById('cp-error');
+        const successEl = document.getElementById('cp-success');
+
+        errorEl.style.display = 'none';
+        successEl.style.display = 'none';
+
+        if (newPwd !== confirm) {
+            errorEl.textContent = 'РќРѕРІС‹Рµ РїР°СЂРѕР»Рё РЅРµ СЃРѕРІРїР°РґР°СЋС‚';
+            errorEl.style.display = 'block';
+            return;
+        }
+
+        try {
+            const resp = await fetch('/api/change-password', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ current_password: current, new_password: newPwd })
+            });
+            const data = await resp.json();
+            if (data.success) {
+                successEl.style.display = 'block';
+                form.reset();
+            } else {
+                errorEl.textContent = data.error || 'РћС€РёР±РєР° СЃРјРµРЅС‹ РїР°СЂРѕР»СЏ';
+                errorEl.style.display = 'block';
+            }
+        } catch (err) {
+            errorEl.textContent = 'РћС€РёР±РєР° СЃРѕРµРґРёРЅРµРЅРёСЏ';
+            errorEl.style.display = 'block';
+        }
+    });
+});
