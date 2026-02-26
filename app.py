@@ -12,6 +12,7 @@ from models.asset_type import AssetType
 from models.cash_balance import CashBalance
 from models.settings import Settings
 from models.user import User
+from models.access_log import AccessLog
 from services.moex_service import MOEXService
 from services.price_logger import PriceLogger
 from services.currency_service import CurrencyService
@@ -26,6 +27,94 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your-secret-key-here-change-in-production'
+
+
+def _parse_user_agent(ua_string):
+    """Извлечь ОС и браузер из строки User-Agent."""
+    if not ua_string:
+        return 'Неизвестно', 'Неизвестно'
+
+    ua = ua_string
+
+    # ОС
+    if 'Windows NT 10.0' in ua:
+        os_info = 'Windows 10/11'
+    elif 'Windows NT 6.3' in ua:
+        os_info = 'Windows 8.1'
+    elif 'Windows NT 6.1' in ua:
+        os_info = 'Windows 7'
+    elif 'Windows' in ua:
+        os_info = 'Windows'
+    elif 'iPhone' in ua:
+        os_info = 'iOS (iPhone)'
+    elif 'iPad' in ua:
+        os_info = 'iOS (iPad)'
+    elif 'Android' in ua:
+        # Попробуем достать версию
+        import re
+        m = re.search(r'Android\s([\d.]+)', ua)
+        os_info = f'Android {m.group(1)}' if m else 'Android'
+    elif 'Mac OS X' in ua:
+        import re
+        m = re.search(r'Mac OS X ([\d_]+)', ua)
+        ver = m.group(1).replace('_', '.') if m else ''
+        os_info = f'macOS {ver}' if ver else 'macOS'
+    elif 'Linux' in ua:
+        os_info = 'Linux'
+    else:
+        os_info = 'Неизвестно'
+
+    # Браузер (порядок важен: Edge/Chrome/Firefox/Safari)
+    if 'Edg/' in ua or 'Edge/' in ua:
+        browser_info = 'Edge'
+    elif 'YaBrowser' in ua:
+        browser_info = 'Яндекс.Браузер'
+    elif 'OPR/' in ua or 'Opera' in ua:
+        browser_info = 'Opera'
+    elif 'Chrome/' in ua:
+        import re
+        m = re.search(r'Chrome/([\d.]+)', ua)
+        browser_info = f'Chrome {m.group(1).split(".")[0]}' if m else 'Chrome'
+    elif 'Firefox/' in ua:
+        import re
+        m = re.search(r'Firefox/([\d.]+)', ua)
+        browser_info = f'Firefox {m.group(1).split(".")[0]}' if m else 'Firefox'
+    elif 'Safari/' in ua:
+        browser_info = 'Safari'
+    else:
+        browser_info = 'Неизвестно'
+
+    return os_info, browser_info
+
+
+def _get_real_ip():
+    """Получить реальный IP клиента с учётом прокси/Nginx."""
+    return (
+        request.headers.get('X-Forwarded-For', '').split(',')[0].strip()
+        or request.headers.get('X-Real-IP', '')
+        or request.remote_addr
+        or '—'
+    )
+
+
+def write_access_log(event: str, username: str = None, success: bool = True):
+    """Записать событие доступа в базу данных."""
+    try:
+        ua_string = request.headers.get('User-Agent', '')
+        os_info, browser_info = _parse_user_agent(ua_string)
+        log = AccessLog(
+            ip_address=_get_real_ip(),
+            username=username,
+            event=event,
+            success=success,
+            os_info=os_info,
+            browser_info=browser_info,
+            user_agent=ua_string[:500] if ua_string else None,
+        )
+        db_session.add(log)
+        db_session.commit()
+    except Exception:
+        db_session.rollback()
 
 # Инициализация Flask-Login
 login_manager = LoginManager()
@@ -358,7 +447,9 @@ def login():
         user = db_session.query(User).filter_by(username=username).first()
         if user and user.check_password(password):
             login_user(user, remember=True)
+            write_access_log('login_ok', username=username, success=True)
             return redirect(url_for('index'))
+        write_access_log('login_fail', username=username or '—', success=False)
         error = 'Неверный логин или пароль'
     return render_template('login.html', error=error)
 
@@ -366,6 +457,7 @@ def login():
 @app.route('/logout')
 @login_required
 def logout():
+    write_access_log('logout', username=current_user.username, success=True)
     logout_user()
     return redirect(url_for('login'))
 
@@ -389,6 +481,7 @@ def change_password():
 @login_required
 def index():
     """Главная страница с портфелем"""
+    write_access_log('page_open', username=current_user.username, success=True)
     return render_template('index.html')
 
 
@@ -1371,6 +1464,27 @@ def download_db():
         download_name='portfolio.db',
         mimetype='application/octet-stream'
     )
+
+
+@app.route('/api/access-logs', methods=['GET'])
+@login_required
+def get_access_logs():
+    """Получить логи доступа (только для авторизованных пользователей)"""
+    try:
+        limit = request.args.get('limit', default=100, type=int)
+        logs = (
+            db_session.query(AccessLog)
+            .order_by(AccessLog.timestamp.desc())
+            .limit(limit)
+            .all()
+        )
+        return jsonify({
+            'success': True,
+            'logs': [log.to_dict() for log in logs],
+            'total': db_session.query(AccessLog).count()
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 @app.route('/api/validate-ticker/<ticker>', methods=['GET'])

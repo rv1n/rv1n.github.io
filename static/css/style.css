@@ -297,6 +297,51 @@ header h1 {
     margin: 2px 0;
 }
 
+/* Журнал подключений */
+.access-log-table-wrap {
+    overflow-x: auto;
+}
+
+.access-log-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.88em;
+}
+
+.access-log-table th {
+    background: #f0f4f8;
+    color: #1e3a5f;
+    font-weight: 600;
+    padding: 8px 12px;
+    text-align: left;
+    border-bottom: 2px solid #d0dce8;
+    white-space: nowrap;
+}
+
+.access-log-table td {
+    padding: 6px 12px;
+    border-bottom: 1px solid #eef2f7;
+    vertical-align: middle;
+}
+
+.access-log-table tr:hover td {
+    background: #f7faff;
+}
+
+.access-log-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 0.82em;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.log-event-ok   { background: #d4edda; color: #155724; }
+.log-event-fail { background: #f8d7da; color: #721c24; }
+.log-event-out  { background: #fff3cd; color: #856404; }
+.log-event-info { background: #d1ecf1; color: #0c5460; }
+
 /* Отображение сырых данных по тикерам */
 .ticker-raw-content {
     font-family: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;

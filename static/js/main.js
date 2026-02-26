@@ -2061,6 +2061,7 @@ function switchView(viewType) {
 
         // Загружаем данные мониторинга сервера
         loadServerStatus();
+        loadAccessLogs();
     } else if (viewType === 'ticker-sber') {
         tableView.style.display = 'none';
         chartView.style.display = 'none';
@@ -2180,6 +2181,63 @@ async function loadServerStatus() {
     } catch (error) {
         console.error('Ошибка загрузки мониторинга сервера:', error);
         container.textContent = 'Ошибка загрузки данных о сервере';
+    }
+}
+
+/**
+ * Загрузка и отображение журнала подключений
+ */
+async function loadAccessLogs() {
+    const container = document.getElementById('access-logs-content');
+    if (!container) return;
+
+    container.innerHTML = '<p style="color:#7f8c8d;">Загрузка журнала...</p>';
+
+    try {
+        const response = await fetch('/api/access-logs?limit=100');
+        const data = await response.json();
+        if (!data.success) throw new Error(data.error || 'Ошибка');
+
+        const logs = data.logs || [];
+        if (logs.length === 0) {
+            container.innerHTML = '<p style="color:#7f8c8d;">Журнал пуст</p>';
+            return;
+        }
+
+        const eventLabels = {
+            login_ok:   { text: 'Вход',        cls: 'log-event-ok'   },
+            login_fail: { text: 'Неверный пароль', cls: 'log-event-fail' },
+            logout:     { text: 'Выход',        cls: 'log-event-out'  },
+            page_open:  { text: 'Открытие',     cls: 'log-event-info' },
+        };
+
+        let html = `<p style="color:#7f8c8d;font-size:0.85em;margin-bottom:8px;">Последние ${logs.length} из ${data.total} записей</p>`;
+        html += '<div class="access-log-table-wrap"><table class="access-log-table">';
+        html += '<thead><tr>'
+              + '<th>Дата и время</th>'
+              + '<th>Пользователь</th>'
+              + '<th>Событие</th>'
+              + '<th>IP-адрес</th>'
+              + '<th>ОС</th>'
+              + '<th>Браузер</th>'
+              + '</tr></thead><tbody>';
+
+        for (const log of logs) {
+            const ev = eventLabels[log.event] || { text: log.event, cls: '' };
+            html += '<tr>'
+                  + `<td style="white-space:nowrap">${log.timestamp || '—'}</td>`
+                  + `<td>${log.username || '—'}</td>`
+                  + `<td><span class="access-log-badge ${ev.cls}">${ev.text}</span></td>`
+                  + `<td style="font-family:monospace">${log.ip_address || '—'}</td>`
+                  + `<td>${log.os_info || '—'}</td>`
+                  + `<td>${log.browser_info || '—'}</td>`
+                  + '</tr>';
+        }
+        html += '</tbody></table></div>';
+        container.innerHTML = html;
+    } catch (err) {
+        container.innerHTML = '<p style="color:#e74c3c;">Ошибка загрузки журнала</p>';
+        console.error('loadAccessLogs error:', err);
     }
 }
 

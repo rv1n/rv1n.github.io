@@ -322,6 +322,17 @@
                         Загрузка данных о сервере...
                     </div>
                 </div>
+
+                <!-- Лог доступа -->
+                <div class="server-status-container" style="margin-top: 20px;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+                        <h3 style="margin: 0;">Журнал подключений</h3>
+                        <button class="btn btn-secondary btn-sm" onclick="loadAccessLogs()" style="font-size: 0.85em; padding: 5px 12px;">🔄 Обновить</button>
+                    </div>
+                    <div id="access-logs-content">
+                        <p style="color: #7f8c8d;">Загрузка журнала...</p>
+                    </div>
+                </div>
             </div>
 
             <!-- Полные данные по тикеру SBER -->
