@@ -6,6 +6,24 @@
     --color-subtext:       #e6c200;   /* подтекст в шапке таблиц */
 }
 
+/* ======= Кастомный скроллбар ======= */
+::-webkit-scrollbar {
+    width: 7px;
+    height: 7px;
+}
+::-webkit-scrollbar-track {
+    background: #f0f4f8;
+    border-radius: 10px;
+}
+::-webkit-scrollbar-thumb {
+    background: var(--color-panels);
+    border-radius: 10px;
+    opacity: 0.7;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: var(--color-panels-hover);
+}
+
 /* Общие стили */
 * {
     margin: 0;
@@ -20,10 +38,10 @@ html, body {
 body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
     background: #ffffff;
-    min-height: 100vh;
+    height: 100vh;
     padding: 0;
     color: #333;
-    overflow: hidden; /* Убираем общую прокрутку страницы */
+    overflow: hidden;
 }
 
 .container {
@@ -31,13 +49,14 @@ body {
     max-width: 70%;
     margin: 0 auto;
     background: white;
-    border-radius: 0;
-    box-shadow: none;
+    border-radius: 16px;
+    box-shadow: 0 4px 32px rgba(30, 58, 95, 0.10), 0 1px 4px rgba(0,0,0,0.06);
     padding: 20px 24px 20px;
     box-sizing: border-box;
-    min-height: 100vh;
+    height: 100vh;
     display: flex;
-    flex-direction: column; /* Верхняя часть фиксирована, нижняя растягивается */
+    flex-direction: column;
+    overflow: hidden;
 }
 
 header {
@@ -46,7 +65,8 @@ header {
     align-items: center;
     margin-bottom: 30px;
     padding-bottom: 20px;
-    border-bottom: 2px solid #e0e0e0;
+    border-bottom: 2px solid transparent;
+    border-image: linear-gradient(to right, var(--color-panels), rgba(30,58,95,0.15), transparent) 1;
 }
 
 header h1 {
@@ -377,11 +397,17 @@ header h1 {
 .summary-card {
     display: flex;
     flex-direction: column;
-    background: var(--color-panels);
+    background: linear-gradient(135deg, var(--color-panels) 0%, var(--color-panels-hover) 100%);
     color: white;
     padding: 25px;
-    border-radius: 10px;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+    border-radius: 14px;
+    box-shadow: 0 6px 24px rgba(30, 58, 95, 0.22), 0 1px 4px rgba(0,0,0,0.08);
+    transition: transform 0.18s, box-shadow 0.18s;
+}
+
+.summary-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 32px rgba(30, 58, 95, 0.28), 0 2px 8px rgba(0,0,0,0.10);
 }
 
 .summary-card-split {
@@ -801,10 +827,11 @@ header h1 {
     position: sticky;
     top: 0;
     z-index: 5;
+    background: linear-gradient(to right, var(--color-panels) 0%, var(--color-panels-hover) 100%);
 }
 
 .history-table th {
-    background: var(--color-panels);
+    background: transparent;
     color: var(--color-header-text);
     padding: 12px;
     text-align: center;
@@ -905,10 +932,11 @@ header h1 {
     position: sticky;
     top: 0;
     z-index: 5;
+    background: linear-gradient(to right, var(--color-panels) 0%, var(--color-panels-hover) 100%);
 }
 
 .transactions-table th {
-    background: var(--color-panels);
+    background: transparent;
     color: var(--color-header-text);
     padding: 15px 10px;
     text-align: center;
@@ -924,13 +952,14 @@ header h1 {
 }
 
 .transactions-table tbody tr {
-    transition: background-color 0.2s, box-shadow 0.2s;
+    transition: background-color 0.2s, box-shadow 0.2s, border-left-color 0.2s;
+    border-left: 3px solid transparent;
 }
 
 .transactions-table tbody tr:hover {
     background-color: #e8f0f5;
-    box-shadow: 0 2px 8px rgba(30, 58, 95, 0.15);
-    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(30, 58, 95, 0.12);
+    border-left-color: var(--color-panels);
 }
 
 .transaction-type-buy {
@@ -1054,7 +1083,7 @@ header h1 {
 }
 
 .categories-table th {
-    background: var(--color-panels);
+    background: transparent;
     color: var(--color-header-text);
     padding: 15px 10px;
     text-align: left;
@@ -1062,10 +1091,12 @@ header h1 {
     white-space: nowrap;
 }
 
-.categories-content .categories-table thead {
+.categories-content .categories-table thead,
+.manage-categories-content .categories-table thead {
     position: sticky;
     top: 0;
     z-index: 5;
+    background: linear-gradient(to right, var(--color-panels) 0%, var(--color-panels-hover) 100%);
 }
 
 .manage-categories-content .categories-table th {
@@ -1159,6 +1190,7 @@ header h1 {
 .ticker-company-cell {
     display: flex;
     flex-direction: column;
+    align-items: center;
     gap: 5px;
 }
 
@@ -1285,9 +1317,11 @@ header h1 {
     min-height: 0; /* позволяет внутреннему скроллу работать */
 }
 
-/* Вкладка "История покупок/продаж" прокручивается внутри зеленой области */
+/* Вкладка "История покупок/продаж": скролл только на таблице (.transactions-content) */
 #transactions-view {
-    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
 }
 
 
@@ -1410,31 +1444,35 @@ header h1 {
 .btn {
     padding: 10px 20px;
     border: none;
-    border-radius: 5px;
+    border-radius: 10px;
     font-size: 1em;
     cursor: pointer;
-    transition: all 0.3s;
+    transition: all 0.22s;
     font-weight: 500;
 }
 
 .btn-primary {
     background: var(--color-panels);
     color: white;
+    box-shadow: 0 2px 8px rgba(30, 58, 95, 0.18);
 }
 
 .btn-primary:hover {
     background: var(--color-panels-hover);
     transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(30, 58, 95, 0.3);
+    box-shadow: 0 6px 16px rgba(30, 58, 95, 0.30);
 }
 
 .btn-secondary {
     background: #4a5568;
     color: white;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
 }
 
 .btn-secondary:hover {
     background: #2d3748;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
 }
 
 .btn-danger {
@@ -1582,12 +1620,12 @@ header h1 {
 }
 
 .portfolio-table-wrapper {
-    overflow-x: auto; /* Горизонтальная прокрутка для таблицы */
-    overflow-y: auto; /* Вертикальная прокрутка только для строк таблицы */
-    -webkit-overflow-scrolling: touch; /* Плавная прокрутка на iOS */
+    overflow-x: auto;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
     width: 100%;
-    /* Высоту задаём динамически через JS в зависимости от нижней границы окна браузера */
-    max-height: none;
+    flex: 1;       /* занимает всё оставшееся место в #table-view */
+    min-height: 0; /* позволяет flex-потомку сжиматься ниже своего контента */
 }
 
 .portfolio-table-container h2 {
@@ -1621,7 +1659,7 @@ header h1 {
 }
 
 .portfolio-table thead {
-    background: var(--color-panels);
+    background: linear-gradient(to right, var(--color-panels) 0%, var(--color-panels-hover) 100%);
     color: var(--color-header-text);
     position: -webkit-sticky; /* Для Safari */
     position: sticky;
@@ -1638,7 +1676,7 @@ header h1 {
 }
 
 .portfolio-table thead tr {
-    background: var(--color-panels);
+    background: transparent;
 }
 
 .portfolio-table th {
@@ -1650,7 +1688,7 @@ header h1 {
     letter-spacing: 0.5px;
     white-space: nowrap;
     vertical-align: top; /* выравниваем все заголовки по верхнему краю */
-    background: var(--color-panels);
+    background: transparent;
     position: -webkit-sticky; /* Для Safari */
     position: sticky;
     top: 0;
@@ -1717,6 +1755,30 @@ header h1 {
     font-weight: 600;
 }
 
+/* Бейджи типов активов в таблице портфеля */
+.asset-type-badge {
+    display: inline-block;
+    width: fit-content;
+    padding: 2px 7px;
+    border-radius: 6px;
+    font-size: 0.72em;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    white-space: nowrap;
+    background: #e8f0fe;
+    color: #1a56b0;
+    border: 1px solid #c3d8fd;
+}
+
+/* Цветовые вариации по популярным типам */
+.asset-type-badge[data-type="Акции"]      { background: #e3f9e5; color: #1b6b2b; border-color: #a8ddb0; }
+.asset-type-badge[data-type="Облигации"]  { background: #fef3c7; color: #92600a; border-color: #fcd97a; }
+.asset-type-badge[data-type="ETF"]        { background: #ede9fe; color: #5b21b6; border-color: #c4b5fd; }
+.asset-type-badge[data-type="Фонды"]      { background: #ede9fe; color: #5b21b6; border-color: #c4b5fd; }
+.asset-type-badge[data-type="Валюта"]     { background: #fce7f3; color: #9d174d; border-color: #f9a8d4; }
+.asset-type-badge[data-type="Золото"]     { background: #fffbeb; color: #92600a; border-color: #fde68a; }
+.asset-type-badge[data-type="Крипто"]     { background: #fff7ed; color: #9a3412; border-color: #fed7aa; }
+
 /* Ячейка с мини-графиком */
 .sparkline-cell {
     text-align: center;
@@ -1744,13 +1806,14 @@ header h1 {
 }
 
 .portfolio-table tbody tr {
-    transition: background-color 0.2s, box-shadow 0.2s;
+    transition: background-color 0.2s, box-shadow 0.2s, border-left-color 0.2s;
+    border-left: 3px solid transparent;
 }
 
 .portfolio-table tbody tr:hover {
     background-color: #e8f0f5;
-    box-shadow: 0 2px 8px rgba(30, 58, 95, 0.15);
-    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(30, 58, 95, 0.12);
+    border-left-color: var(--color-panels);
 }
 
 .portfolio-table tbody tr:last-child td {
@@ -2189,6 +2252,27 @@ tr.row-loading td:first-child::after {
 .color-btn.active {
     background: var(--color-panels);
     color: white;
+}
+
+.color-btn-reset:hover {
+    background: #c0392b !important;
+    color: white;
+}
+
+.color-btn-divider {
+    width: 26px;
+    height: 1px;
+    background: #e0e0e0;
+    margin: 3px 0;
+}
+
+@keyframes spin-once {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(-360deg); }
+}
+
+.color-btn-reset.spinning svg {
+    animation: spin-once 0.45s ease-out;
 }
 
 .color-picker-popup {

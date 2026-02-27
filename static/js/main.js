@@ -101,7 +101,7 @@ document.addEventListener('DOMContentLoaded', async function() {
  */
 function setupPortfolioTableHeight() {
     const updateHeight = () => {
-        const wrappers = document.querySelectorAll('.portfolio-table-wrapper, .transactions-content, .categories-content, .price-history-content, #chart-view, #server-view, #ticker-sber-view, #ticker-ru-view');
+        const wrappers = document.querySelectorAll('.transactions-content, .categories-content, .price-history-content, #chart-view, #server-view, #ticker-sber-view, #ticker-ru-view');
         if (!wrappers.length) return;
 
         const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
@@ -789,6 +789,10 @@ function attachSellButtonHandlers() {
 /**
  * Создание строки таблицы для позиции
  */
+function _escapeAttr(str) {
+    return String(str).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 function createPortfolioRow(item, totalPortfolioValue = 0) {
     const row = document.createElement('tr');
     // Сохраняем тикер и id позиции в data-атрибутах для точечного обновления строки
@@ -887,6 +891,10 @@ function createPortfolioRow(item, totalPortfolioValue = 0) {
         `;
     }
     
+    const assetTypeBadge = item.asset_type
+        ? `<span class="asset-type-badge" data-type="${_escapeAttr(item.asset_type)}">${item.asset_type}</span>`
+        : '';
+
     row.innerHTML = `
         <td>
             <div class="ticker-company-cell">
@@ -894,6 +902,7 @@ function createPortfolioRow(item, totalPortfolioValue = 0) {
                 <span class="ticker-company-ticker" style="cursor: pointer; text-decoration: underline; color: #1e3a5f;" 
                       onclick="openTickerInfoModal('${item.ticker}', '${item.instrument_type || 'STOCK'}')" 
                       title="Нажмите для просмотра информации о тикере">${item.ticker}</span>
+                ${assetTypeBadge}
             </div>
         </td>
         <td>${formatPrice(effectiveAvgPrice, item.price_decimals)}</td>
@@ -1988,7 +1997,7 @@ function switchView(viewType) {
     const btnCategories = document.getElementById('btn-categories-view');
     
     if (viewType === 'table') {
-        tableView.style.display = 'block';
+        tableView.style.display = 'flex';
         chartView.style.display = 'none';
         historyView.style.display = 'none';
         transactionsView.style.display = 'none';
@@ -2053,7 +2062,7 @@ function switchView(viewType) {
         tableView.style.display = 'none';
         chartView.style.display = 'none';
         historyView.style.display = 'none';
-        transactionsView.style.display = 'block';
+        transactionsView.style.display = 'flex';
         categoriesView.style.display = 'none';
         if (serverView) serverView.style.display = 'none';
         if (tickerSberView) tickerSberView.style.display = 'none';
@@ -2070,7 +2079,7 @@ function switchView(viewType) {
         chartView.style.display = 'none';
         historyView.style.display = 'none';
         transactionsView.style.display = 'none';
-        categoriesView.style.display = 'block';
+        categoriesView.style.display = 'flex';
         if (serverView) serverView.style.display = 'none';
         if (tickerSberView) tickerSberView.style.display = 'none';
         if (tickerRuView) tickerRuView.style.display = 'none';

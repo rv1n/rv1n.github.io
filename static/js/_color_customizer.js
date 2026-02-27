@@ -117,6 +117,21 @@ function resetColorPicker() {
     closeColorPicker();
 }
 
+function resetAllColors() {
+    Object.keys(COLOR_DEFAULTS).forEach(key => {
+        localStorage.removeItem(`uiColor_${key}`);
+        _applyColor(key, COLOR_DEFAULTS[key]);
+    });
+    closeColorPicker();
+
+    // Анимация кнопки
+    const btn = document.querySelector('.color-btn-reset');
+    if (btn) {
+        btn.classList.add('spinning');
+        setTimeout(() => btn.classList.remove('spinning'), 500);
+    }
+}
+
 // Закрытие попапа при клике вне него
 document.addEventListener('click', function(e) {
     const popup = document.getElementById('color-picker-popup');
