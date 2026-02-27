@@ -848,11 +848,11 @@ header h1 {
     text-align: center;
 }
 
-.history-table tr {
+.history-table tbody tr {
     transition: background-color 0.2s, box-shadow 0.2s;
 }
 
-.history-table tr:hover {
+.history-table tbody tr:hover {
     background-color: #e8f0f5;
     box-shadow: 0 2px 8px rgba(30, 58, 95, 0.15);
     transform: translateY(-1px);
