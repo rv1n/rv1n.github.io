@@ -1,3 +1,11 @@
+/* ======= Цветовые переменные темы (изменяются через палитру) ======= */
+:root {
+    --color-panels:        #1e3a5f;   /* фон панелей, шапки таблиц, вкладок */
+    --color-panels-hover:  #2c5282;   /* hover-состояние панелей */
+    --color-header-text:   #ffffff;   /* текст заголовков столбцов */
+    --color-subtext:       #e6c200;   /* подтекст в шапке таблиц */
+}
+
 /* Общие стили */
 * {
     margin: 0;
@@ -83,13 +91,13 @@ header h1 {
 }
 
 #next-update-timer {
-    color: #1e3a5f;
+    color: var(--color-panels);
     font-weight: bold;
     font-family: 'Courier New', monospace;
 }
 
 .btn-refresh {
-    background: #1e3a5f;
+    background: var(--color-panels);
     color: white;
     padding: 8px 16px;
     font-size: 0.9em;
@@ -99,7 +107,7 @@ header h1 {
 }
 
 .btn-refresh:hover {
-    background: #2c5282;
+    background: var(--color-panels-hover);
     transform: translateY(-2px);
     box-shadow: 0 4px 12px rgba(30, 58, 95, 0.3);
 }
@@ -112,7 +120,7 @@ header h1 {
 }
 
 .btn-header-icon {
-    background: #1e3a5f;
+    background: var(--color-panels);
     color: white;
     width: 38px;
     height: 38px;
@@ -128,7 +136,7 @@ header h1 {
 }
 
 .btn-header-icon:hover {
-    background: #2c5282;
+    background: var(--color-panels-hover);
     transform: translateY(-2px);
     box-shadow: 0 4px 12px rgba(30, 58, 95, 0.3);
 }
@@ -215,7 +223,7 @@ header h1 {
 .th-sub-label {
     font-size: 0.8em;
     font-weight: normal;
-    color: #e6c200; /* темно-желтый цвет */
+    color: var(--color-subtext); /* темно-желтый цвет */
     margin-top: 2px;
 }
 
@@ -237,24 +245,24 @@ header h1 {
     border-radius: 8px;
     border: 1px solid transparent;
     background: transparent;
-    color: #e6c200; /* темно-желтый цвет */
+    color: var(--color-subtext); /* темно-желтый цвет */
     cursor: pointer;
     transition: background 0.15s, color 0.15s, border-color 0.15s, transform 0.1s;
 }
 
 .portfolio-table th.sortable .sort-btn:hover {
-    border-color: #e6c200;
+    border-color: var(--color-subtext);
     background: rgba(230, 194, 0, 0.1);
-    color: #e6c200;
+    color: var(--color-subtext);
 }
 
 .portfolio-table th.sortable.sorted-asc .sort-btn {
-    color: #e6c200;
+    color: var(--color-subtext);
     font-weight: bold;
 }
 
 .portfolio-table th.sortable.sorted-desc .sort-btn {
-    color: #e6c200;
+    color: var(--color-subtext);
     font-weight: bold;
 }
 
@@ -290,7 +298,7 @@ header h1 {
 .server-status-section h4 {
     margin-bottom: 8px;
     font-size: 1em;
-    color: #1e3a5f;
+    color: var(--color-panels);
 }
 
 .server-status-section p {
@@ -300,6 +308,16 @@ header h1 {
 /* Журнал подключений */
 .access-log-table-wrap {
     overflow-x: auto;
+    overflow-y: auto;
+    max-height: 420px;
+    border-radius: 6px;
+    border: 1px solid #e0e6ed;
+}
+
+.access-log-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
 }
 
 .access-log-table {
@@ -310,7 +328,7 @@ header h1 {
 
 .access-log-table th {
     background: #f0f4f8;
-    color: #1e3a5f;
+    color: var(--color-panels);
     font-weight: 600;
     padding: 8px 12px;
     text-align: left;
@@ -359,7 +377,7 @@ header h1 {
 .summary-card {
     display: flex;
     flex-direction: column;
-    background: #1e3a5f;
+    background: var(--color-panels);
     color: white;
     padding: 25px;
     border-radius: 10px;
@@ -389,6 +407,44 @@ header h1 {
     font-size: 0.9em;
     opacity: 0.9;
     margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.summary-toggle-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 2px 3px;
+    line-height: 1;
+    opacity: 0.65;
+    transition: opacity 0.15s;
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+}
+
+.summary-toggle-btn svg {
+    width: 22px;
+    height: 22px;
+    stroke: white;
+    fill: none;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.summary-toggle-btn:hover {
+    opacity: 1;
+}
+
+.summary-hidden .summary-value,
+.summary-hidden .summary-percent {
+    color: transparent;
+    text-shadow: 0 0 20px rgba(255, 255, 255, 0.95);
+    user-select: none;
+    pointer-events: none;
 }
 
 .summary-value {
@@ -480,7 +536,7 @@ header h1 {
 .form-group input:focus,
 .form-group select:focus {
     outline: none;
-    border-color: #1e3a5f;
+    border-color: var(--color-panels);
     box-shadow: 0 0 0 3px rgba(30, 58, 95, 0.1);
 }
 
@@ -525,7 +581,7 @@ header h1 {
 }
 
 .ticker-status.validating {
-    color: #1e3a5f;
+    color: var(--color-panels);
     animation: spin 1s linear infinite;
 }
 
@@ -606,12 +662,12 @@ header h1 {
 
 .history-filter:focus {
     outline: none;
-    border-color: #1e3a5f;
+    border-color: var(--color-panels);
     box-shadow: 0 0 0 3px rgba(30, 58, 95, 0.1);
 }
 
 .btn-secondary {
-    background: #1e3a5f;
+    background: var(--color-panels);
     color: white;
     border: none;
     padding: 10px 20px;
@@ -650,7 +706,7 @@ header h1 {
     color: #2c3e50;
     margin-bottom: 15px;
     padding-bottom: 10px;
-    border-bottom: 2px solid #1e3a5f;
+    border-bottom: 2px solid var(--color-panels);
 }
 
 .history-items {
@@ -663,7 +719,7 @@ header h1 {
     background: #f8f9fa;
     padding: 15px;
     border-radius: 8px;
-    border-left: 4px solid #1e3a5f;
+    border-left: 4px solid var(--color-panels);
     transition: transform 0.2s, box-shadow 0.2s;
 }
 
@@ -748,8 +804,8 @@ header h1 {
 }
 
 .history-table th {
-    background: #1e3a5f;
-    color: white;
+    background: var(--color-panels);
+    color: var(--color-header-text);
     padding: 12px;
     text-align: center;
     font-weight: 600;
@@ -852,8 +908,8 @@ header h1 {
 }
 
 .transactions-table th {
-    background: #1e3a5f;
-    color: white;
+    background: var(--color-panels);
+    color: var(--color-header-text);
     padding: 15px 10px;
     text-align: center;
     font-weight: 600;
@@ -936,7 +992,7 @@ header h1 {
 
 .modal textarea:focus {
     outline: none;
-    border-color: #1e3a5f;
+    border-color: var(--color-panels);
     box-shadow: 0 0 0 3px rgba(30, 58, 95, 0.1);
 }
 
@@ -998,8 +1054,8 @@ header h1 {
 }
 
 .categories-table th {
-    background: #1e3a5f;
-    color: white;
+    background: var(--color-panels);
+    color: var(--color-header-text);
     padding: 15px 10px;
     text-align: left;
     font-weight: 600;
@@ -1080,7 +1136,7 @@ header h1 {
 .asset-type-select:hover,
 .asset-type-select:focus {
     outline: none;
-    border-color: #1e3a5f;
+    border-color: var(--color-panels);
     box-shadow: 0 0 0 3px rgba(30, 58, 95, 0.1);
 }
 
@@ -1216,7 +1272,7 @@ header h1 {
 }
 
 .view-btn.active {
-    background: #1e3a5f;
+    background: var(--color-panels);
     color: white;
 }
 
@@ -1233,6 +1289,7 @@ header h1 {
 #transactions-view {
     overflow-y: auto;
 }
+
 
 @keyframes fadeIn {
     from {
@@ -1361,12 +1418,12 @@ header h1 {
 }
 
 .btn-primary {
-    background: #1e3a5f;
+    background: var(--color-panels);
     color: white;
 }
 
 .btn-primary:hover {
-    background: #2c5282;
+    background: var(--color-panels-hover);
     transform: translateY(-2px);
     box-shadow: 0 4px 12px rgba(30, 58, 95, 0.3);
 }
@@ -1403,7 +1460,7 @@ header h1 {
 }
 
 .btn-edit {
-    background: #1e3a5f;
+    background: var(--color-panels);
     color: white;
     padding: 8px 12px;
     font-size: 1.2em;
@@ -1420,7 +1477,7 @@ header h1 {
 }
 
 .btn-edit:hover {
-    background: #2c5282;
+    background: var(--color-panels-hover);
     transform: scale(1.1);
 }
 
@@ -1564,8 +1621,8 @@ header h1 {
 }
 
 .portfolio-table thead {
-    background: #1e3a5f;
-    color: white;
+    background: var(--color-panels);
+    color: var(--color-header-text);
     position: -webkit-sticky; /* Для Safari */
     position: sticky;
     top: 0;
@@ -1581,7 +1638,7 @@ header h1 {
 }
 
 .portfolio-table thead tr {
-    background: #1e3a5f;
+    background: var(--color-panels);
 }
 
 .portfolio-table th {
@@ -1593,7 +1650,7 @@ header h1 {
     letter-spacing: 0.5px;
     white-space: nowrap;
     vertical-align: top; /* выравниваем все заголовки по верхнему краю */
-    background: #1e3a5f;
+    background: var(--color-panels);
     position: -webkit-sticky; /* Для Safari */
     position: sticky;
     top: 0;
@@ -1626,13 +1683,19 @@ header h1 {
     font-size: 0.85em;
     border-radius: 4px;
     border: 1px solid rgba(255, 255, 255, 0.4);
-    background-color: #16324a;
-    color: #ecf0f1;
+    background-color: var(--color-panels);
+    color: var(--color-header-text);
+    cursor: pointer;
+}
+
+.change-period-select option {
+    background-color: var(--color-panels);
+    color: var(--color-header-text);
 }
 
 .change-period-select:focus {
     outline: none;
-    border-color: #ffffff;
+    border-color: rgba(255, 255, 255, 0.9);
 }
 
 .portfolio-table td {
@@ -1648,7 +1711,7 @@ header h1 {
     display: inline-block;
     padding: 2px 8px;
     border-radius: 999px;
-    background-color: #1e3a5f; /* основной цвет интерфейса */
+    background-color: var(--color-panels); /* основной цвет интерфейса */
     color: #ffffff;
     font-size: 0.75em;
     font-weight: 600;
@@ -1728,7 +1791,7 @@ tr.row-loading td:first-child::after {
     width: 22px;
     height: 22px;
     border: 3px solid #c0cfe0;
-    border-top-color: #1e3a5f;
+    border-top-color: var(--color-panels);
     border-radius: 50%;
     animation: row-spin 0.7s linear infinite;
 }
@@ -1804,8 +1867,8 @@ tr.row-loading td:first-child::after {
 }
 
 .tab-button.active {
-    color: #1e3a5f;
-    border-bottom-color: #1e3a5f;
+    color: var(--color-panels);
+    border-bottom-color: var(--color-panels);
     font-weight: 600;
 }
 
@@ -1831,9 +1894,9 @@ tr.row-loading td:first-child::after {
 
 .modal-content h3 {
     margin-top: 0;
-    color: #1e3a5f;
+    color: var(--color-panels);
     font-size: 1.2em;
-    border-bottom: 2px solid #1e3a5f;
+    border-bottom: 2px solid var(--color-panels);
     padding-bottom: 10px;
 }
 
@@ -1974,7 +2037,7 @@ tr.row-loading td:first-child::after {
 }
 
 .chart-toggle-btn.active {
-    background: #1e3a5f;
+    background: var(--color-panels);
     color: white;
     box-shadow: 0 2px 8px rgba(30, 58, 95, 0.3);
 }
@@ -2074,7 +2137,103 @@ tr.row-loading td:first-child::after {
 
 .pie-legend-percentage {
     font-weight: 600;
-    color: #1e3a5f;
+    color: var(--color-panels);
     font-size: 0.95em;
     white-space: nowrap;
+}
+
+/* ======= Панель настройки цветов ======= */
+.color-customizer {
+    position: fixed;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 9000;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0;
+}
+
+.color-customizer-btns {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    background: rgba(255,255,255,0.97);
+    border-radius: 10px 0 0 10px;
+    box-shadow: -3px 0 16px rgba(0,0,0,0.13);
+    padding: 8px 6px;
+}
+
+.color-btn {
+    width: 38px;
+    height: 38px;
+    background: none;
+    border: none;
+    border-radius: 7px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #555;
+    transition: background 0.15s, color 0.15s;
+    padding: 0;
+}
+
+.color-btn svg {
+    width: 20px;
+    height: 20px;
+}
+
+.color-btn:hover,
+.color-btn.active {
+    background: var(--color-panels);
+    color: white;
+}
+
+.color-picker-popup {
+    position: absolute;
+    right: 52px;
+    background: white;
+    border-radius: 10px;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.18);
+    padding: 14px 16px 12px;
+    min-width: 200px;
+    z-index: 9001;
+}
+
+.color-picker-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    font-weight: 600;
+    font-size: 0.9em;
+    color: #333;
+}
+
+.color-picker-close {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 1em;
+    color: #888;
+    padding: 0 2px;
+}
+
+.color-picker-close:hover { color: #333; }
+
+.color-picker-input {
+    width: 100%;
+    height: 44px;
+    border: 1px solid #ddd;
+    border-radius: 7px;
+    cursor: pointer;
+    padding: 2px;
+    margin-bottom: 10px;
+}
+
+.color-picker-actions {
+    display: flex;
+    gap: 8px;
 }
