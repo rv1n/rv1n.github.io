@@ -2671,6 +2671,8 @@ def hard_reset_portfolio():
 
         db_session.commit()
 
+        write_access_log('hard_reset', username=current_user.username, success=True)
+
         return jsonify({
             'success': True,
             'deleted': {

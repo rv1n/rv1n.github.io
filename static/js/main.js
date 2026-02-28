@@ -2289,10 +2289,11 @@ async function loadAccessLogs() {
         }
 
         const eventLabels = {
-            login_ok:   { text: 'Вход',        cls: 'log-event-ok'   },
-            login_fail: { text: 'Неверный пароль', cls: 'log-event-fail' },
-            logout:     { text: 'Выход',        cls: 'log-event-out'  },
-            page_open:  { text: 'Открытие',     cls: 'log-event-info' },
+            login_ok:   { text: 'Вход',           cls: 'log-event-ok'    },
+            login_fail: { text: 'Неверный пароль', cls: 'log-event-fail'  },
+            logout:     { text: 'Выход',           cls: 'log-event-out'   },
+            page_open:  { text: 'Открытие',        cls: 'log-event-info'  },
+            hard_reset: { text: '💥 Hard Reset',   cls: 'log-event-reset' },
         };
 
         const fmtMsk = ts => {
@@ -2319,7 +2320,8 @@ async function loadAccessLogs() {
 
         for (const log of logs) {
             const ev = eventLabels[log.event] || { text: log.event, cls: '' };
-            html += '<tr>'
+            const rowCls = log.event === 'hard_reset' ? ' class="log-row-reset"' : '';
+            html += `<tr${rowCls}>`
                   + `<td style="white-space:nowrap">${fmtMsk(log.timestamp)}</td>`
                   + `<td>${log.username || '—'}</td>`
                   + `<td><span class="access-log-badge ${ev.cls}">${ev.text}</span></td>`

@@ -478,10 +478,19 @@ header h1 {
     white-space: nowrap;
 }
 
-.log-event-ok   { background: #d4edda; color: #155724; }
-.log-event-fail { background: #f8d7da; color: #721c24; }
-.log-event-out  { background: #fff3cd; color: #856404; }
-.log-event-info { background: #d1ecf1; color: #0c5460; }
+.log-event-ok    { background: #d4edda; color: #155724; }
+.log-event-fail  { background: #f8d7da; color: #721c24; }
+.log-event-out   { background: #fff3cd; color: #856404; }
+.log-event-info  { background: #d1ecf1; color: #0c5460; }
+.log-event-reset { background: #b91c1c; color: #fff; font-weight: 600; }
+
+.log-row-reset td {
+    background: #fff1f1;
+    color: #7f1d1d;
+    font-weight: 500;
+    border-top: 1px solid #fca5a5;
+    border-bottom: 1px solid #fca5a5;
+}
 
 /* Отображение сырых данных по тикерам */
 .ticker-raw-content {
