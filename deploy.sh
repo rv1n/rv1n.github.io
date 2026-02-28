@@ -40,8 +40,19 @@ fi
 
 echo "=== [3/5] Создание виртуального окружения ==="
 if [ ! -d "venv" ]; then
-    $PYTHON -m venv venv
-    echo "  venv создан"
+    # Пробуем стандартный способ
+    if $PYTHON -m venv venv 2>/dev/null; then
+        echo "  venv создан (стандартный)"
+    else
+        # ensurepip отсутствует — создаём без pip, потом ставим вручную
+        echo "  ensurepip недоступен, создаём venv без pip..."
+        $PYTHON -m venv venv --without-pip
+        # Скачиваем и устанавливаем pip вручную
+        curl -sS https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py
+        venv/bin/python /tmp/get-pip.py
+        rm -f /tmp/get-pip.py
+        echo "  venv создан + pip установлен вручную"
+    fi
 else
     echo "  venv уже существует"
 fi
