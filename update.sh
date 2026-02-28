@@ -1,23 +1,15 @@
 #!/bin/bash
-# =============================================================
-# Скрипт обновления приложения из git
-# Запускать: bash /var/www/portfolio/update.sh
-# =============================================================
-set -e
+# Обновление из git и перезапуск
+APP_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$APP_DIR"
 
-APP_DIR="/var/www/portfolio"
-SERVICE_NAME="portfolio"
+echo "=== [1/3] Получение изменений из git ==="
+git pull
 
-echo "=== [1/4] Получение изменений из git ==="
-git -C "$APP_DIR" pull
+echo "=== [2/3] Обновление зависимостей ==="
+venv/bin/pip install -r requirements.txt --quiet
 
-echo "=== [2/4] Обновление зависимостей ==="
-"$APP_DIR/venv/bin/pip" install -r "$APP_DIR/requirements.txt" --quiet
-
-echo "=== [3/4] Перезапуск сервиса ==="
-systemctl restart "$SERVICE_NAME"
-sleep 2
-systemctl status "$SERVICE_NAME" --no-pager
-
-echo ""
-echo "=== Обновление завершено ==="
+echo "=== [3/3] Перезапуск ==="
+bash stop.sh
+sleep 1
+bash start.sh
