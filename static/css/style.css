@@ -145,7 +145,6 @@ header h1 {
     width: 38px;
     height: 38px;
     padding: 0;
-    font-size: 1.1rem;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -153,11 +152,23 @@ header h1 {
     border-radius: 8px;
     cursor: pointer;
     transition: background 0.2s, transform 0.15s, box-shadow 0.15s;
+    flex-shrink: 0;
+}
+
+.btn-header-icon svg {
+    width: 18px;
+    height: 18px;
+    stroke: white;
+    fill: none;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    flex-shrink: 0;
 }
 
 .btn-header-icon:hover {
     background: var(--color-panels-hover);
-    transform: translateY(-2px);
+    transform: translateY(-1px);
     box-shadow: 0 4px 12px rgba(30, 58, 95, 0.3);
 }
 
@@ -316,18 +327,25 @@ header h1 {
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: background 0.15s, color 0.15s;
+    transition: background 0.15s, color 0.15s, transform 0.15s;
     padding: 0;
+    flex-shrink: 0;
 }
 
 .btn-trusted-ip svg {
-    width: 18px;
-    height: 18px;
+    width: 16px;
+    height: 16px;
+    stroke: currentColor;
+    fill: none;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
 }
 
 .btn-trusted-ip:hover {
     background: var(--color-panels);
     color: white;
+    transform: translateY(-1px);
 }
 
 .trusted-ip-popup {
@@ -816,16 +834,32 @@ header h1 {
     background: var(--color-panels);
     color: white;
     border: none;
-    padding: 10px 20px;
-    border-radius: 5px;
+    padding: 8px 16px;
+    border-radius: 8px;
     cursor: pointer;
-    font-size: 1em;
-    transition: transform 0.2s, box-shadow 0.2s;
+    font-size: 0.9em;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: transform 0.15s, box-shadow 0.15s, background 0.15s;
+    white-space: nowrap;
+}
+
+.btn-secondary svg {
+    width: 15px;
+    height: 15px;
+    stroke: currentColor;
+    fill: none;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    flex-shrink: 0;
 }
 
 .btn-secondary:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 5px 15px rgba(30, 58, 95, 0.3);
+    background: var(--color-panels-hover);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(30, 58, 95, 0.25);
 }
 
 .btn-secondary:active {
@@ -1795,14 +1829,31 @@ header h1 {
     font-size: 0.95em;
 }
 
+/* ======= Базовая кнопка ======= */
 .btn {
-    padding: 10px 20px;
+    padding: 8px 16px;
     border: none;
-    border-radius: 10px;
-    font-size: 1em;
+    border-radius: 8px;
+    font-size: 0.9em;
     cursor: pointer;
-    transition: all 0.22s;
+    transition: transform 0.15s, box-shadow 0.15s, background 0.15s;
     font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+}
+
+/* SVG внутри любой .btn кнопки */
+.btn svg {
+    width: 15px;
+    height: 15px;
+    stroke: currentColor;
+    fill: none;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    flex-shrink: 0;
 }
 
 .btn-primary {
@@ -1813,17 +1864,20 @@ header h1 {
 
 .btn-primary:hover {
     background: var(--color-panels-hover);
-    transform: translateY(-2px);
-    box-shadow: 0 6px 16px rgba(30, 58, 95, 0.30);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 14px rgba(30, 58, 95, 0.28);
 }
 
-.btn-secondary {
+/* modal .btn-secondary отличается от header — нейтральный серый */
+.modal-buttons .btn-secondary,
+.analytics-customizer-footer .btn-secondary {
     background: #4a5568;
     color: white;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
 }
 
-.btn-secondary:hover {
+.modal-buttons .btn-secondary:hover,
+.analytics-customizer-footer .btn-secondary:hover {
     background: #2d3748;
     transform: translateY(-1px);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
@@ -1837,13 +1891,11 @@ header h1 {
 
 .btn-hard-reset:hover {
     background: linear-gradient(135deg, #991b1b 0%, #b91c1c 100%);
-    transform: translateY(-2px);
-    box-shadow: 0 6px 16px rgba(185, 28, 28, 0.40);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 14px rgba(185, 28, 28, 0.38);
 }
 
-.btn-hard-reset:active {
-    transform: translateY(0);
-}
+.btn-hard-reset:active { transform: translateY(0); }
 
 .btn-hard-reset:disabled {
     opacity: 0.6;
@@ -1858,8 +1910,8 @@ header h1 {
 }
 .btn-delete-history:hover {
     background: linear-gradient(135deg, #9a3e12 0%, #c2410c 100%);
-    transform: translateY(-2px);
-    box-shadow: 0 6px 16px rgba(194, 65, 12, 0.40);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 14px rgba(194, 65, 12, 0.38);
 }
 .btn-delete-history:active { transform: translateY(0); }
 
@@ -1917,45 +1969,63 @@ header h1 {
 .btn-danger {
     background: #7f1d1d;
     color: white;
-    padding: 8px 12px;
-    font-size: 1.2em;
-    min-width: auto;
-    width: 40px;
-    height: 40px;
-    white-space: nowrap;
+    padding: 0;
+    width: 34px;
+    height: 34px;
     flex-shrink: 0;
     display: flex;
     align-items: center;
     justify-content: center;
-    border-radius: 6px;
+    border-radius: 8px;
+    border: none;
     cursor: pointer;
+    transition: background 0.15s, transform 0.15s;
+}
+
+.btn-danger svg {
+    width: 16px;
+    height: 16px;
+    stroke: currentColor;
+    fill: none;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
 }
 
 .btn-danger:hover {
     background: #991b1b;
-    transform: scale(1.1);
+    transform: translateY(-1px);
 }
 
 .btn-edit {
     background: var(--color-panels);
     color: white;
-    padding: 8px 12px;
-    font-size: 1.2em;
-    min-width: auto;
-    width: 40px;
-    height: 40px;
-    white-space: nowrap;
+    padding: 0;
+    width: 34px;
+    height: 34px;
     flex-shrink: 0;
     display: flex;
     align-items: center;
     justify-content: center;
-    border-radius: 6px;
+    border-radius: 8px;
+    border: none;
     cursor: pointer;
+    transition: background 0.15s, transform 0.15s;
+}
+
+.btn-edit svg {
+    width: 16px;
+    height: 16px;
+    stroke: currentColor;
+    fill: none;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
 }
 
 .btn-edit:hover {
     background: var(--color-panels-hover);
-    transform: scale(1.1);
+    transform: translateY(-1px);
 }
 
 .btn-buy {

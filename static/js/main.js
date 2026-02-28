@@ -1751,6 +1751,19 @@ function initSummaryVisibility() {
     });
 }
 
+// ======= SVG Icon Constants =======
+const SVG_ATTR = `viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"`;
+
+const SVG_REFRESH  = `<svg ${SVG_ATTR}><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.5"/></svg>`;
+const SVG_KEY      = `<svg ${SVG_ATTR}><circle cx="7.5" cy="15.5" r="5.5"/><line x1="21" y1="2" x2="13.29" y2="9.71"/><line x1="16" y1="8" x2="21" y2="3"/><line x1="14" y1="10" x2="16" y2="8"/></svg>`;
+const SVG_LOGOUT   = `<svg ${SVG_ATTR}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>`;
+const SVG_PENCIL   = `<svg ${SVG_ATTR}><line x1="18" y1="2" x2="22" y2="6"/><path d="M7.5 20.5 19 9l-4-4L2.5 16.5 2 22z"/></svg>`;
+const SVG_TRASH    = `<svg ${SVG_ATTR}><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>`;
+const SVG_DOWNLOAD = `<svg ${SVG_ATTR}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`;
+const SVG_ZAP      = `<svg ${SVG_ATTR}><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>`;
+const SVG_RESET_LAYOUT = `<svg ${SVG_ATTR}><polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>`;
+const SVG_SETTINGS = `<svg ${SVG_ATTR}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`;
+
 const SVG_EYE_OPEN = `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
   <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
   <circle cx="12" cy="12" r="3"/>
@@ -3058,38 +3071,37 @@ async function logPricesNow() {
     const btn = document.getElementById('manual-log-btn');
     if (!btn) return;
     
-    const originalText = btn.textContent;
+    const originalHTML = btn.innerHTML;
     btn.disabled = true;
-    btn.textContent = '⏳ Логирование...';
-    
+    btn.innerHTML = `${SVG_PENCIL} Логирование...`;
+
     try {
         const response = await fetch('/api/log-prices-now', {
             method: 'POST'
         });
         const data = await response.json();
-        
+
         if (data.success) {
-            btn.textContent = '✅ Готово!';
-            // Перезагружаем историю и портфель (колонка "Изменение")
+            btn.innerHTML = `${SVG_PENCIL} Готово!`;
             setTimeout(() => {
                 loadPriceHistory();
-                loadPortfolio(); // Обновляем портфель для актуализации колонки "Изменение"
-                btn.textContent = originalText;
+                loadPortfolio();
+                btn.innerHTML = originalHTML;
                 btn.disabled = false;
             }, 1000);
         } else {
-            btn.textContent = '❌ Ошибка';
+            btn.innerHTML = `${SVG_PENCIL} Ошибка`;
             console.error('Ошибка логирования цен:', data.error);
             setTimeout(() => {
-                btn.textContent = originalText;
+                btn.innerHTML = originalHTML;
                 btn.disabled = false;
             }, 2000);
         }
     } catch (error) {
         console.error('Ошибка логирования:', error);
-        btn.textContent = '❌ Ошибка';
+        btn.innerHTML = `${SVG_PENCIL} Ошибка`;
         setTimeout(() => {
-            btn.textContent = originalText;
+            btn.innerHTML = originalHTML;
             btn.disabled = false;
         }, 2000);
     }
@@ -3306,8 +3318,8 @@ function renderTransactions(transactions) {
             <td><strong>${formatCurrency(transaction.total)}</strong></td>
             <td>
                 <div class="transaction-actions">
-                    <button class="btn-edit" onclick="openEditTransactionModal(${transaction.id})" title="Редактировать">✏️</button>
-                    <button class="btn-danger" onclick="deleteTransaction(${transaction.id})" title="Удалить">🗑️</button>
+                    <button class="btn-edit" onclick="openEditTransactionModal(${transaction.id})" title="Редактировать">${SVG_PENCIL}</button>
+                    <button class="btn-danger" onclick="deleteTransaction(${transaction.id})" title="Удалить">${SVG_TRASH}</button>
                 </div>
             </td>
         `;
@@ -4303,10 +4315,10 @@ async function loadManageCategories() {
                     <td>${category.name}</td>
                     <td style="white-space: nowrap;">
                         <button class="btn btn-edit" onclick="editCategory(${category.id}, '${category.name.replace(/'/g, "\\'")}')" title="Редактировать" style="margin-right: 5px;">
-                            ✏️
+                            ${SVG_PENCIL}
                         </button>
                         <button class="btn btn-danger" onclick="deleteCategory(${category.id}, '${category.name.replace(/'/g, "\\'")}')" title="Удалить">
-                            🗑️
+                            ${SVG_TRASH}
                         </button>
                     </td>
                 `;
@@ -4602,10 +4614,10 @@ async function loadManageAssetTypes() {
                     <td>${assetType.name}</td>
                     <td style="white-space: nowrap;">
                         <button class="btn btn-edit" onclick="editAssetType(${assetType.id}, '${assetType.name.replace(/'/g, "\\'")}')" title="Редактировать" style="margin-right: 5px;">
-                            ✏️
+                            ${SVG_PENCIL}
                         </button>
                         <button class="btn btn-danger" onclick="deleteAssetType(${assetType.id}, '${assetType.name.replace(/'/g, "\\'")}')" title="Удалить">
-                            🗑️
+                            ${SVG_TRASH}
                         </button>
                     </td>
                 `;
@@ -5143,7 +5155,7 @@ function openHardResetModal() {
     errorEl.style.display = 'none';
     errorEl.textContent = '';
     btn.disabled = false;
-    btn.textContent = '💥 Удалить всё';
+    btn.innerHTML = `${SVG_ZAP} Удалить всё`;
     modal.style.display = 'flex';
     setTimeout(() => pwdInput.focus(), 100);
 }
@@ -5168,7 +5180,7 @@ async function confirmHardReset() {
     }
 
     btn.disabled = true;
-    btn.textContent = 'Выполняется...';
+    btn.innerHTML = `${SVG_ZAP} Выполняется...`;
 
     try {
         const resp = await fetch('/api/hard-reset-portfolio', {
@@ -5186,7 +5198,7 @@ async function confirmHardReset() {
             errorEl.textContent = data.error || 'Неизвестная ошибка';
             errorEl.style.display = 'block';
             btn.disabled = false;
-            btn.textContent = '💥 Удалить всё';
+            btn.innerHTML = `${SVG_ZAP} Удалить всё`;
             pwdInput.value = '';
             pwdInput.focus();
         }
@@ -5194,7 +5206,7 @@ async function confirmHardReset() {
         errorEl.textContent = 'Ошибка соединения: ' + err.message;
         errorEl.style.display = 'block';
         btn.disabled = false;
-        btn.textContent = '💥 Удалить всё';
+        btn.innerHTML = `${SVG_ZAP} Удалить всё`;
     }
 }
 
@@ -5516,7 +5528,7 @@ function openDeleteHistoryModal() {
     errorEl.textContent = '';
     preview.textContent = '';
     btn.disabled = false;
-    btn.textContent = '🗑️ Удалить';
+    btn.innerHTML = `${SVG_TRASH} Удалить`;
 
     // Заполняем тикеры из текущего фильтра истории
     const tickerSel = document.getElementById('delete-history-ticker');
@@ -5576,7 +5588,7 @@ async function confirmDeleteHistory() {
     }
 
     btn.disabled = true;
-    btn.textContent = 'Удаление...';
+    btn.innerHTML = `${SVG_TRASH} Удаление...`;
 
     try {
         const resp = await fetch('/api/delete-price-history', {
@@ -5594,7 +5606,7 @@ async function confirmDeleteHistory() {
             errorEl.textContent = data.error || 'Неизвестная ошибка';
             errorEl.style.display = 'block';
             btn.disabled = false;
-            btn.textContent = '🗑️ Удалить';
+            btn.innerHTML = `${SVG_TRASH} Удалить`;
             pwdInput.value = '';
             pwdInput.focus();
         }
@@ -5602,6 +5614,6 @@ async function confirmDeleteHistory() {
         errorEl.textContent = 'Ошибка соединения: ' + err.message;
         errorEl.style.display = 'block';
         btn.disabled = false;
-        btn.textContent = '🗑️ Удалить';
+        btn.innerHTML = `${SVG_TRASH} Удалить`;
     }
 }
