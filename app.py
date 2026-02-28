@@ -2202,6 +2202,52 @@ def get_price_history():
         }), 500
 
 
+@app.route('/api/delete-price-history', methods=['POST'])
+@login_required
+def delete_price_history():
+    """Удаление истории цен за указанный период с подтверждением паролем"""
+    data = request.get_json() or {}
+    password = data.get('password', '')
+    date_from = data.get('date_from')
+    date_to = data.get('date_to')
+    ticker = data.get('ticker')
+
+    if not password:
+        return jsonify({'success': False, 'error': 'Пароль не указан'}), 400
+    if not current_user.check_password(password):
+        return jsonify({'success': False, 'error': 'Неверный пароль'}), 403
+    if not date_from or not date_to:
+        return jsonify({'success': False, 'error': 'Укажите период'}), 400
+
+    try:
+        from datetime import date as date_type
+        dt_from = datetime.strptime(date_from, '%Y-%m-%d')
+        dt_to = datetime.strptime(date_to, '%Y-%m-%d').replace(hour=23, minute=59, second=59)
+
+        query = db_session.query(PriceHistory).filter(
+            PriceHistory.logged_at >= dt_from,
+            PriceHistory.logged_at <= dt_to
+        )
+        if ticker:
+            query = query.filter(PriceHistory.ticker == ticker)
+
+        count = query.count()
+        query.delete(synchronize_session=False)
+        db_session.commit()
+
+        period = f"{date_from} — {date_to}"
+        ticker_info = f" ({ticker})" if ticker else " (все тикеры)"
+        write_access_log('delete_price_history', username=current_user.username, success=True)
+        return jsonify({
+            'success': True,
+            'deleted': count,
+            'message': f'Удалено {count} записей истории цен за период {period}{ticker_info}'
+        })
+    except Exception as e:
+        db_session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @app.route('/api/log-prices-now', methods=['POST'])
 def log_prices_now():
     """

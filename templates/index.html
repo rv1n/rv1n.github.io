@@ -308,6 +308,7 @@
                         <input type="date" id="history-date-to" class="history-filter" placeholder="Дата до">
                         <button id="history-reset-filters" class="btn btn-secondary">🔄 Сбросить</button>
                         <button id="manual-log-btn" class="btn btn-secondary">📝 Записать цены сейчас</button>
+                        <button class="btn btn-delete-history" onclick="openDeleteHistoryModal()">🗑️ Удалить за период</button>
                     </div>
                     <div id="price-history-content" class="price-history-content">
                         <!-- История загружается через JavaScript -->
@@ -531,6 +532,45 @@
                     💥 Удалить всё
                 </button>
                 <button type="button" class="btn btn-secondary" onclick="closeHardResetModal()">Отмена</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно удаления истории цен за период -->
+    <div id="delete-history-modal" class="modal" style="display: none;">
+        <div class="modal-content" style="max-width: 460px;">
+            <span class="close" onclick="closeDeleteHistoryModal()">&times;</span>
+            <h2 style="color: #b91c1c;">🗑️ Удалить историю цен</h2>
+            <p style="margin: 0 0 14px; color: #555; font-size: 0.95em;">
+                Записи истории цен за указанный период будут <strong>безвозвратно удалены</strong>.
+            </p>
+            <div class="form-group">
+                <label>Тикер</label>
+                <select id="delete-history-ticker">
+                    <option value="">Все тикеры</option>
+                </select>
+            </div>
+            <div style="display: flex; gap: 12px;">
+                <div class="form-group" style="flex: 1;">
+                    <label>Дата от</label>
+                    <input type="date" id="delete-history-from">
+                </div>
+                <div class="form-group" style="flex: 1;">
+                    <label>Дата до</label>
+                    <input type="date" id="delete-history-to">
+                </div>
+            </div>
+            <div id="delete-history-preview" style="font-size:0.88rem; color:#555; margin-bottom:10px;"></div>
+            <div class="form-group">
+                <label for="delete-history-password">Введите пароль для подтверждения</label>
+                <input type="password" id="delete-history-password" placeholder="Ваш пароль" autocomplete="off">
+            </div>
+            <div id="delete-history-error" style="color: #b91c1c; font-size: 0.88rem; margin-bottom: 10px; display: none;"></div>
+            <div class="modal-buttons">
+                <button type="button" class="btn btn-hard-reset" id="delete-history-confirm-btn" onclick="confirmDeleteHistory()">
+                    🗑️ Удалить
+                </button>
+                <button type="button" class="btn btn-secondary" onclick="closeDeleteHistoryModal()">Отмена</button>
             </div>
         </div>
     </div>

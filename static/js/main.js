@@ -5193,10 +5193,119 @@ async function confirmHardReset() {
 }
 
 document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') closeHardResetModal();
+    if (e.key === 'Escape') {
+        closeHardResetModal();
+        closeDeleteHistoryModal();
+    }
 });
 
 document.addEventListener('click', (e) => {
     const modal = document.getElementById('hard-reset-modal');
     if (modal && e.target === modal) closeHardResetModal();
+    const dModal = document.getElementById('delete-history-modal');
+    if (dModal && e.target === dModal) closeDeleteHistoryModal();
 });
+
+// ======= Удаление истории цен за период =======
+
+function openDeleteHistoryModal() {
+    const modal = document.getElementById('delete-history-modal');
+    const pwdInput = document.getElementById('delete-history-password');
+    const errorEl = document.getElementById('delete-history-error');
+    const btn = document.getElementById('delete-history-confirm-btn');
+    const preview = document.getElementById('delete-history-preview');
+
+    pwdInput.value = '';
+    errorEl.style.display = 'none';
+    errorEl.textContent = '';
+    preview.textContent = '';
+    btn.disabled = false;
+    btn.textContent = '🗑️ Удалить';
+
+    // Заполняем тикеры из текущего фильтра истории
+    const tickerSel = document.getElementById('delete-history-ticker');
+    const srcSel = document.getElementById('history-ticker-filter');
+    tickerSel.innerHTML = '<option value="">Все тикеры</option>';
+    if (srcSel) {
+        Array.from(srcSel.options).forEach(opt => {
+            if (opt.value) {
+                const o = document.createElement('option');
+                o.value = opt.value;
+                o.textContent = opt.textContent;
+                tickerSel.appendChild(o);
+            }
+        });
+    }
+
+    // Дефолтные даты — текущий месяц
+    const today = new Date();
+    const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+    document.getElementById('delete-history-from').value = firstDay.toISOString().slice(0, 10);
+    document.getElementById('delete-history-to').value = today.toISOString().slice(0, 10);
+
+    modal.style.display = 'flex';
+    setTimeout(() => pwdInput.focus(), 100);
+}
+
+function closeDeleteHistoryModal() {
+    document.getElementById('delete-history-modal').style.display = 'none';
+}
+
+async function confirmDeleteHistory() {
+    const pwdInput = document.getElementById('delete-history-password');
+    const errorEl = document.getElementById('delete-history-error');
+    const btn = document.getElementById('delete-history-confirm-btn');
+    const password = pwdInput.value.trim();
+    const dateFrom = document.getElementById('delete-history-from').value;
+    const dateTo = document.getElementById('delete-history-to').value;
+    const ticker = document.getElementById('delete-history-ticker').value;
+
+    errorEl.style.display = 'none';
+
+    if (!dateFrom || !dateTo) {
+        errorEl.textContent = 'Укажите период (обе даты)';
+        errorEl.style.display = 'block';
+        return;
+    }
+    if (dateFrom > dateTo) {
+        errorEl.textContent = 'Дата "от" не может быть позже даты "до"';
+        errorEl.style.display = 'block';
+        return;
+    }
+    if (!password) {
+        errorEl.textContent = 'Введите пароль для подтверждения';
+        errorEl.style.display = 'block';
+        pwdInput.focus();
+        return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Удаление...';
+
+    try {
+        const resp = await fetch('/api/delete-price-history', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ password, date_from: dateFrom, date_to: dateTo, ticker: ticker || null })
+        });
+        const data = await resp.json();
+
+        if (data.success) {
+            closeDeleteHistoryModal();
+            alert(data.message);
+            loadPriceHistory();
+        } else {
+            errorEl.textContent = data.error || 'Неизвестная ошибка';
+            errorEl.style.display = 'block';
+            btn.disabled = false;
+            btn.textContent = '🗑️ Удалить';
+            pwdInput.value = '';
+            pwdInput.focus();
+        }
+    } catch (err) {
+        errorEl.textContent = 'Ошибка соединения: ' + err.message;
+        errorEl.style.display = 'block';
+        btn.disabled = false;
+        btn.textContent = '🗑️ Удалить';
+    }
+}

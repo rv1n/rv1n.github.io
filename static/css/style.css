@@ -1617,6 +1617,18 @@ header h1 {
     transform: none;
 }
 
+.btn-delete-history {
+    background: linear-gradient(135deg, #7c3410 0%, #9a3e12 100%);
+    color: white;
+    box-shadow: 0 2px 8px rgba(124, 52, 16, 0.30);
+}
+.btn-delete-history:hover {
+    background: linear-gradient(135deg, #9a3e12 0%, #c2410c 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(194, 65, 12, 0.40);
+}
+.btn-delete-history:active { transform: translateY(0); }
+
 /* ======= Модальное окно Hard Reset ======= */
 .hard-reset-list {
     list-style: none;
