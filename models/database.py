@@ -1,12 +1,16 @@
 """
 Настройка подключения к базе данных SQLite
 """
+import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import scoped_session, sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 
-# Создаем движок SQLite
-engine = create_engine('sqlite:///portfolio.db', echo=False)
+# DATABASE_URL можно переопределить через переменную окружения:
+#   sqlite:////var/www/portfolio/data/portfolio.db  (абсолютный путь, 4 слеша)
+#   sqlite:///portfolio.db                          (относительный, для разработки)
+_db_url = os.environ.get('DATABASE_URL', 'sqlite:///portfolio.db')
+engine = create_engine(_db_url, echo=False)
 
 # Создаем сессию БД
 db_session = scoped_session(sessionmaker(autocommit=False, autoflush=False, bind=engine))

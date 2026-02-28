@@ -48,3 +48,9 @@ instance/
 # Environment
 .env
 .env.local
+
+# Секреты на сервере (создаются deploy.sh, не коммитить)
+/etc/portfolio.env
+
+# Временные файлы разработки
+*.log

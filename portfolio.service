@@ -1,0 +1,26 @@
+[Unit]
+Description=Portfolio Tracker (Flask + Gunicorn)
+After=network.target
+
+[Service]
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/portfolio
+
+# Секреты хранятся в /etc/portfolio.env (не в репозитории)
+# Файл создаётся автоматически скриптом deploy.sh
+EnvironmentFile=/etc/portfolio.env
+
+ExecStart=/var/www/portfolio/venv/bin/gunicorn \
+    --config /var/www/portfolio/gunicorn.conf.py \
+    app:app
+
+Restart=always
+RestartSec=5
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=portfolio
+
+[Install]
+WantedBy=multi-user.target
