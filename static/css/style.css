@@ -299,6 +299,108 @@ header h1 {
     margin-top: 20px;
 }
 
+/* Кнопка и попап доверенных IP */
+.trusted-ip-wrapper {
+    position: relative;
+    display: inline-flex;
+}
+
+.btn-trusted-ip {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    border: none;
+    background: #e8f0fe;
+    color: var(--color-panels);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s, color 0.15s;
+    padding: 0;
+}
+
+.btn-trusted-ip svg {
+    width: 18px;
+    height: 18px;
+}
+
+.btn-trusted-ip:hover {
+    background: var(--color-panels);
+    color: white;
+}
+
+.trusted-ip-popup {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 8px);
+    background: white;
+    border-radius: 10px;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.15);
+    padding: 14px 16px;
+    min-width: 210px;
+    z-index: 500;
+    border: 1px solid #e0e6ed;
+}
+
+.trusted-ip-title {
+    font-weight: 600;
+    font-size: 0.88em;
+    color: #555;
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #eee;
+}
+
+.trusted-ip-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.trusted-ip-list li {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.9em;
+}
+
+.trusted-ip-list li::before {
+    content: '✓';
+    color: #27ae60;
+    font-weight: 700;
+    font-size: 0.85em;
+}
+
+.trusted-ip-list code {
+    font-family: 'SFMono-Regular', Consolas, monospace;
+    background: #f0f4f8;
+    padding: 2px 7px;
+    border-radius: 5px;
+    color: var(--color-panels);
+    font-size: 0.95em;
+}
+
+/* Контейнер журнала — растягивается на всё оставшееся место */
+.server-logs-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+/* Содержимое журнала (обёртка таблицы) */
+.access-logs-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+}
+
 .server-status-content {
     margin-top: 15px;
     padding: 16px 20px;
@@ -329,7 +431,8 @@ header h1 {
 .access-log-table-wrap {
     overflow-x: auto;
     overflow-y: auto;
-    max-height: 420px;
+    flex: 1;
+    min-height: 0;
     border-radius: 6px;
     border: 1px solid #e0e6ed;
 }
@@ -1475,6 +1578,79 @@ header h1 {
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
 }
 
+.btn-hard-reset {
+    background: linear-gradient(135deg, #7f1d1d 0%, #991b1b 100%);
+    color: white;
+    box-shadow: 0 2px 8px rgba(127, 29, 29, 0.30);
+}
+
+.btn-hard-reset:hover {
+    background: linear-gradient(135deg, #991b1b 0%, #b91c1c 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(185, 28, 28, 0.40);
+}
+
+.btn-hard-reset:active {
+    transform: translateY(0);
+}
+
+.btn-hard-reset:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+}
+
+/* ======= Модальное окно Hard Reset ======= */
+.hard-reset-list {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.hard-reset-list li {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    background: #fff5f5;
+    border: 1px solid #fecaca;
+    border-radius: 8px;
+    padding: 10px 14px;
+}
+
+.hard-reset-icon {
+    font-size: 1.3em;
+    line-height: 1.4;
+    flex-shrink: 0;
+}
+
+.hard-reset-list li div {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.hard-reset-list li strong {
+    font-size: 0.95em;
+    color: #1a202c;
+}
+
+.hard-reset-sub {
+    font-size: 0.82em;
+    color: #718096;
+}
+
+.hard-reset-safe {
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 0.88em;
+    color: #166534;
+}
+
 .btn-danger {
     background: #7f1d1d;
     color: white;
@@ -1866,7 +2042,7 @@ tr.row-loading td:first-child::after {
 /* Модальное окно */
 .modal {
     position: fixed;
-    z-index: 1000;
+    z-index: 10000;
     left: 0;
     top: 0;
     width: 100%;

@@ -204,13 +204,22 @@ class MOEXService:
                     marketdata_dict = best_item
                     marketdata_index = best_index
                 else:
-                    # Fallback: берем последнюю запись с LAST
+                    # Fallback 1: берем последнюю запись с LAST
                     for idx, item in enumerate(reversed(marketdata_table)):
                         if isinstance(item, dict) and item.get('LAST') is not None:
                             marketdata_dict = item
                             # Вычисляем оригинальный индекс
                             marketdata_index = len(marketdata_table) - 1 - idx
                             break
+                    
+                    # Fallback 2: для замороженных/неактивных инструментов (LAST=None) —
+                    # берем последнюю запись с MARKETPRICE (это уже цена в рублях на MOEX)
+                    if not marketdata_dict:
+                        for idx, item in enumerate(reversed(marketdata_table)):
+                            if isinstance(item, dict) and item.get('MARKETPRICE') is not None:
+                                marketdata_dict = item
+                                marketdata_index = len(marketdata_table) - 1 - idx
+                                break
             
             # Для облигаций (только если использовался рынок bonds) проверяем marketdata_yields, если LAST пустой
             if used_market and used_market[1] == 'bonds' and (not marketdata_dict.get('LAST') or marketdata_dict.get('LAST') == ''):

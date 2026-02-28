@@ -2639,6 +2639,55 @@ def delete_asset_type(asset_type_id):
         }), 500
 
 
+@app.route('/api/hard-reset-portfolio', methods=['POST'])
+@login_required
+def hard_reset_portfolio():
+    """
+    Hard-reset: удалить все позиции, транзакции и обнулить кэш-баланс текущего пользователя.
+    История цен (PriceHistory) не затрагивается.
+    Требует подтверждения паролем пользователя.
+    """
+    data = request.get_json() or {}
+    password = data.get('password', '')
+
+    if not password:
+        return jsonify({'success': False, 'error': 'Пароль не указан'}), 400
+
+    if not current_user.check_password(password):
+        return jsonify({'success': False, 'error': 'Неверный пароль'}), 403
+
+    try:
+        user_id = current_user.id
+
+        portfolio_count = db_session.query(Portfolio).filter_by(user_id=user_id).count()
+        transactions_count = db_session.query(Transaction).filter_by(user_id=user_id).count()
+
+        db_session.query(Transaction).filter_by(user_id=user_id).delete()
+        db_session.query(Portfolio).filter_by(user_id=user_id).delete()
+
+        cash = db_session.query(CashBalance).filter_by(user_id=user_id).first()
+        if cash:
+            cash.balance = 0.0
+
+        db_session.commit()
+
+        return jsonify({
+            'success': True,
+            'deleted': {
+                'portfolio': portfolio_count,
+                'transactions': transactions_count,
+                'cash_balance_reset': True
+            },
+            'message': (
+                f'Hard-reset выполнен: удалено {portfolio_count} позиций портфеля, '
+                f'{transactions_count} транзакций, баланс сброшен в 0.'
+            )
+        })
+    except Exception as e:
+        db_session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 atexit.register(close_db)
 
 

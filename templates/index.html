@@ -320,9 +320,14 @@
                 <div class="server-status-container">
                     <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;">
                         <h3 style="margin: 0;">Мониторинг сервера</h3>
-                        <a href="/api/download-db" class="btn btn-secondary" download="portfolio.db" style="text-decoration: none;">
-                            ⬇️ Скачать базу данных
-                        </a>
+                        <div style="display: flex; gap: 10px; align-items: center;">
+                            <a href="/api/download-db" class="btn btn-secondary" download="portfolio.db" style="text-decoration: none;">
+                                ⬇️ Скачать базу данных
+                            </a>
+                            <button class="btn btn-hard-reset" onclick="openHardResetModal()" title="Удалить все позиции, транзакции и обнулить баланс (история цен сохраняется)">
+                                💥 Hard Reset
+                            </button>
+                        </div>
                     </div>
                     <div id="server-status-content" class="server-status-content">
                         Загрузка данных о сервере...
@@ -330,12 +335,37 @@
                 </div>
 
                 <!-- Лог доступа -->
-                <div class="server-status-container" style="margin-top: 20px;">
+                <div class="server-status-container server-logs-container">
                     <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
                         <h3 style="margin: 0;">Журнал подключений</h3>
-                        <button class="btn btn-secondary btn-sm" onclick="loadAccessLogs()" style="font-size: 0.85em; padding: 5px 12px;">🔄 Обновить</button>
+                        <div style="display:flex;align-items:center;gap:8px;">
+                            <div class="trusted-ip-wrapper">
+                                <button class="btn-trusted-ip" onclick="toggleTrustedIps()" title="Доверенные IP-адреса">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <circle cx="12" cy="12" r="10"/>
+                                        <line x1="12" y1="8" x2="12" y2="12"/>
+                                        <line x1="12" y1="16" x2="12.01" y2="16"/>
+                                    </svg>
+                                </button>
+                                <div id="trusted-ip-popup" class="trusted-ip-popup" style="display:none;">
+                                    <div class="trusted-ip-title">Доверенные IP-адреса</div>
+                                    <ul class="trusted-ip-list">
+                                        <li><code>213.165.57.1</code></li>
+                                        <li><code>109.107.190.211</code></li>
+                                        <li><code>46.191.183.137</code></li>
+                                        <li><code>77.40.53.238</code></li>
+                                    </ul>
+                                </div>
+                            </div>
+                            <button class="btn-trusted-ip" onclick="loadAccessLogs()" title="Обновить журнал">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+                                    <path d="M3 3v5h5"/>
+                                </svg>
+                            </button>
+                        </div>
                     </div>
-                    <div id="access-logs-content">
+                    <div id="access-logs-content" class="access-logs-content">
                         <p style="color: #7f8c8d;">Загрузка журнала...</p>
                     </div>
                 </div>
@@ -453,6 +483,54 @@
                         </div>
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно Hard Reset -->
+    <div id="hard-reset-modal" class="modal" style="display: none;">
+        <div class="modal-content" style="max-width: 460px;">
+            <span class="close" onclick="closeHardResetModal()">&times;</span>
+            <h2 style="color: #b91c1c;">💥 Hard Reset портфеля</h2>
+            <p style="margin: 0 0 14px; color: #555; font-size: 0.95em;">
+                Это действие <strong>необратимо</strong>. Будут удалены:
+            </p>
+            <ul class="hard-reset-list">
+                <li>
+                    <span class="hard-reset-icon">📋</span>
+                    <div>
+                        <strong>Все позиции портфеля</strong>
+                        <span class="hard-reset-sub">тикеры, количество, средние цены покупки</span>
+                    </div>
+                </li>
+                <li>
+                    <span class="hard-reset-icon">🔄</span>
+                    <div>
+                        <strong>Все транзакции</strong>
+                        <span class="hard-reset-sub">история покупок и продаж</span>
+                    </div>
+                </li>
+                <li>
+                    <span class="hard-reset-icon">💰</span>
+                    <div>
+                        <strong>Баланс свободных средств</strong>
+                        <span class="hard-reset-sub">обнуляется до 0 ₽</span>
+                    </div>
+                </li>
+            </ul>
+            <div class="hard-reset-safe">
+                ✅ <strong>История цен сохранится</strong> — она не будет затронута
+            </div>
+            <div class="form-group" style="margin-top: 18px;">
+                <label for="hard-reset-password">Введите пароль для подтверждения</label>
+                <input type="password" id="hard-reset-password" placeholder="Ваш пароль" autocomplete="off">
+            </div>
+            <div id="hard-reset-error" style="color: #b91c1c; font-size: 0.88rem; margin-bottom: 10px; display: none;"></div>
+            <div class="modal-buttons">
+                <button type="button" class="btn btn-hard-reset" id="hard-reset-confirm-btn" onclick="confirmHardReset()">
+                    💥 Удалить всё
+                </button>
+                <button type="button" class="btn btn-secondary" onclick="closeHardResetModal()">Отмена</button>
             </div>
         </div>
     </div>

@@ -448,6 +448,9 @@ async function refreshSinglePortfolioPosition(ticker) {
             if (existingRow) {
                 tbody.replaceChild(newRow, existingRow);
             } else {
+                // Удаляем строку-заглушку «Портфель пуст» перед добавлением первого реального ряда
+                const emptyRow = tbody.querySelector('tr:not([data-ticker])');
+                if (emptyRow) emptyRow.remove();
                 tbody.appendChild(newRow);
             }
             
@@ -1698,15 +1701,19 @@ async function deletePosition(id, ticker) {
  */
 function updateLastUpdateTime() {
     const now = new Date();
-    const timeString = now.toLocaleTimeString('ru-RU', {
+    const dateTimeString = now.toLocaleString('ru-RU', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
         hour: '2-digit',
         minute: '2-digit',
         second: '2-digit'
     });
-    localStorage.setItem('lastUpdateTime', timeString);
+    localStorage.setItem('lastUpdateDateTime', dateTimeString);
+    localStorage.removeItem('lastUpdateTime'); // удаляем старый ключ
     const lastUpdateEl = document.getElementById('last-update-time');
     if (lastUpdateEl) {
-        lastUpdateEl.textContent = timeString;
+        lastUpdateEl.textContent = dateTimeString;
     }
 }
 
@@ -1715,11 +1722,11 @@ function initTodayDate() {
     if (todayEl) {
         todayEl.textContent = new Date().toLocaleDateString('ru-RU');
     }
-    // Восстанавливаем сохранённое время последнего обновления
-    const saved = localStorage.getItem('lastUpdateTime');
+    // Восстанавливаем сохранённое значение (новый ключ с датой+временем)
+    const saved = localStorage.getItem('lastUpdateDateTime');
     const lastUpdateEl = document.getElementById('last-update-time');
-    if (lastUpdateEl && saved) {
-        lastUpdateEl.textContent = saved;
+    if (lastUpdateEl) {
+        lastUpdateEl.textContent = saved || '—';
     }
 }
 
@@ -2112,7 +2119,7 @@ function switchView(viewType) {
         historyView.style.display = 'none';
         transactionsView.style.display = 'none';
         if (categoriesView) categoriesView.style.display = 'none';
-        if (serverView) serverView.style.display = 'block';
+        if (serverView) serverView.style.display = 'flex';
         if (tickerSberView) tickerSberView.style.display = 'none';
         if (tickerRuView) tickerRuView.style.display = 'none';
 
@@ -2250,6 +2257,20 @@ async function loadServerStatus() {
 /**
  * Загрузка и отображение журнала подключений
  */
+function toggleTrustedIps() {
+    const popup = document.getElementById('trusted-ip-popup');
+    if (!popup) return;
+    popup.style.display = popup.style.display === 'none' ? 'block' : 'none';
+}
+
+document.addEventListener('click', function(e) {
+    const wrapper = document.querySelector('.trusted-ip-wrapper');
+    const popup = document.getElementById('trusted-ip-popup');
+    if (popup && popup.style.display !== 'none' && wrapper && !wrapper.contains(e.target)) {
+        popup.style.display = 'none';
+    }
+});
+
 async function loadAccessLogs() {
     const container = document.getElementById('access-logs-content');
     if (!container) return;
@@ -2274,10 +2295,21 @@ async function loadAccessLogs() {
             page_open:  { text: 'Открытие',     cls: 'log-event-info' },
         };
 
+        const fmtMsk = ts => {
+            if (!ts) return '—';
+            try {
+                return new Date(ts).toLocaleString('ru-RU', {
+                    timeZone: 'Europe/Moscow',
+                    day: '2-digit', month: '2-digit', year: 'numeric',
+                    hour: '2-digit', minute: '2-digit', second: '2-digit'
+                }) + ' МСК';
+            } catch { return ts; }
+        };
+
         let html = `<p style="color:#7f8c8d;font-size:0.85em;margin-bottom:8px;">Последние ${logs.length} из ${data.total} записей</p>`;
         html += '<div class="access-log-table-wrap"><table class="access-log-table">';
         html += '<thead><tr>'
-              + '<th>Дата и время</th>'
+              + '<th>Дата и время (МСК)</th>'
               + '<th>Пользователь</th>'
               + '<th>Событие</th>'
               + '<th>IP-адрес</th>'
@@ -2288,7 +2320,7 @@ async function loadAccessLogs() {
         for (const log of logs) {
             const ev = eventLabels[log.event] || { text: log.event, cls: '' };
             html += '<tr>'
-                  + `<td style="white-space:nowrap">${log.timestamp || '—'}</td>`
+                  + `<td style="white-space:nowrap">${fmtMsk(log.timestamp)}</td>`
                   + `<td>${log.username || '—'}</td>`
                   + `<td><span class="access-log-badge ${ev.cls}">${ev.text}</span></td>`
                   + `<td style="font-family:monospace">${log.ip_address || '—'}</td>`
@@ -2298,6 +2330,9 @@ async function loadAccessLogs() {
         }
         html += '</tbody></table></div>';
         container.innerHTML = html;
+        // Растягиваем враппер таблицы на всю доступную высоту
+        const wrap = container.querySelector('.access-log-table-wrap');
+        if (wrap) wrap.style.flex = '1';
     } catch (err) {
         container.innerHTML = '<p style="color:#e74c3c;">Ошибка загрузки журнала</p>';
         console.error('loadAccessLogs error:', err);
@@ -5081,12 +5116,85 @@ document.addEventListener('DOMContentLoaded', () => {
                 successEl.style.display = 'block';
                 form.reset();
             } else {
-                errorEl.textContent = data.error || 'РћС€РёР±РєР° СЃРјРµРЅС‹ РїР°СЂРѕР»СЏ';
+                errorEl.textContent = data.error || 'РћС€РёР±РєР° СЃРјРµРЅС‹ РїР°СЂРѕР»СЯ';
                 errorEl.style.display = 'block';
             }
         } catch (err) {
-            errorEl.textContent = 'РћС€РёР±РєР° СЃРѕРµРґРёРЅРµРЅРёСЏ';
+            errorEl.textContent = 'РћС€РёР±РєР° СЃРѕРµРґРёРЅРµРЅРёСЯ';
             errorEl.style.display = 'block';
         }
     });
+});
+
+function openHardResetModal() {
+    const modal = document.getElementById('hard-reset-modal');
+    const pwdInput = document.getElementById('hard-reset-password');
+    const errorEl = document.getElementById('hard-reset-error');
+    const btn = document.getElementById('hard-reset-confirm-btn');
+    pwdInput.value = '';
+    errorEl.style.display = 'none';
+    errorEl.textContent = '';
+    btn.disabled = false;
+    btn.textContent = '💥 Удалить всё';
+    modal.style.display = 'flex';
+    setTimeout(() => pwdInput.focus(), 100);
+}
+
+function closeHardResetModal() {
+    document.getElementById('hard-reset-modal').style.display = 'none';
+}
+
+async function confirmHardReset() {
+    const pwdInput = document.getElementById('hard-reset-password');
+    const errorEl = document.getElementById('hard-reset-error');
+    const btn = document.getElementById('hard-reset-confirm-btn');
+    const password = pwdInput.value.trim();
+
+    errorEl.style.display = 'none';
+
+    if (!password) {
+        errorEl.textContent = 'Введите пароль для подтверждения';
+        errorEl.style.display = 'block';
+        pwdInput.focus();
+        return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Выполняется...';
+
+    try {
+        const resp = await fetch('/api/hard-reset-portfolio', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ password })
+        });
+        const data = await resp.json();
+
+        if (data.success) {
+            closeHardResetModal();
+            alert(data.message);
+            loadPortfolio();
+        } else {
+            errorEl.textContent = data.error || 'Неизвестная ошибка';
+            errorEl.style.display = 'block';
+            btn.disabled = false;
+            btn.textContent = '💥 Удалить всё';
+            pwdInput.value = '';
+            pwdInput.focus();
+        }
+    } catch (err) {
+        errorEl.textContent = 'Ошибка соединения: ' + err.message;
+        errorEl.style.display = 'block';
+        btn.disabled = false;
+        btn.textContent = '💥 Удалить всё';
+    }
+}
+
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeHardResetModal();
+});
+
+document.addEventListener('click', (e) => {
+    const modal = document.getElementById('hard-reset-modal');
+    if (modal && e.target === modal) closeHardResetModal();
 });
