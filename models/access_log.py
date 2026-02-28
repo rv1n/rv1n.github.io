@@ -29,7 +29,7 @@ class AccessLog(Base):
     def to_dict(self):
         return {
             'id': self.id,
-            'timestamp': self.timestamp.strftime('%Y-%m-%d %H:%M:%S') if self.timestamp else None,
+            'timestamp': self.timestamp.strftime('%Y-%m-%dT%H:%M:%S+03:00') if self.timestamp else None,
             'ip_address': self.ip_address,
             'username': self.username,
             'event': self.event,
