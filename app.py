@@ -28,6 +28,12 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
 
+# В режиме CGI перенаправляем stdout в stderr чтобы print-сообщения
+# не попадали в тело HTTP-ответа
+if os.environ.get('GATEWAY_INTERFACE', '').startswith('CGI'):
+    import sys as _sys
+    _sys.stdout = _sys.stderr
+
 
 def _parse_user_agent(ua_string):
     """Извлечь ОС и браузер из строки User-Agent."""

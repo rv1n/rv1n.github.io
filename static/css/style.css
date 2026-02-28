@@ -580,9 +580,17 @@ header h1 {
 .summary-hidden .summary-value,
 .summary-hidden .summary-percent {
     color: transparent;
-    text-shadow: 0 0 20px rgba(255, 255, 255, 0.95);
     user-select: none;
     pointer-events: none;
+    position: relative;
+}
+.summary-hidden .summary-value::after,
+.summary-hidden .summary-percent::after {
+    content: "*****";
+    color: var(--text-primary);
+    position: absolute;
+    left: 0;
+    top: 0;
 }
 
 .summary-value {
