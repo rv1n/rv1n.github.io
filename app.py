@@ -97,12 +97,15 @@ def _get_real_ip():
     )
 
 
+_MOSCOW_TZ = pytz.timezone('Europe/Moscow')
+
 def write_access_log(event: str, username: str = None, success: bool = True):
     """Записать событие доступа в базу данных."""
     try:
         ua_string = request.headers.get('User-Agent', '')
         os_info, browser_info = _parse_user_agent(ua_string)
         log = AccessLog(
+            timestamp=datetime.now(_MOSCOW_TZ).replace(tzinfo=None),
             ip_address=_get_real_ip(),
             username=username,
             event=event,
