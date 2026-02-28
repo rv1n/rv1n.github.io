@@ -15,8 +15,22 @@ SERVICE_NAME="portfolio"
 # ---------------------------------------------------
 
 echo "=== [1/8] Обновление пакетов ==="
-apt update -y
-apt install -y python3 python3-pip python3-venv nginx git
+if command -v apt &>/dev/null; then
+    apt update -y
+    apt install -y python3 python3-pip python3-venv nginx git
+elif command -v dnf &>/dev/null; then
+    dnf install -y python3 python3-pip nginx git
+elif command -v yum &>/dev/null; then
+    yum install -y python3 python3-pip nginx git
+elif command -v pacman &>/dev/null; then
+    pacman -Sy --noconfirm python python-pip nginx git
+else
+    echo "ОШИБКА: неизвестный менеджер пакетов. Установите вручную: python3, pip, nginx, git"
+    exit 1
+fi
+
+# python3-venv может отсутствовать как отдельный пакет (в не-Debian системах venv встроен)
+python3 -m venv --version &>/dev/null || true
 
 echo "=== [2/8] Клонирование репозитория ==="
 if [ -d "$APP_DIR/.git" ]; then
