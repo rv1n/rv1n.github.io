@@ -2045,8 +2045,14 @@ function switchView(viewType) {
             updateCategoryChart(currentPortfolioData.portfolio || currentPortfolioData);
         }
         
+        // Применяем порядок и видимость секций аналитики
+        applyAnalyticsLayout();
+
         // Применяем выбор типа диаграммы
         applyChartTypeSelection();
+
+        // Загружаем график стоимости портфеля
+        loadPortfolioValueChart(_pvcActiveDays);
     } else if (viewType === 'history') {
         tableView.style.display = 'none';
         chartView.style.display = 'none';
@@ -5205,6 +5211,296 @@ document.addEventListener('click', (e) => {
     const dModal = document.getElementById('delete-history-modal');
     if (dModal && e.target === dModal) closeDeleteHistoryModal();
 });
+
+// ======= Кастомизация аналитики =======
+
+const ANALYTICS_LAYOUT_KEY = 'analyticsLayout';
+const ANALYTICS_SECTIONS_META = [
+    { id: 'portfolio-value', label: '📈 Динамика стоимости портфеля' },
+    { id: 'asset-type',      label: '🥧 Распределение по видам активов' },
+    { id: 'category',        label: '🏷️ Распределение по категориям' },
+];
+
+function getAnalyticsLayout() {
+    try {
+        const saved = localStorage.getItem(ANALYTICS_LAYOUT_KEY);
+        if (saved) {
+            const parsed = JSON.parse(saved);
+            // Добавляем новые секции, которых ещё нет в сохранённом layout
+            const existingIds = parsed.map(x => x.id);
+            ANALYTICS_SECTIONS_META.forEach(m => {
+                if (!existingIds.includes(m.id)) parsed.push({ id: m.id, visible: true });
+            });
+            return parsed;
+        }
+    } catch (_) {}
+    return ANALYTICS_SECTIONS_META.map(m => ({ id: m.id, visible: true }));
+}
+
+function saveAnalyticsLayout(layout) {
+    localStorage.setItem(ANALYTICS_LAYOUT_KEY, JSON.stringify(layout));
+}
+
+function applyAnalyticsLayout() {
+    const layout = getAnalyticsLayout();
+    const container = document.getElementById('chart-view');
+    const toolbar = container.querySelector('.analytics-toolbar');
+
+    layout.forEach(item => {
+        const section = document.getElementById(`analytics-section-${item.id}`);
+        if (!section) return;
+        section.style.display = item.visible ? '' : 'none';
+        // Перемещаем в конец контейнера (сохраняет порядок)
+        container.appendChild(section);
+    });
+    // Тулбар всегда первым
+    container.insertBefore(toolbar, container.firstChild);
+}
+
+let _custDragSrcEl = null;
+
+function openAnalyticsCustomizer() {
+    const layout = getAnalyticsLayout();
+    const list = document.getElementById('analytics-customizer-list');
+    list.innerHTML = '';
+
+    layout.forEach(item => {
+        const meta = ANALYTICS_SECTIONS_META.find(m => m.id === item.id);
+        if (!meta) return;
+
+        const li = document.createElement('li');
+        li.className = 'analytics-customizer-item';
+        li.dataset.id = item.id;
+        li.draggable = true;
+
+        li.innerHTML = `
+            <span class="acl-drag-handle" title="Перетащить">⠿</span>
+            <span class="acl-label">${meta.label}</span>
+            <button class="acl-toggle ${item.visible ? 'acl-visible' : 'acl-hidden'}"
+                    onclick="toggleAnalyticsItem(this, '${item.id}')"
+                    title="${item.visible ? 'Скрыть' : 'Показать'}">
+                ${item.visible ? SVG_EYE_OPEN : SVG_EYE_OFF}
+            </button>`;
+
+        // Drag & Drop events
+        li.addEventListener('dragstart', e => {
+            _custDragSrcEl = li;
+            e.dataTransfer.effectAllowed = 'move';
+            li.classList.add('acl-dragging');
+        });
+        li.addEventListener('dragend', () => {
+            li.classList.remove('acl-dragging');
+            document.querySelectorAll('.analytics-customizer-item').forEach(el => el.classList.remove('acl-drag-over'));
+            _saveCustomizerOrder();
+        });
+        li.addEventListener('dragover', e => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            if (_custDragSrcEl !== li) li.classList.add('acl-drag-over');
+        });
+        li.addEventListener('dragleave', () => li.classList.remove('acl-drag-over'));
+        li.addEventListener('drop', e => {
+            e.preventDefault();
+            li.classList.remove('acl-drag-over');
+            if (_custDragSrcEl && _custDragSrcEl !== li) {
+                const items = [...list.children];
+                const srcIdx = items.indexOf(_custDragSrcEl);
+                const dstIdx = items.indexOf(li);
+                if (srcIdx < dstIdx) list.insertBefore(_custDragSrcEl, li.nextSibling);
+                else list.insertBefore(_custDragSrcEl, li);
+            }
+        });
+
+        list.appendChild(li);
+    });
+
+    document.getElementById('analytics-customizer').style.display = 'flex';
+}
+
+function toggleAnalyticsItem(btn, id) {
+    const layout = getAnalyticsLayout();
+    const item = layout.find(x => x.id === id);
+    if (!item) return;
+    item.visible = !item.visible;
+    saveAnalyticsLayout(layout);
+    applyAnalyticsLayout();
+    btn.innerHTML = item.visible ? SVG_EYE_OPEN : SVG_EYE_OFF;
+    btn.className = `acl-toggle ${item.visible ? 'acl-visible' : 'acl-hidden'}`;
+    btn.title = item.visible ? 'Скрыть' : 'Показать';
+}
+
+function _saveCustomizerOrder() {
+    const list = document.getElementById('analytics-customizer-list');
+    const currentLayout = getAnalyticsLayout();
+    const newOrder = [...list.children].map(li => {
+        const id = li.dataset.id;
+        const existing = currentLayout.find(x => x.id === id);
+        return { id, visible: existing ? existing.visible : true };
+    });
+    saveAnalyticsLayout(newOrder);
+    applyAnalyticsLayout();
+}
+
+function closeAnalyticsCustomizer() {
+    document.getElementById('analytics-customizer').style.display = 'none';
+}
+
+function closeAnalyticsCustomizerOutside(e) {
+    if (e.target === document.getElementById('analytics-customizer')) closeAnalyticsCustomizer();
+}
+
+function resetAnalyticsLayout() {
+    localStorage.removeItem(ANALYTICS_LAYOUT_KEY);
+    applyAnalyticsLayout();
+    openAnalyticsCustomizer(); // Перерисовать список
+}
+
+// ======= График стоимости портфеля vs IMOEX =======
+
+let _portfolioValueChart = null;
+let _pvcActiveDays = 365;
+
+async function loadPortfolioValueChart(days) {
+    _pvcActiveDays = days;
+
+    // Подсветка активной кнопки периода
+    document.querySelectorAll('.period-btn').forEach(btn => btn.classList.remove('active'));
+    const allBtns = document.querySelectorAll('.period-btn');
+    const labels = [30, 90, 180, 365, 0];
+    labels.forEach((d, i) => { if (d === days && allBtns[i]) allBtns[i].classList.add('active'); });
+
+    const statusEl = document.getElementById('portfolio-value-chart-status');
+    const perfLabel = document.getElementById('pvc-perf-label');
+    statusEl.textContent = 'Загрузка...';
+    if (perfLabel) perfLabel.textContent = '';
+
+    try {
+        const url = days > 0 ? `/api/portfolio-value-history?days=${days}` : '/api/portfolio-value-history?days=3650';
+        const resp = await fetch(url);
+        const data = await resp.json();
+
+        if (!data.success) { statusEl.textContent = 'Ошибка загрузки данных'; return; }
+        if (!data.portfolio || data.portfolio.length === 0) {
+            statusEl.textContent = 'Недостаточно данных истории цен. Дождитесь записи цен планировщиком.';
+            if (_portfolioValueChart) { _portfolioValueChart.destroy(); _portfolioValueChart = null; }
+            return;
+        }
+        statusEl.textContent = '';
+
+        const portfolioDates = data.portfolio.map(d => d.date);
+        const portfolioValues = data.portfolio.map(d => d.value);
+
+        // Нормализуем оба ряда к 100 в первой точке для сравнения
+        const pBase = portfolioValues[0];
+        const portfolioNorm = portfolioValues.map(v => +(v / pBase * 100).toFixed(2));
+
+        // Выровняем IMOEX по датам портфеля
+        const imoexMap = {};
+        (data.imoex || []).forEach(d => { imoexMap[d.date] = d.value; });
+        const imoexNorm = [];
+        let imoexBase = null;
+        portfolioDates.forEach(date => {
+            const v = imoexMap[date];
+            if (v !== undefined && imoexBase === null) imoexBase = v;
+            imoexNorm.push(imoexBase && v !== undefined ? +(v / imoexBase * 100).toFixed(2) : null);
+        });
+
+        // Читаем CSS-переменную цвета панелей для портфеля
+        const panelColor = getComputedStyle(document.documentElement)
+            .getPropertyValue('--color-panels').trim() || '#1e3a5f';
+
+        const canvas = document.getElementById('portfolioValueChart');
+        if (_portfolioValueChart) _portfolioValueChart.destroy();
+
+        _portfolioValueChart = new Chart(canvas, {
+            type: 'line',
+            data: {
+                labels: portfolioDates,
+                datasets: [
+                    {
+                        label: 'Портфель',
+                        data: portfolioNorm,
+                        borderColor: panelColor,
+                        backgroundColor: panelColor + '22',
+                        borderWidth: 2,
+                        pointRadius: portfolioNorm.length > 100 ? 0 : 3,
+                        pointHoverRadius: 5,
+                        fill: true,
+                        tension: 0.3,
+                        yAxisID: 'y',
+                    },
+                    {
+                        label: 'IMOEX',
+                        data: imoexNorm,
+                        borderColor: '#e6a817',
+                        backgroundColor: 'transparent',
+                        borderWidth: 2,
+                        borderDash: [5, 4],
+                        pointRadius: 0,
+                        pointHoverRadius: 5,
+                        fill: false,
+                        tension: 0.3,
+                        yAxisID: 'y',
+                        spanGaps: true,
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            title: ctx => ctx[0]?.label || '',
+                            label: ctx => {
+                                if (ctx.datasetIndex === 0) {
+                                    const absVal = portfolioValues[ctx.dataIndex];
+                                    return ` Портфель: ${absVal ? absVal.toLocaleString('ru-RU') + ' ₽' : '—'} (${ctx.parsed.y}%)`;
+                                }
+                                return ctx.parsed.y !== null ? ` IMOEX: ${ctx.parsed.y}%` : ' IMOEX: нет данных';
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        ticks: {
+                            maxTicksLimit: 8,
+                            color: '#888',
+                            font: { size: 11 }
+                        },
+                        grid: { color: '#e5e9f0' }
+                    },
+                    y: {
+                        ticks: {
+                            color: '#888',
+                            font: { size: 11 },
+                            callback: v => v + '%'
+                        },
+                        grid: { color: '#e5e9f0' }
+                    }
+                }
+            }
+        });
+
+        // Показываем доходность портфеля vs IMOEX
+        if (perfLabel && portfolioNorm.length > 1) {
+            const pPerf = (portfolioNorm[portfolioNorm.length - 1] - 100).toFixed(1);
+            const lastImoex = [...imoexNorm].reverse().find(v => v !== null);
+            const iPerf = lastImoex !== undefined ? (lastImoex - 100).toFixed(1) : null;
+            const pColor = pPerf >= 0 ? '#16a34a' : '#b91c1c';
+            const iColor = iPerf !== null ? (iPerf >= 0 ? '#d97706' : '#b91c1c') : '#888';
+            perfLabel.innerHTML =
+                `Портфель: <strong style="color:${pColor}">${pPerf >= 0 ? '+' : ''}${pPerf}%</strong>` +
+                (iPerf !== null ? `&nbsp;&nbsp;IMOEX: <strong style="color:${iColor}">${iPerf >= 0 ? '+' : ''}${iPerf}%</strong>` : '');
+        }
+
+    } catch (err) {
+        statusEl.textContent = 'Ошибка: ' + err.message;
+    }
+}
 
 // ======= Удаление истории цен за период =======
 

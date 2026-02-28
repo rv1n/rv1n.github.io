@@ -10,6 +10,7 @@
     <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='favicon-16x16.png') }}">
     <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 </head>
 <body>
     <div class="container">
@@ -232,7 +233,45 @@
 
             <!-- Представление диаграмм распределения -->
             <div id="chart-view" class="portfolio-view" style="display: none;">
-                <!-- СНАЧАЛА: Диаграмма распределения по видам активов -->
+
+                <!-- Панель управления аналитикой -->
+                <div class="analytics-toolbar">
+                    <button class="btn btn-secondary btn-analytics-customize" onclick="openAnalyticsCustomizer()" title="Настроить отображение">
+                        ⚙️ Настроить
+                    </button>
+                </div>
+
+                <!-- График стоимости портфеля vs IMOEX -->
+                <div id="analytics-section-portfolio-value" class="analytics-section">
+                <div class="category-chart-container portfolio-value-chart-section">
+                    <div class="portfolio-value-chart-header">
+                        <h3 style="margin: 0;">📈 Динамика стоимости портфеля</h3>
+                        <div class="portfolio-value-period-btns">
+                            <button class="period-btn active" onclick="loadPortfolioValueChart(30)">1М</button>
+                            <button class="period-btn" onclick="loadPortfolioValueChart(90)">3М</button>
+                            <button class="period-btn" onclick="loadPortfolioValueChart(180)">6М</button>
+                            <button class="period-btn" onclick="loadPortfolioValueChart(365)">1Г</button>
+                            <button class="period-btn" onclick="loadPortfolioValueChart(0)">Всё</button>
+                        </div>
+                    </div>
+                    <div id="portfolio-value-chart-status" class="portfolio-value-chart-status"></div>
+                    <div class="portfolio-value-chart-wrap">
+                        <canvas id="portfolioValueChart"></canvas>
+                    </div>
+                    <div class="portfolio-value-chart-legend">
+                        <span class="pvc-legend-item pvc-legend-portfolio">
+                            <span class="pvc-legend-dot"></span> Портфель (₽)
+                        </span>
+                        <span class="pvc-legend-item pvc-legend-imoex">
+                            <span class="pvc-legend-dot"></span> IMOEX (норм.)
+                        </span>
+                        <span id="pvc-perf-label" class="pvc-perf-label"></span>
+                    </div>
+                </div>
+                </div><!-- /analytics-section-portfolio-value -->
+
+                <!-- Диаграмма распределения по видам активов -->
+                <div id="analytics-section-asset-type" class="analytics-section">
                 <div class="category-chart-container">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
                         <h3 style="margin: 0;">Распределение портфеля по видам активов</h3>
@@ -263,8 +302,11 @@
                     </div>
                 </div>
                 
-                <!-- НИЖЕ: Диаграмма распределения по категориям -->
-                <div class="category-chart-container" style="margin-top: 40px;">
+                </div><!-- /analytics-section-asset-type -->
+
+                <!-- Диаграмма распределения по категориям -->
+                <div id="analytics-section-category" class="analytics-section">
+                <div class="category-chart-container">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
                         <h3 style="margin: 0;">Распределение портфеля по категориям</h3>
                         
@@ -293,6 +335,8 @@
                         </div>
                     </div>
                 </div>
+                </div><!-- /analytics-section-category -->
+
             </div>
 
             <!-- Представление истории цен -->
@@ -532,6 +576,24 @@
                     💥 Удалить всё
                 </button>
                 <button type="button" class="btn btn-secondary" onclick="closeHardResetModal()">Отмена</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Панель кастомизации аналитики -->
+    <div id="analytics-customizer" class="analytics-customizer-overlay" style="display:none;" onclick="closeAnalyticsCustomizerOutside(event)">
+        <div class="analytics-customizer-panel">
+            <div class="analytics-customizer-header">
+                <h3>⚙️ Настройка аналитики</h3>
+                <button class="analytics-customizer-close" onclick="closeAnalyticsCustomizer()">✕</button>
+            </div>
+            <p class="analytics-customizer-hint">Перетащите блоки для изменения порядка. Нажмите на глаз чтобы скрыть/показать.</p>
+            <ul id="analytics-customizer-list" class="analytics-customizer-list">
+                <!-- Заполняется через JS -->
+            </ul>
+            <div class="analytics-customizer-footer">
+                <button class="btn btn-secondary" onclick="resetAnalyticsLayout()">↺ Сбросить</button>
+                <button class="btn btn-primary" onclick="closeAnalyticsCustomizer()">Готово</button>
             </div>
         </div>
     </div>

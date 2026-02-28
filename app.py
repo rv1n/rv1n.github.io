@@ -2202,6 +2202,58 @@ def get_price_history():
         }), 500
 
 
+@app.route('/api/portfolio-value-history', methods=['GET'])
+@login_required
+def get_portfolio_value_history():
+    """
+    Рассчитать историю стоимости портфеля по дням на основе истории цен.
+    Использует текущие количества позиций и исторические цены.
+    Query: days (int, default 365)
+    """
+    from collections import defaultdict
+    try:
+        days = request.args.get('days', 365, type=int)
+        date_from = datetime.now() - timedelta(days=days)
+
+        portfolio = db_session.query(Portfolio).filter_by(user_id=current_user.id).all()
+        if not portfolio:
+            return jsonify({'success': True, 'portfolio': [], 'imoex': []})
+
+        tickers = [p.ticker for p in portfolio]
+        quantities = {p.ticker: p.quantity for p in portfolio}
+
+        history = db_session.query(PriceHistory).filter(
+            PriceHistory.ticker.in_(tickers),
+            PriceHistory.logged_at >= date_from
+        ).order_by(PriceHistory.logged_at).all()
+
+        daily_prices = defaultdict(dict)
+        for h in history:
+            date_key = h.logged_at.strftime('%Y-%m-%d')
+            if h.ticker not in daily_prices[date_key]:
+                daily_prices[date_key][h.ticker] = h.price
+
+        portfolio_data = []
+        for date_str in sorted(daily_prices.keys()):
+            prices = daily_prices[date_str]
+            total = sum(quantities.get(t, 0) * p for t, p in prices.items())
+            if total > 0:
+                portfolio_data.append({'date': date_str, 'value': round(total, 2)})
+
+        imoex_data = []
+        if portfolio_data:
+            try:
+                imoex_data = moex_service.get_imoex_history(
+                    portfolio_data[0]['date'], portfolio_data[-1]['date']
+                )
+            except Exception as e:
+                print(f"Ошибка получения IMOEX: {e}")
+
+        return jsonify({'success': True, 'portfolio': portfolio_data, 'imoex': imoex_data})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @app.route('/api/delete-price-history', methods=['POST'])
 @login_required
 def delete_price_history():

@@ -565,3 +565,38 @@ class MOEXService:
             traceback.print_exc()
         
         return None
+
+    def get_imoex_history(self, date_from: str, date_to: str) -> list:
+        """
+        Получить историю значений индекса IMOEX за период.
+        date_from, date_to: строки формата 'YYYY-MM-DD'
+        Возвращает список {'date': 'YYYY-MM-DD', 'value': float}
+        """
+        url = f"{self.BASE_URL}/history/engines/stock/markets/index/boards/SNDX/securities/IMOEX.json"
+        results = []
+        start = 0
+        while True:
+            try:
+                resp = requests.get(url, params={
+                    'from': date_from, 'till': date_to,
+                    'limit': 500, 'start': start
+                }, timeout=15)
+                resp.raise_for_status()
+                data = resp.json()
+                history = data.get('history', {})
+                columns = history.get('columns', [])
+                rows = history.get('data', [])
+                if not rows:
+                    break
+                date_idx = columns.index('TRADEDATE')
+                close_idx = columns.index('CLOSE')
+                for row in rows:
+                    if row[close_idx] is not None:
+                        results.append({'date': row[date_idx], 'value': float(row[close_idx])})
+                start += len(rows)
+                if len(rows) < 500:
+                    break
+            except Exception as e:
+                print(f"Ошибка получения истории IMOEX: {e}")
+                break
+        return results
