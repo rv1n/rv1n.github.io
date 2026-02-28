@@ -20,7 +20,7 @@ cd "$APP_DIR"
 nohup venv/bin/gunicorn \
     --workers 1 \
     --threads 4 \
-    --bind 0.0.0.0:8000 \
+    --bind 0.0.0.0:${PORT:-8000} \
     --timeout 120 \
     --access-logfile "$LOG_FILE" \
     --error-logfile "$LOG_FILE" \
