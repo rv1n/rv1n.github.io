@@ -6,7 +6,7 @@
 set -e
 
 # ---- Настройки (отредактируйте перед запуском) ----
-GIT_REPO="https://github.com/ВАШ_ЛОГИН/ВАШ_РЕПО.git"
+GIT_REPO="https://github.com/rv1n/rv1n.github.io.git"
 APP_DIR="/var/www/portfolio"
 LOG_DIR="/var/log/portfolio"
 DATA_DIR="$APP_DIR/data"
