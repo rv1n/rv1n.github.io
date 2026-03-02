@@ -255,7 +255,7 @@
                 <div id="analytics-section-portfolio-value" class="analytics-section">
                 <div class="category-chart-container portfolio-value-chart-section">
                     <div class="portfolio-value-chart-header">
-                        <h3 style="margin: 0;">📈 Динамика стоимости портфеля</h3>
+                        <h3 style="margin: 0;">📈 Изменение стоимости портфеля</h3>
                         <div class="portfolio-value-chart-controls">
                             <div class="portfolio-value-period-btns">
                                 <button class="period-btn active" onclick="loadPortfolioValueChart(30)" data-days="30">1М</button>
@@ -265,8 +265,8 @@
                                 <button class="period-btn" onclick="loadPortfolioValueChart(0)" data-days="0">Всё</button>
                             </div>
                             <div class="pvc-date-start-wrap">
-                                <label for="pvc-date-from" class="pvc-date-label">Дата старта:</label>
-                                <input type="date" id="pvc-date-from" class="pvc-date-input" title="Выберите точку старта графика" onchange="if(this.value) loadPortfolioValueChart(this.value)">
+                                <label for="pvc-date-from" class="pvc-date-label">Дата отсчёта:</label>
+                                <input type="date" id="pvc-date-from" class="pvc-date-input" title="Выберите дату отсчёта графика" onchange="if(this.value) loadPortfolioValueChart(this.value)">
                             </div>
                         </div>
                     </div>
@@ -276,10 +276,10 @@
                     </div>
                     <div class="portfolio-value-chart-legend">
                         <span class="pvc-legend-item pvc-legend-portfolio">
-                            <span class="pvc-legend-dot"></span> Портфель (₽)
+                            <span class="pvc-legend-dot"></span> Портфель (% изм.)
                         </span>
                         <span class="pvc-legend-item pvc-legend-imoex">
-                            <span class="pvc-legend-dot"></span> IMOEX (норм.)
+                            <span class="pvc-legend-dot"></span> IMOEX (% изм.)
                         </span>
                         <span id="pvc-perf-label" class="pvc-perf-label"></span>
                     </div>
@@ -426,7 +426,7 @@
                             </a>
                             <button class="btn btn-hard-reset" onclick="openHardResetModal()" title="Удалить все позиции, транзакции и обнулить баланс (история цен сохраняется)">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-                                Hard Reset
+                                Удалить все активы
                             </button>
                         </div>
                     </div>

@@ -1303,7 +1303,7 @@ async function updateAllAssetTypeViews() {
             updateAssetTypeChart(currentPortfolioData.portfolio);
 
             // Обновляем диаграмму активов и их долей
-            renderAssetsShareChart(currentPortfolioData.portfolio);
+            renderAssetsShareChart(getAnalyticsPortfolio());
         }
     } catch (error) {
         console.error('Ошибка обновления видов активов:', error);
@@ -2089,6 +2089,9 @@ function switchView(viewType) {
         // Применяем выбор типа диаграммы
         applyChartTypeSelection();
 
+        // Восстанавливаем дату старта из localStorage в поле
+        const pvcDateInput = document.getElementById('pvc-date-from');
+        if (pvcDateInput && _pvcDateFrom) pvcDateInput.value = _pvcDateFrom;
         // Загружаем график стоимости портфеля (дата старта или период)
         loadPortfolioValueChart(_pvcDateFrom || _pvcActiveDays);
 
@@ -5323,7 +5326,10 @@ function _setupPieChartTooltip() {
         const pct = slice.getAttribute('data-pct');
         if (label || value != null || pct != null) {
             const valueStr = value != null && value !== '' ? formatCurrency(parseFloat(value), 2) : '';
-            tooltip.innerHTML = `<strong>${label}</strong><br>${pct != null ? pct + '%' : ''} ${valueStr ? valueStr : ''}`.trim();
+            const pctNum = pct != null && pct !== '' ? parseFloat(pct) : NaN;
+            const pctStr = !isNaN(pctNum) ? parseFloat(pct).toFixed(2) + '%' : '';
+            const detailParts = [pctStr, valueStr].filter(Boolean);
+            tooltip.innerHTML = `<strong>${label}</strong><br>${detailParts.join(' · ')}`;
             tooltip.setAttribute('aria-hidden', 'false');
             tooltip.style.left = (e.pageX + 12) + 'px';
             tooltip.style.top = (e.pageY + 12) + 'px';
@@ -5352,7 +5358,7 @@ function _setupPieChartTooltip() {
 }
 
 const ANALYTICS_SECTIONS_META = [
-    { id: 'portfolio-value', label: '📈 Динамика стоимости портфеля' },
+    { id: 'portfolio-value', label: '📈 Изменение стоимости портфеля' },
     { id: 'asset-type',      label: '🥧 Распределение по видам активов' },
     { id: 'category',        label: '🏷️ Распределение по категориям' },
     { id: 'assets-share',    label: '📊 Доля активов в портфеле' },
@@ -5496,22 +5502,27 @@ function resetAnalyticsLayout() {
 
 let _portfolioValueChart = null;
 let _pvcActiveDays = 365;
-let _pvcDateFrom = null; // 'YYYY-MM-DD' или null
+const PVC_STORAGE_KEY = 'pvc_date_from';
+let _pvcDateFrom = (function() {
+    const s = localStorage.getItem(PVC_STORAGE_KEY);
+    return (s && /^\d{4}-\d{2}-\d{2}$/.test(s)) ? s : null;
+})();
 
 async function loadPortfolioValueChart(daysOrDate) {
     const isDate = typeof daysOrDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(daysOrDate);
     const dateInput = document.getElementById('pvc-date-from');
 
     if (isDate) {
+        // Пользователь выбрал конкретную дату старта
         _pvcDateFrom = daysOrDate;
         _pvcActiveDays = null;
         if (dateInput) dateInput.value = daysOrDate;
         document.querySelectorAll('.period-btn').forEach(btn => btn.classList.remove('active'));
     } else {
+        // Пользователь выбрал период кнопкой (1М, 3М, 6М, 1Г, Всё) — дату старта не меняем
         const days = daysOrDate == null ? _pvcActiveDays : Number(daysOrDate);
         _pvcActiveDays = days;
-        _pvcDateFrom = null;
-        if (dateInput) dateInput.value = '';
+
         document.querySelectorAll('.period-btn').forEach(btn => btn.classList.remove('active'));
         const allBtns = document.querySelectorAll('.period-btn');
         const labels = [30, 90, 180, 365, 0];
@@ -5523,9 +5534,14 @@ async function loadPortfolioValueChart(daysOrDate) {
     statusEl.textContent = 'Загрузка...';
     if (perfLabel) perfLabel.textContent = '';
 
+    // Если в поле даты что-то выбрано — всегда используем его как точку старта
+    const effectiveDateFrom = (dateInput && dateInput.value && dateInput.value.trim()) || _pvcDateFrom;
+    if (effectiveDateFrom) localStorage.setItem(PVC_STORAGE_KEY, effectiveDateFrom);
+    else localStorage.removeItem(PVC_STORAGE_KEY);
+
     try {
-        const url = _pvcDateFrom
-            ? `/api/portfolio-value-history?date_from=${encodeURIComponent(_pvcDateFrom)}`
+        const url = effectiveDateFrom
+            ? `/api/portfolio-value-history?date_from=${encodeURIComponent(effectiveDateFrom)}`
             : (_pvcActiveDays > 0 ? `/api/portfolio-value-history?days=${_pvcActiveDays}` : '/api/portfolio-value-history?days=3650');
         const resp = await fetch(url);
         const data = await resp.json();
@@ -5541,11 +5557,11 @@ async function loadPortfolioValueChart(daysOrDate) {
         const portfolioDates = data.portfolio.map(d => d.date);
         const portfolioValues = data.portfolio.map(d => d.value);
 
-        // Нормализуем оба ряда к 100 в первой точке для сравнения
+        // Процент изменения от точки старта (первая точка = 0%, возможен отрицательный рост)
         const pBase = portfolioValues[0];
-        const portfolioNorm = portfolioValues.map(v => +(v / pBase * 100).toFixed(2));
+        const portfolioNorm = portfolioValues.map(v => +((v / pBase - 1) * 100).toFixed(2));
 
-        // Выровняем IMOEX по датам портфеля
+        // Выровняем IMOEX по датам портфеля — тоже % изменения от старта
         const imoexMap = {};
         (data.imoex || []).forEach(d => { imoexMap[d.date] = d.value; });
         const imoexNorm = [];
@@ -5553,7 +5569,7 @@ async function loadPortfolioValueChart(daysOrDate) {
         portfolioDates.forEach(date => {
             const v = imoexMap[date];
             if (v !== undefined && imoexBase === null) imoexBase = v;
-            imoexNorm.push(imoexBase && v !== undefined ? +(v / imoexBase * 100).toFixed(2) : null);
+            imoexNorm.push(imoexBase && v !== undefined ? +((v / imoexBase - 1) * 100).toFixed(2) : null);
         });
 
         // Читаем CSS-переменную цвета панелей для портфеля
@@ -5606,11 +5622,12 @@ async function loadPortfolioValueChart(daysOrDate) {
                         callbacks: {
                             title: ctx => ctx[0]?.label || '',
                             label: ctx => {
+                                const sign = ctx.parsed.y >= 0 ? '+' : '';
                                 if (ctx.datasetIndex === 0) {
                                     const absVal = portfolioValues[ctx.dataIndex];
-                                    return ` Портфель: ${absVal ? absVal.toLocaleString('ru-RU') + ' ₽' : '—'} (${ctx.parsed.y}%)`;
+                                    return ` Портфель: ${absVal ? absVal.toLocaleString('ru-RU') + ' ₽' : '—'} (${sign}${ctx.parsed.y}%)`;
                                 }
-                                return ctx.parsed.y !== null ? ` IMOEX: ${ctx.parsed.y}%` : ' IMOEX: нет данных';
+                                return ctx.parsed.y !== null ? ` IMOEX: ${sign}${ctx.parsed.y}%` : ' IMOEX: нет данных';
                             }
                         }
                     }
@@ -5625,10 +5642,16 @@ async function loadPortfolioValueChart(daysOrDate) {
                         grid: { color: '#e5e9f0' }
                     },
                     y: {
+                        beginAtZero: true,
+                        min: (function() {
+                            const all = [...portfolioNorm, ...imoexNorm.filter(v => v != null)];
+                            const mn = all.length ? Math.min(...all) : 0;
+                            return mn < 0 ? Math.min(mn - 2, 0) : 0;
+                        })(),
                         ticks: {
                             color: '#888',
                             font: { size: 11 },
-                            callback: v => v + '%'
+                            callback: v => (v >= 0 ? '+' : '') + v + '%'
                         },
                         grid: { color: '#e5e9f0' }
                     }
@@ -5636,16 +5659,17 @@ async function loadPortfolioValueChart(daysOrDate) {
             }
         });
 
-        // Показываем доходность портфеля vs IMOEX
+        // Показываем доходность портфеля vs IMOEX (% изменения от старта)
         if (perfLabel && portfolioNorm.length > 1) {
-            const pPerf = (portfolioNorm[portfolioNorm.length - 1] - 100).toFixed(1);
+            const pVal = portfolioNorm[portfolioNorm.length - 1];
+            const pPerf = pVal.toFixed(1);
             const lastImoex = [...imoexNorm].reverse().find(v => v !== null);
-            const iPerf = lastImoex !== undefined ? (lastImoex - 100).toFixed(1) : null;
-            const pColor = pPerf >= 0 ? '#16a34a' : '#b91c1c';
-            const iColor = iPerf !== null ? (iPerf >= 0 ? '#d97706' : '#b91c1c') : '#888';
+            const iPerf = lastImoex !== undefined ? lastImoex.toFixed(1) : null;
+            const pColor = pVal >= 0 ? '#16a34a' : '#b91c1c';
+            const iColor = iPerf !== null ? (lastImoex >= 0 ? '#d97706' : '#b91c1c') : '#888';
             perfLabel.innerHTML =
-                `Портфель: <strong style="color:${pColor}">${pPerf >= 0 ? '+' : ''}${pPerf}%</strong>` +
-                (iPerf !== null ? `&nbsp;&nbsp;IMOEX: <strong style="color:${iColor}">${iPerf >= 0 ? '+' : ''}${iPerf}%</strong>` : '');
+                `Портфель: <strong style="color:${pColor}">${pVal >= 0 ? '+' : ''}${pPerf}%</strong>` +
+                (iPerf !== null ? `&nbsp;&nbsp;IMOEX: <strong style="color:${iColor}">${lastImoex >= 0 ? '+' : ''}${iPerf}%</strong>` : '');
         }
 
     } catch (err) {
@@ -5667,7 +5691,7 @@ function switchAssetsShareType(type) {
     const sortGroup = document.getElementById('assets-share-sort-group');
     if (sortGroup) sortGroup.style.display = type === 'bar' ? '' : 'none';
     if (currentPortfolioData && currentPortfolioData.portfolio) {
-        renderAssetsShareChart(currentPortfolioData.portfolio);
+        renderAssetsShareChart(getAnalyticsPortfolio());
     }
 }
 
@@ -5676,7 +5700,7 @@ function switchAssetsShareSort(mode) {
     document.getElementById('assets-share-sort-value').classList.toggle('active', mode === 'value');
     document.getElementById('assets-share-sort-pct').classList.toggle('active', mode === 'pct');
     if (currentPortfolioData && currentPortfolioData.portfolio) {
-        renderAssetsShareChart(currentPortfolioData.portfolio);
+        renderAssetsShareChart(getAnalyticsPortfolio());
     }
 }
 // _assetsShareSort теперь означает: 'value' = ось X в рублях, 'pct' = ось X в %
@@ -5810,7 +5834,7 @@ function _renderAssetsSharePie(items, palette) {
         cumulativePct += seg.pct;
     });
 
-    // Легенда в 2 колонки
+    // Легенда в 3 колонки
     let legendItems = '';
     segments.forEach(seg => {
         legendItems += `
@@ -5821,7 +5845,7 @@ function _renderAssetsSharePie(items, palette) {
         </div>`;
     });
     const legendHTML = `
-        <div style="flex:1;min-width:0;display:grid;grid-template-columns:1fr 1fr;gap:0 16px;align-content:start;max-height:500px;overflow-y:auto;overflow-x:hidden;">
+        <div style="flex:1;min-width:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0 16px;align-content:start;max-height:500px;overflow-y:auto;overflow-x:hidden;">
             ${legendItems}
         </div>`;
 
