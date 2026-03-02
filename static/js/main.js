@@ -254,7 +254,10 @@ function manualRefresh() {
         refreshBtn.textContent = '⏳';
     }
     
-    loadPortfolio(false).finally(() => {
+    Promise.all([
+        loadPortfolio(false),
+        loadCurrencyRates()
+    ]).finally(() => {
         if (refreshBtn) {
             refreshBtn.disabled = false;
             refreshBtn.textContent = '🔄';
@@ -882,14 +885,14 @@ function createPortfolioRow(item, totalPortfolioValue = 0) {
         const currencyText = bondCurrency && bondCurrency !== 'SUR' ? ` (${bondCurrency})` : '';
         currentValueLines = `
             <strong>${formatAssetTotal(assetTotal)}${currencyText}</strong>
-            <span style="font-size: 0.85em; color: #2c3e50;">${formatCurrentPrice(effectivePrice, item.price_decimals)} (${formatPercent(currentPricePercent, 2)})</span>
+            <span style="font-size: 0.9em; color: #2c3e50;">${formatCurrentPrice(effectivePrice, item.price_decimals)} (${formatPercent(currentPricePercent, 2)})</span>
             <span class="portfolio-share-badge">${portfolioPercentLine}</span>
         `;
     } else {
         // Для акций: общая стоимость, цена за единицу, процент от портфеля
         currentValueLines = `
             <strong>${formatAssetTotal(assetTotal)}</strong>
-            <span style="font-size: 0.85em; color: #2c3e50;">${formatCurrentPrice(effectivePrice, item.price_decimals)}</span>
+            <span style="font-size: 0.9em; color: #2c3e50;">${formatCurrentPrice(effectivePrice, item.price_decimals)}</span>
             <span class="portfolio-share-badge">${portfolioPercentLine}</span>
         `;
     }
@@ -925,13 +928,13 @@ function createPortfolioRow(item, totalPortfolioValue = 0) {
         <td class="${pnlClass}" style="text-align: center;">
             <div style="display: flex; flex-direction: column; align-items: center;">
                 <span>${pnlValueText}</span>
-                <span style="font-size: 0.85em; color: #7f8c8d;">${pnlPercentText}</span>
+                <span style="font-size: 0.9em; color: #7f8c8d;">${pnlPercentText}</span>
             </div>
         </td>
         <td class="${changeClass}" style="text-align: center;">
             <div style="display: flex; flex-direction: column; align-items: center; gap: 2px;">
-                <span>${item.price_change >= 0 ? '+' : ''}${formatPrice(item.price_change, 2)} (${item.price_change_percent >= 0 ? '+' : ''}${formatPercent(Math.abs(item.price_change_percent), 2)})</span>
-                <span style="font-size: 0.8em; color: #7f8c8d; white-space: nowrap;">${formatPrice(effectivePrice - item.price_change, 2)} → ${formatPrice(effectivePrice, 2)}</span>
+                <span>${item.price_change >= 0 ? '+' : ''}${formatCurrency(item.price_change * item.quantity, 2)} (${item.price_change_percent >= 0 ? '+' : ''}${formatPercent(Math.abs(item.price_change_percent), 2)})</span>
+                <span style="font-size: 0.85em; color: #7f8c8d; white-space: nowrap;">${formatPrice(effectivePrice - item.price_change, 2)} → ${formatPrice(effectivePrice, 2)}</span>
             </div>
         </td>
         <td class="sparkline-cell">
@@ -2071,10 +2074,12 @@ function switchView(viewType) {
         if (categoriesChanged) {
             updateAllCategoryViews();
         } else if (currentPortfolioData) {
-            // Используем уже загруженные данные
-            updateCategoryChart(currentPortfolioData.portfolio || currentPortfolioData);
+            const filtered = getAnalyticsPortfolio();
+            updateCategoryChart(filtered);
+            updateAssetTypeChart(filtered);
+            renderAssetsShareChart(filtered);
         }
-        
+
         // Применяем порядок и видимость секций аналитики
         applyAnalyticsLayout();
 
@@ -2084,10 +2089,8 @@ function switchView(viewType) {
         // Загружаем график стоимости портфеля
         loadPortfolioValueChart(_pvcActiveDays);
 
-        // Рендерим диаграмму активов
-        if (currentPortfolioData && currentPortfolioData.portfolio) {
-            renderAssetsShareChart(currentPortfolioData.portfolio);
-        }
+        // Обновляем лейбл фильтра
+        _updateAnalyticsFilterLabel();
     } else if (viewType === 'history') {
         tableView.style.display = 'none';
         chartView.style.display = 'none';
@@ -3250,6 +3253,8 @@ document.addEventListener('DOMContentLoaded', function() {
             if (currentPortfolioData) {
                 displayPortfolio(currentPortfolioData.portfolio, currentPortfolioData.summary);
             }
+            // Перерисовываем аналитику, если она открыта
+            refreshAnalyticsCharts();
         });
     }
 });
@@ -3485,6 +3490,7 @@ async function openEditTransactionModal(transactionId) {
                 document.getElementById('trans-edit-price').value = transaction.price;
                 document.getElementById('trans-edit-quantity').value = transaction.quantity;
                 document.getElementById('trans-edit-total').value = transaction.total;
+                document.getElementById('trans-edit-notes').value = '';
                 
                 document.getElementById('edit-transaction-modal').style.display = 'flex';
             }
@@ -3518,7 +3524,8 @@ async function handleEditTransaction(event) {
         company_name: document.getElementById('trans-edit-company').value,
         operation_type: document.getElementById('trans-edit-type').value,
         price: parseFloat(document.getElementById('trans-edit-price').value),
-        quantity: parseFloat(document.getElementById('trans-edit-quantity').value)
+        quantity: parseFloat(document.getElementById('trans-edit-quantity').value),
+        notes: document.getElementById('trans-edit-notes').value
     };
     
     try {
@@ -4568,7 +4575,7 @@ function updateAssetTypeSelects() {
     const portfolioTypeFilter = document.getElementById('portfolio-type-filter');
     if (portfolioTypeFilter) {
         const currentValue = portfolioTypeFilter.value;
-        portfolioTypeFilter.innerHTML = '<option value=\"\">Все типы</option>';
+        portfolioTypeFilter.innerHTML = '<option value=\"\">Все виды</option>';
         ASSET_TYPES.forEach(at => {
             const option = document.createElement('option');
             option.value = at;
@@ -5247,6 +5254,49 @@ document.addEventListener('click', (e) => {
 // ======= Кастомизация аналитики =======
 
 const ANALYTICS_LAYOUT_KEY = 'analyticsLayout';
+/**
+ * Возвращает портфель, отфильтрованный по выбранному виду актива (из дропдауна портфеля).
+ * Используется для всех диаграмм аналитики.
+ */
+function getAnalyticsPortfolio() {
+    if (!currentPortfolioData || !currentPortfolioData.portfolio) return [];
+    const typeFilter = document.getElementById('portfolio-type-filter');
+    const selectedType = typeFilter ? typeFilter.value : '';
+    if (!selectedType) return currentPortfolioData.portfolio;
+    return currentPortfolioData.portfolio.filter(item => (item.asset_type || '') === selectedType);
+}
+
+/**
+ * Перерисовать все диаграммы аналитики с текущим фильтром.
+ */
+function refreshAnalyticsCharts() {
+    const chartView = document.getElementById('chart-view');
+    if (!chartView || chartView.style.display === 'none') return;
+    const filtered = getAnalyticsPortfolio();
+    updateCategoryChart(filtered);
+    updateAssetTypeChart(filtered);
+    renderAssetsShareChart(filtered);
+    _updateAnalyticsFilterLabel();
+}
+
+/**
+ * Обновляет лейбл активного фильтра в шапке аналитики.
+ */
+function _updateAnalyticsFilterLabel() {
+    const label = document.getElementById('analytics-filter-label');
+    if (!label) return;
+    const typeFilter = document.getElementById('portfolio-type-filter');
+    const selectedType = typeFilter ? typeFilter.value : '';
+    if (selectedType) {
+        label.textContent = `Фильтр: ${selectedType}`;
+        label.setAttribute('data-type', selectedType);
+        label.style.display = 'inline-block';
+    } else {
+        label.style.display = 'none';
+        label.removeAttribute('data-type');
+    }
+}
+
 const ANALYTICS_SECTIONS_META = [
     { id: 'portfolio-value', label: '📈 Динамика стоимости портфеля' },
     { id: 'asset-type',      label: '🥧 Распределение по видам активов' },
@@ -5539,7 +5589,7 @@ async function loadPortfolioValueChart(days) {
 
 let _assetsShareChart = null;
 let _assetsShareSort = 'value'; // 'value' | 'pct'
-let _assetsShareType = 'bar';   // 'bar' | 'pie'
+let _assetsShareType = 'pie';   // 'bar' | 'pie'
 
 function switchAssetsShareType(type) {
     _assetsShareType = type;
@@ -5692,22 +5742,24 @@ function _renderAssetsSharePie(items, palette) {
         cumulativePct += seg.pct;
     });
 
-    // Легенда
-    let legendHTML = '<div class="pie-legend" style="flex:1;min-width:0;max-height:320px;overflow-y:auto;overflow-x:hidden;">';
+    // Легенда в 2 колонки
+    let legendItems = '';
     segments.forEach(seg => {
-        legendHTML += `
-        <div class="pie-legend-item" style="display:flex;align-items:center;gap:6px;padding:4px 0;font-size:0.85em;min-width:0;">
+        legendItems += `
+        <div style="display:flex;align-items:center;gap:6px;padding:4px 0;font-size:0.85em;min-width:0;">
             <span style="width:12px;height:12px;border-radius:3px;background:${seg.color};flex-shrink:0;display:inline-block;"></span>
-            <span style="flex:1;color:#34495e;min-width:0;word-break:break-word;" title="${seg.label}">${seg.label}</span>
+            <span style="flex:1;color:#34495e;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${seg.label}">${seg.label}</span>
             <span style="color:#2c3e50;font-weight:600;white-space:nowrap;margin-left:4px;">${seg.pct.toFixed(2)}%</span>
-            <span style="color:#7f8c8d;white-space:nowrap;margin-left:4px;">${formatCurrency(seg.value)}</span>
         </div>`;
     });
-    legendHTML += '</div>';
+    const legendHTML = `
+        <div style="flex:1;min-width:0;display:grid;grid-template-columns:1fr 1fr;gap:0 16px;align-content:start;max-height:500px;overflow-y:auto;overflow-x:hidden;">
+            ${legendItems}
+        </div>`;
 
     container.innerHTML = `
         <div style="display:flex;gap:32px;align-items:flex-start;flex-wrap:wrap;overflow:hidden;">
-            <svg viewBox="0 0 100 100" style="width:300px;height:300px;flex-shrink:0;filter:drop-shadow(0 4px 8px rgba(0,0,0,0.15));">
+            <svg viewBox="0 0 100 100" style="width:500px;height:500px;max-width:100%;flex-shrink:0;filter:drop-shadow(0 4px 8px rgba(0,0,0,0.15));">
                 ${pathsHTML}
             </svg>
             ${legendHTML}

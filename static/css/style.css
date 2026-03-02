@@ -1508,8 +1508,29 @@ header h1 {
 .analytics-toolbar {
     display: flex;
     justify-content: flex-end;
+    align-items: center;
+    gap: 12px;
     margin-bottom: 12px;
 }
+
+.analytics-filter-label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    border-radius: 20px;
+    padding: 3px 12px;
+    margin-right: auto;
+    border: 1px solid #ccc;
+    background: #f0f0f0;
+    color: #333;
+}
+
+.analytics-filter-label[data-type="Акции"]     { background: #e3f9e5; color: #1b6b2b; border-color: #a8ddb0; }
+.analytics-filter-label[data-type="Облигации"] { background: #fef3c7; color: #92600a; border-color: #fcd97a; }
+.analytics-filter-label[data-type="ETF"]       { background: #ede9fe; color: #5b21b6; border-color: #c4b5fd; }
+.analytics-filter-label[data-type="Фонды"]     { background: #ede9fe; color: #5b21b6; border-color: #c4b5fd; }
+.analytics-filter-label[data-type="Валюта"]    { background: #fce7f3; color: #9d174d; border-color: #f9a8d4; }
+.analytics-filter-label[data-type="Золото"]    { background: #fffbeb; color: #92600a; border-color: #fde68a; }
+.analytics-filter-label[data-type="Крипто"]    { background: #fff7ed; color: #9a3412; border-color: #fed7aa; }
 
 .btn-analytics-customize {
     font-size: 0.85rem;
