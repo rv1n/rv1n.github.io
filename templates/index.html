@@ -15,7 +15,7 @@
 <body>
     <div class="container">
         <header>
-            <h1>📈 Портфель акций Московской биржи</h1>
+            <h1>📈 Портфель</h1>
             <div class="header-controls">
                 <div class="header-info-vertical">
                     <div class="last-update">
@@ -24,6 +24,8 @@
                         Последнее обновление: <span id="last-update-time">-</span>
                     </div>
                     <div class="header-currency-rates" id="header-currency-rates">
+                        <span id="rate-imoex">IMOEX: -</span>
+                        <span class="header-rate-divider">|</span>
                         <span id="rate-usd">USD: -</span>
                         <span id="rate-eur">EUR: -</span>
                         <span id="rate-cny">CNY: -</span>
@@ -343,6 +345,35 @@
                     </div>
                 </div>
                 </div><!-- /analytics-section-category -->
+
+                <!-- Диаграмма активов и их доли в портфеле -->
+                <div id="analytics-section-assets-share" class="analytics-section">
+                <div class="category-chart-container">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 10px;">
+                        <h3 style="margin: 0;">Доля активов в портфеле</h3>
+                        <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+                            <!-- Тип диаграммы -->
+                            <div class="chart-type-toggle">
+                                <button id="assets-share-type-bar" class="chart-toggle-btn active" onclick="switchAssetsShareType('bar')">📊 Столбчатая</button>
+                                <button id="assets-share-type-pie" class="chart-toggle-btn" onclick="switchAssetsShareType('pie')">🥧 Круговая</button>
+                            </div>
+                            <!-- Сортировка (только для bar) -->
+                            <div class="chart-type-toggle" id="assets-share-sort-group">
+                                <button id="assets-share-sort-value" class="chart-toggle-btn active" onclick="switchAssetsShareSort('value')" title="Ось X — стоимость в рублях">Ось: ₽</button>
+                                <button id="assets-share-sort-pct" class="chart-toggle-btn" onclick="switchAssetsShareSort('pct')" title="Ось X — доля в портфеле (%)">Ось: %</button>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Bar chart -->
+                    <div id="assets-share-bar-wrap" class="assets-share-chart-wrap">
+                        <canvas id="assetsShareChart"></canvas>
+                    </div>
+                    <!-- Pie chart -->
+                    <div id="assets-share-pie-wrap" class="categories-pie-chart-container" style="display: none;">
+                        <div id="assets-share-pie-chart" class="categories-pie-chart"></div>
+                    </div>
+                </div>
+                </div><!-- /analytics-section-assets-share -->
 
             </div>
 
@@ -800,10 +831,6 @@
                 <div class="form-group">
                     <label for="trans-edit-total">Сумма</label>
                     <input type="number" id="trans-edit-total" name="total" readonly>
-                </div>
-                <div class="form-group">
-                    <label for="trans-edit-notes">Заметки</label>
-                    <textarea id="trans-edit-notes" name="notes" rows="3"></textarea>
                 </div>
                 <div class="modal-buttons">
                     <button type="submit" class="btn btn-primary">Сохранить</button>

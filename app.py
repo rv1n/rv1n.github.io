@@ -2016,16 +2016,16 @@ def get_cash_balance():
 @app.route('/api/currency-rates', methods=['GET'])
 def get_currency_rates():
     """
-    Получить основные курсы валют к рублю (для отображения в UI).
-    Возвращает минимальный набор: USD, EUR, CNY (если есть), а также дату обновления.
+    Получить основные курсы валют к рублю (для отображения в UI) + текущий IMOEX.
     """
     try:
-        # Получаем расширенную информацию по основным валютам
         rates_info = currency_service.get_rates_info(['USD', 'EUR', 'CNY'])
+        imoex = moex_service.get_imoex_current()
 
         return jsonify({
             'success': True,
-            'rates': rates_info
+            'rates': rates_info,
+            'imoex': imoex
         })
     except Exception as e:
         return jsonify({

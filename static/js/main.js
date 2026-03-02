@@ -872,7 +872,7 @@ function createPortfolioRow(item, totalPortfolioValue = 0) {
     const portfolioPercentLine = formatPercent(portfolioPercent, 2);
     
     const pnlValueText = `${item.profit_loss >= 0 ? '+' : ''}${formatCurrency(item.profit_loss, 2)}`;
-    const pnlPercentText = `${item.profit_loss_percent >= 0 ? '+' : ''}${formatPercent(Math.abs(item.profit_loss_percent), 2)}`;
+    const pnlPercentText = `${item.profit_loss_percent >= 0 ? '+' : '-'}${formatPercent(Math.abs(item.profit_loss_percent), 2)}`;
     
     // Формируем три строки для колонки "Текущая стоимость"
     let currentValueLines = '';
@@ -1063,9 +1063,9 @@ function comparePortfolioItems(a, b, sortState) {
             bVal = parseFloat(b.total_cost) || ((parseFloat(b.quantity) || 0) * (parseFloat(b.current_price) || 0));
             break;
         case 'day_change':
-            // Изменение за день — берем абсолютное изменение в деньгах (price_change * quantity)
-            aVal = (parseFloat(a.price_change) || 0) * (parseFloat(a.quantity) || 0);
-            bVal = (parseFloat(b.price_change) || 0) * (parseFloat(b.quantity) || 0);
+            // Изменение за период — сортировка по % изменению цены
+            aVal = parseFloat(a.price_change_percent) || 0;
+            bVal = parseFloat(b.price_change_percent) || 0;
             break;
         case 'profit':
             // Прибыль — profit_loss в деньгах
@@ -1186,6 +1186,7 @@ async function loadCurrencyRates() {
         const usdEl = document.getElementById('rate-usd');
         const eurEl = document.getElementById('rate-eur');
         const cnyEl = document.getElementById('rate-cny');
+        const imoexEl = document.getElementById('rate-imoex');
 
         const formatRate = (rate) => {
             if (rate === null || rate === undefined) return '-';
@@ -1217,6 +1218,19 @@ async function loadCurrencyRates() {
         updateEl(usdEl, 'USD', data.rates.USD);
         updateEl(eurEl, 'EUR', data.rates.EUR);
         updateEl(cnyEl, 'CNY', data.rates.CNY);
+
+        // IMOEX
+        if (imoexEl && data.imoex) {
+            const im = data.imoex;
+            const sign = im.change >= 0 ? '+' : '';
+            const val = im.value >= 1000
+                ? im.value.toLocaleString('ru-RU', { maximumFractionDigits: 2 })
+                : im.value.toFixed(2);
+            imoexEl.textContent = `IMOEX: ${val} (${sign}${im.change_percent.toFixed(2)}%)`;
+            imoexEl.classList.remove('profit', 'loss');
+            if (im.change > 0) imoexEl.classList.add('profit');
+            else if (im.change < 0) imoexEl.classList.add('loss');
+        }
     } catch (err) {
         console.error('Ошибка загрузки курсов валют:', err);
     }
@@ -1281,6 +1295,9 @@ async function updateAllAssetTypeViews() {
             
             // Обновляем диаграмму распределения по видам активов
             updateAssetTypeChart(currentPortfolioData.portfolio);
+
+            // Обновляем диаграмму активов и их долей
+            renderAssetsShareChart(currentPortfolioData.portfolio);
         }
     } catch (error) {
         console.error('Ошибка обновления видов активов:', error);
@@ -2066,6 +2083,11 @@ function switchView(viewType) {
 
         // Загружаем график стоимости портфеля
         loadPortfolioValueChart(_pvcActiveDays);
+
+        // Рендерим диаграмму активов
+        if (currentPortfolioData && currentPortfolioData.portfolio) {
+            renderAssetsShareChart(currentPortfolioData.portfolio);
+        }
     } else if (viewType === 'history') {
         tableView.style.display = 'none';
         chartView.style.display = 'none';
@@ -3463,7 +3485,6 @@ async function openEditTransactionModal(transactionId) {
                 document.getElementById('trans-edit-price').value = transaction.price;
                 document.getElementById('trans-edit-quantity').value = transaction.quantity;
                 document.getElementById('trans-edit-total').value = transaction.total;
-                document.getElementById('trans-edit-notes').value = transaction.notes || '';
                 
                 document.getElementById('edit-transaction-modal').style.display = 'flex';
             }
@@ -3497,8 +3518,7 @@ async function handleEditTransaction(event) {
         company_name: document.getElementById('trans-edit-company').value,
         operation_type: document.getElementById('trans-edit-type').value,
         price: parseFloat(document.getElementById('trans-edit-price').value),
-        quantity: parseFloat(document.getElementById('trans-edit-quantity').value),
-        notes: document.getElementById('trans-edit-notes').value
+        quantity: parseFloat(document.getElementById('trans-edit-quantity').value)
     };
     
     try {
@@ -5231,6 +5251,7 @@ const ANALYTICS_SECTIONS_META = [
     { id: 'portfolio-value', label: '📈 Динамика стоимости портфеля' },
     { id: 'asset-type',      label: '🥧 Распределение по видам активов' },
     { id: 'category',        label: '🏷️ Распределение по категориям' },
+    { id: 'assets-share',    label: '📊 Доля активов в портфеле' },
 ];
 
 function getAnalyticsLayout() {
@@ -5512,6 +5533,185 @@ async function loadPortfolioValueChart(days) {
     } catch (err) {
         statusEl.textContent = 'Ошибка: ' + err.message;
     }
+}
+
+// ======= Диаграмма: Активы и их доля в портфеле =======
+
+let _assetsShareChart = null;
+let _assetsShareSort = 'value'; // 'value' | 'pct'
+let _assetsShareType = 'bar';   // 'bar' | 'pie'
+
+function switchAssetsShareType(type) {
+    _assetsShareType = type;
+    document.getElementById('assets-share-type-bar').classList.toggle('active', type === 'bar');
+    document.getElementById('assets-share-type-pie').classList.toggle('active', type === 'pie');
+    // Скрываем/показываем сортировку (только для bar)
+    const sortGroup = document.getElementById('assets-share-sort-group');
+    if (sortGroup) sortGroup.style.display = type === 'bar' ? '' : 'none';
+    if (currentPortfolioData && currentPortfolioData.portfolio) {
+        renderAssetsShareChart(currentPortfolioData.portfolio);
+    }
+}
+
+function switchAssetsShareSort(mode) {
+    _assetsShareSort = mode;
+    document.getElementById('assets-share-sort-value').classList.toggle('active', mode === 'value');
+    document.getElementById('assets-share-sort-pct').classList.toggle('active', mode === 'pct');
+    if (currentPortfolioData && currentPortfolioData.portfolio) {
+        renderAssetsShareChart(currentPortfolioData.portfolio);
+    }
+}
+// _assetsShareSort теперь означает: 'value' = ось X в рублях, 'pct' = ось X в %
+
+function renderAssetsShareChart(portfolio) {
+    const totalValue = portfolio.reduce((s, item) => s + (item.total_cost || 0), 0);
+    if (totalValue === 0) return;
+
+    // Цветовая палитра
+    const palette = [
+        '#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6',
+        '#06b6d4','#f97316','#84cc16','#ec4899','#14b8a6',
+        '#6366f1','#a855f7','#22c55e','#eab308','#64748b',
+    ];
+
+    // Подготавливаем данные
+    let items = portfolio.map(item => ({
+        label: item.company_name ? `${item.ticker} — ${item.company_name}` : item.ticker,
+        ticker: item.ticker,
+        value: item.total_cost || 0,
+        pct: totalValue > 0 ? (item.total_cost || 0) / totalValue * 100 : 0,
+    }));
+    items.sort((a, b) => _assetsShareSort === 'pct' ? b.pct - a.pct : b.value - a.value);
+
+    const barWrap = document.getElementById('assets-share-bar-wrap');
+    const pieWrap = document.getElementById('assets-share-pie-wrap');
+
+    if (_assetsShareType === 'pie') {
+        if (barWrap) barWrap.style.display = 'none';
+        if (pieWrap) pieWrap.style.display = 'block';
+        if (_assetsShareChart) { _assetsShareChart.destroy(); _assetsShareChart = null; }
+        _renderAssetsSharePie(items, palette);
+        return;
+    }
+
+    // Bar chart
+    if (barWrap) barWrap.style.display = 'block';
+    if (pieWrap) pieWrap.style.display = 'none';
+
+    const canvas = document.getElementById('assetsShareChart');
+    if (!canvas) return;
+
+    const colors = items.map((_, i) => palette[i % palette.length]);
+    const showValue = _assetsShareSort === 'value';
+
+    // Высота: минимум 300px, по 36px на строку
+    const barHeight = 36;
+    const minHeight = 300;
+    barWrap.style.height = Math.max(minHeight, items.length * barHeight + 60) + 'px';
+
+    if (_assetsShareChart) { _assetsShareChart.destroy(); _assetsShareChart = null; }
+
+    _assetsShareChart = new Chart(canvas, {
+        type: 'bar',
+        data: {
+            labels: items.map(i => i.label),
+            datasets: [{
+                label: showValue ? 'Стоимость (₽)' : 'Доля в портфеле (%)',
+                data: items.map(i => showValue ? i.value : i.pct),
+                backgroundColor: colors,
+                borderWidth: 0,
+                borderRadius: 4,
+            }]
+        },
+        options: {
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: (ctx) => {
+                            const item = items[ctx.dataIndex];
+                            return [
+                                ` Стоимость: ${formatCurrency(item.value)}`,
+                                ` Доля: ${item.pct.toFixed(2)}%`,
+                            ];
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    beginAtZero: true,
+                    ticks: {
+                        callback: v => showValue ? formatCurrency(v) : v + '%',
+                        color: '#64748b',
+                    },
+                    grid: { color: 'rgba(0,0,0,0.06)' },
+                },
+                y: {
+                    ticks: { color: '#34495e', font: { size: 12 }, autoSkip: false },
+                    grid: { display: false },
+                }
+            }
+        }
+    });
+}
+
+function _renderAssetsSharePie(items, palette) {
+    const container = document.getElementById('assets-share-pie-chart');
+    if (!container) return;
+
+    // Строим HTML по той же логике что и другие круговые диаграммы
+    const total = items.reduce((s, i) => s + i.value, 0);
+    const segments = items.map((item, idx) => ({
+        ...item,
+        color: palette[idx % palette.length],
+        pct: total > 0 ? item.value / total * 100 : 0,
+    }));
+
+    // SVG pie
+    let cumulativePct = 0;
+    const cx = 50, cy = 50, r = 45;
+    let pathsHTML = '';
+
+    segments.forEach(seg => {
+        if (seg.pct <= 0) return;
+        const startAngle = (cumulativePct / 100) * 2 * Math.PI - Math.PI / 2;
+        const endAngle   = ((cumulativePct + seg.pct) / 100) * 2 * Math.PI - Math.PI / 2;
+        const x1 = cx + r * Math.cos(startAngle);
+        const y1 = cy + r * Math.sin(startAngle);
+        const x2 = cx + r * Math.cos(endAngle);
+        const y2 = cy + r * Math.sin(endAngle);
+        const largeArc = seg.pct > 50 ? 1 : 0;
+        pathsHTML += `<path d="M${cx},${cy} L${x1.toFixed(2)},${y1.toFixed(2)} A${r},${r} 0 ${largeArc},1 ${x2.toFixed(2)},${y2.toFixed(2)} Z"
+            fill="${seg.color}" stroke="#fff" stroke-width="0.5" opacity="0.9">
+            <title>${seg.label}: ${seg.pct.toFixed(2)}% (${formatCurrency(seg.value)})</title>
+        </path>`;
+        cumulativePct += seg.pct;
+    });
+
+    // Легенда
+    let legendHTML = '<div class="pie-legend" style="flex:1;min-width:0;max-height:320px;overflow-y:auto;overflow-x:hidden;">';
+    segments.forEach(seg => {
+        legendHTML += `
+        <div class="pie-legend-item" style="display:flex;align-items:center;gap:6px;padding:4px 0;font-size:0.85em;min-width:0;">
+            <span style="width:12px;height:12px;border-radius:3px;background:${seg.color};flex-shrink:0;display:inline-block;"></span>
+            <span style="flex:1;color:#34495e;min-width:0;word-break:break-word;" title="${seg.label}">${seg.label}</span>
+            <span style="color:#2c3e50;font-weight:600;white-space:nowrap;margin-left:4px;">${seg.pct.toFixed(2)}%</span>
+            <span style="color:#7f8c8d;white-space:nowrap;margin-left:4px;">${formatCurrency(seg.value)}</span>
+        </div>`;
+    });
+    legendHTML += '</div>';
+
+    container.innerHTML = `
+        <div style="display:flex;gap:32px;align-items:flex-start;flex-wrap:wrap;overflow:hidden;">
+            <svg viewBox="0 0 100 100" style="width:300px;height:300px;flex-shrink:0;filter:drop-shadow(0 4px 8px rgba(0,0,0,0.15));">
+                ${pathsHTML}
+            </svg>
+            ${legendHTML}
+        </div>`;
 }
 
 // ======= Удаление истории цен за период =======

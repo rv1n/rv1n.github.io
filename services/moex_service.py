@@ -566,6 +566,53 @@ class MOEXService:
         
         return None
 
+    def get_imoex_current(self) -> Optional[Dict]:
+        """
+        Получить текущее (последнее торговое) значение индекса IMOEX и дневное изменение.
+        Возвращает {'value': float, 'change': float, 'change_percent': float} или None.
+        """
+        try:
+            url = f"{self.BASE_URL}/engines/stock/markets/index/boards/SNDX/securities/IMOEX.json"
+            resp = requests.get(url, params={'iss.meta': 'off'}, timeout=10)
+            resp.raise_for_status()
+            data = resp.json()
+
+            marketdata = data.get('marketdata', {})
+            columns = marketdata.get('columns', [])
+            rows = marketdata.get('data', [])
+
+            if not rows:
+                return None
+
+            row = rows[0]
+            def col(name):
+                try:
+                    return row[columns.index(name)]
+                except (ValueError, IndexError):
+                    return None
+
+            current = col('CURRENTVALUE') or col('LASTVALUE') or col('LAST')
+            open_val = col('OPENVALUE') or col('OPEN')
+            low = col('LOW')
+            high = col('HIGH')
+
+            if current is None:
+                return None
+
+            change = (current - open_val) if open_val else None
+            change_percent = (change / open_val * 100) if (open_val and change is not None) else None
+
+            return {
+                'value': float(current),
+                'change': float(change) if change is not None else 0.0,
+                'change_percent': float(change_percent) if change_percent is not None else 0.0,
+                'low': float(low) if low else None,
+                'high': float(high) if high else None,
+            }
+        except Exception as e:
+            print(f"Ошибка получения текущего IMOEX: {e}")
+            return None
+
     def get_imoex_history(self, date_from: str, date_to: str) -> list:
         """
         Получить историю значений индекса IMOEX за период.

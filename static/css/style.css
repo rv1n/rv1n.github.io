@@ -644,6 +644,12 @@ header h1 {
     white-space: nowrap;
 }
 
+.header-rate-divider {
+    color: #bdc3c7;
+    font-weight: 300;
+    padding: 0 2px;
+}
+
 /* Форма добавления */
 .add-form-container {
     background: #f8f9fa;
@@ -1690,6 +1696,12 @@ header h1 {
     width: 100%;
 }
 
+.assets-share-chart-wrap {
+    position: relative;
+    width: 100%;
+    min-height: 300px;
+}
+
 .portfolio-value-chart-status {
     font-size: 0.9rem;
     color: #888;
@@ -2648,6 +2660,8 @@ tr.row-loading td:first-child::after {
     justify-content: center;
     gap: 40px;
     flex-wrap: wrap;
+    overflow-x: hidden;
+    min-width: 0;
 }
 
 .pie-chart-svg {
