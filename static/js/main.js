@@ -1193,6 +1193,7 @@ async function loadCurrencyRates() {
         const eurEl = document.getElementById('rate-eur');
         const cnyEl = document.getElementById('rate-cny');
         const imoexEl = document.getElementById('rate-imoex');
+        const imoex2El = document.getElementById('rate-imoex2');
 
         const formatRate = (rate) => {
             if (rate === null || rate === undefined) return '-';
@@ -1225,18 +1226,19 @@ async function loadCurrencyRates() {
         updateEl(eurEl, 'EUR', data.rates.EUR);
         updateEl(cnyEl, 'CNY', data.rates.CNY);
 
-        // IMOEX
-        if (imoexEl && data.imoex) {
-            const im = data.imoex;
+        const updateIndexEl = (el, label, im) => {
+            if (!el || !im) return;
             const sign = im.change >= 0 ? '+' : '';
             const val = im.value >= 1000
                 ? im.value.toLocaleString('ru-RU', { maximumFractionDigits: 2 })
                 : im.value.toFixed(2);
-            imoexEl.textContent = `IMOEX: ${val} (${sign}${im.change_percent.toFixed(2)}%)`;
-            imoexEl.classList.remove('profit', 'loss');
-            if (im.change > 0) imoexEl.classList.add('profit');
-            else if (im.change < 0) imoexEl.classList.add('loss');
-        }
+            el.textContent = `${label}: ${val} (${sign}${im.change_percent.toFixed(2)}%)`;
+            el.classList.remove('profit', 'loss');
+            if (im.change > 0) el.classList.add('profit');
+            else if (im.change < 0) el.classList.add('loss');
+        };
+        updateIndexEl(imoexEl, 'IMOEX', data.imoex);
+        updateIndexEl(imoex2El, 'IMOEX2', data.imoex2);
     } catch (err) {
         console.error('Ошибка загрузки курсов валют:', err);
     }

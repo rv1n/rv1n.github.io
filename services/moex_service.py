@@ -566,13 +566,13 @@ class MOEXService:
         
         return None
 
-    def get_imoex_current(self) -> Optional[Dict]:
+    def _get_index_current(self, secid: str) -> Optional[Dict]:
         """
-        Получить текущее (последнее торговое) значение индекса IMOEX и дневное изменение.
+        Получить текущее значение индекса (IMOEX, IMOEX2 и т.д.) и дневное изменение.
         Возвращает {'value': float, 'change': float, 'change_percent': float} или None.
         """
         try:
-            url = f"{self.BASE_URL}/engines/stock/markets/index/boards/SNDX/securities/IMOEX.json"
+            url = f"{self.BASE_URL}/engines/stock/markets/index/boards/SNDX/securities/{secid}.json"
             resp = requests.get(url, params={'iss.meta': 'off'}, timeout=10)
             resp.raise_for_status()
             data = resp.json()
@@ -610,8 +610,16 @@ class MOEXService:
                 'high': float(high) if high else None,
             }
         except Exception as e:
-            print(f"Ошибка получения текущего IMOEX: {e}")
+            print(f"Ошибка получения текущего {secid}: {e}")
             return None
+
+    def get_imoex_current(self) -> Optional[Dict]:
+        """Текущее значение IMOEX."""
+        return self._get_index_current('IMOEX')
+
+    def get_imoex2_current(self) -> Optional[Dict]:
+        """Текущее значение IMOEX2 (расширенная сессия)."""
+        return self._get_index_current('IMOEX2')
 
     def get_imoex_history(self, date_from: str, date_to: str) -> list:
         """

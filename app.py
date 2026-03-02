@@ -2021,11 +2021,13 @@ def get_currency_rates():
     try:
         rates_info = currency_service.get_rates_info(['USD', 'EUR', 'CNY'])
         imoex = moex_service.get_imoex_current()
+        imoex2 = moex_service.get_imoex2_current()
 
         return jsonify({
             'success': True,
             'rates': rates_info,
-            'imoex': imoex
+            'imoex': imoex,
+            'imoex2': imoex2
         })
     except Exception as e:
         return jsonify({
