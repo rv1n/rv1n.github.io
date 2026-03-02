@@ -900,7 +900,7 @@ function createPortfolioRow(item, totalPortfolioValue = 0) {
     const assetTypeBadge = item.asset_type
         ? `<span class="asset-type-badge" data-type="${_escapeAttr(item.asset_type)}">${item.asset_type}</span>`
         : '';
-    const changeDecimals = item.ticker === 'LQDT' ? 5 : 2;
+    const changeDecimals = (item.ticker === 'LQDT' || item.ticker === 'GOLD') ? 5 : 2;
 
     row.innerHTML = `
         <td>
