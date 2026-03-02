@@ -2208,12 +2208,27 @@ def get_portfolio_value_history():
     """
     Рассчитать историю стоимости портфеля по дням на основе истории цен.
     Использует текущие количества позиций и исторические цены.
-    Query: days (int, default 365)
+    Query: days (int) или date_from (YYYY-MM-DD) — точка старта; date_to (YYYY-MM-DD) — опционально.
     """
     from collections import defaultdict
     try:
-        days = request.args.get('days', 365, type=int)
-        date_from = datetime.now() - timedelta(days=days)
+        date_from_arg = request.args.get('date_from')
+        date_to_arg = request.args.get('date_to')
+        if date_from_arg:
+            try:
+                date_from = datetime.strptime(date_from_arg, '%Y-%m-%d').replace(tzinfo=None)
+            except ValueError:
+                date_from = datetime.now() - timedelta(days=365)
+        else:
+            days = request.args.get('days', 365, type=int)
+            date_from = datetime.now() - timedelta(days=days)
+        if date_to_arg:
+            try:
+                date_to = datetime.strptime(date_to_arg, '%Y-%m-%d').replace(tzinfo=None)
+            except ValueError:
+                date_to = datetime.now()
+        else:
+            date_to = datetime.now()
 
         portfolio = db_session.query(Portfolio).filter_by(user_id=current_user.id).all()
         if not portfolio:
@@ -2222,9 +2237,11 @@ def get_portfolio_value_history():
         tickers = [p.ticker for p in portfolio]
         quantities = {p.ticker: p.quantity for p in portfolio}
 
+        date_to_end = date_to.replace(hour=23, minute=59, second=59, microsecond=999999) if hasattr(date_to, 'replace') else date_to
         history = db_session.query(PriceHistory).filter(
             PriceHistory.ticker.in_(tickers),
-            PriceHistory.logged_at >= date_from
+            PriceHistory.logged_at >= date_from,
+            PriceHistory.logged_at <= date_to_end
         ).order_by(PriceHistory.logged_at).all()
 
         daily_prices = defaultdict(dict)

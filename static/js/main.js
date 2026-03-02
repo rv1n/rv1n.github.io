@@ -900,6 +900,7 @@ function createPortfolioRow(item, totalPortfolioValue = 0) {
     const assetTypeBadge = item.asset_type
         ? `<span class="asset-type-badge" data-type="${_escapeAttr(item.asset_type)}">${item.asset_type}</span>`
         : '';
+    const changeDecimals = item.ticker === 'LQDT' ? 5 : 2;
 
     row.innerHTML = `
         <td>
@@ -933,8 +934,8 @@ function createPortfolioRow(item, totalPortfolioValue = 0) {
         </td>
         <td class="${changeClass}" style="text-align: center;">
             <div style="display: flex; flex-direction: column; align-items: center; gap: 2px;">
-                <span>${item.price_change >= 0 ? '+' : ''}${formatCurrency(item.price_change * item.quantity, 2)} (${item.price_change_percent >= 0 ? '+' : ''}${formatPercent(Math.abs(item.price_change_percent), 2)})</span>
-                <span style="font-size: 0.85em; color: #7f8c8d; white-space: nowrap;">${formatPrice(effectivePrice - item.price_change, 2)} → ${formatPrice(effectivePrice, 2)}</span>
+                <span>${item.price_change >= 0 ? '+' : ''}${formatCurrency(item.price_change * item.quantity, changeDecimals)} (${item.price_change_percent >= 0 ? '+' : ''}${formatPercent(Math.abs(item.price_change_percent), changeDecimals)})</span>
+                <span style="font-size: 0.9em; color: #7f8c8d; white-space: nowrap;">${formatPrice(effectivePrice - item.price_change, changeDecimals)} → ${formatPrice(effectivePrice, changeDecimals)}</span>
             </div>
         </td>
         <td class="sparkline-cell">
@@ -1134,11 +1135,13 @@ function updateSummary(summary) {
     
     if (totalCountEl) {
         const count = summary.total_count || 0;
-        const countText = count === 0 ? '0 активов' : 
-                         count === 1 ? '1 актив' : 
-                         count < 5 ? `${count} актива` : 
-                         `${count} активов`;
-        totalCountEl.textContent = countText;
+        const word = (n) => {
+            const mod10 = n % 10, mod100 = n % 100;
+            if (mod10 === 1 && mod100 !== 11) return 'актив';
+            if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return 'актива';
+            return 'активов';
+        };
+        totalCountEl.textContent = `${count} ${word(count)}`;
     }
     
     if (cashBalanceEl && summary.cash_balance !== undefined) {
@@ -2086,8 +2089,8 @@ function switchView(viewType) {
         // Применяем выбор типа диаграммы
         applyChartTypeSelection();
 
-        // Загружаем график стоимости портфеля
-        loadPortfolioValueChart(_pvcActiveDays);
+        // Загружаем график стоимости портфеля (дата старта или период)
+        loadPortfolioValueChart(_pvcDateFrom || _pvcActiveDays);
 
         // Обновляем лейбл фильтра
         _updateAnalyticsFilterLabel();
@@ -2693,7 +2696,8 @@ function renderAssetTypesPieChart(portfolio, containerId = 'asset-type-pie-chart
     if (sortedAssetTypes.length === 1) {
         const color = colors[0];
         // Рисуем полный круг через элемент circle
-        svgPaths = `<circle cx="${center}" cy="${center}" r="${radius}" fill="${color}" stroke="white" stroke-width="2" class="pie-slice" data-asset-type="${sortedAssetTypes[0].assetType}"/>`;
+        const it = sortedAssetTypes[0];
+        svgPaths = `<circle cx="${center}" cy="${center}" r="${radius}" fill="${color}" stroke="white" stroke-width="2" class="pie-slice" data-asset-type="${_escapeAttr(it.assetType)}" data-value="${it.value}" data-pct="${it.percentage}"/>`;
     } else {
         sortedAssetTypes.forEach((item, index) => {
             const angle = (item.percentage / 100) * 360;
@@ -2722,7 +2726,7 @@ function renderAssetTypesPieChart(portfolio, containerId = 'asset-type-pie-chart
                 'Z'                        // Закрытие пути
             ].join(' ');
             
-            svgPaths += `<path d="${pathD}" fill="${color}" stroke="white" stroke-width="2" class="pie-slice" data-asset-type="${item.assetType}"/>`;
+            svgPaths += `<path d="${pathD}" fill="${color}" stroke="white" stroke-width="2" class="pie-slice" data-asset-type="${_escapeAttr(item.assetType)}" data-value="${item.value}" data-pct="${item.percentage}"/>`;
             
             currentAngle = endAngle;
         });
@@ -2828,7 +2832,8 @@ function renderCategoriesPieChart(portfolio, containerId = 'categories-pie-chart
     if (sortedCategories.length === 1) {
         const color = colors[0];
         // Рисуем полный круг через элемент circle
-        svgPaths = `<circle cx="${center}" cy="${center}" r="${radius}" fill="${color}" stroke="white" stroke-width="2" class="pie-slice" data-category="${sortedCategories[0].category}"/>`;
+        const it = sortedCategories[0];
+        svgPaths = `<circle cx="${center}" cy="${center}" r="${radius}" fill="${color}" stroke="white" stroke-width="2" class="pie-slice" data-category="${_escapeAttr(it.category)}" data-value="${it.value}" data-pct="${it.percentage}"/>`;
     } else {
         sortedCategories.forEach((item, index) => {
             const angle = (item.percentage / 100) * 360;
@@ -2857,7 +2862,7 @@ function renderCategoriesPieChart(portfolio, containerId = 'categories-pie-chart
                 'Z'                        // Закрытие пути
             ].join(' ');
             
-            svgPaths += `<path d="${pathD}" fill="${color}" stroke="white" stroke-width="2" class="pie-slice" data-category="${item.category}"/>`;
+            svgPaths += `<path d="${pathD}" fill="${color}" stroke="white" stroke-width="2" class="pie-slice" data-category="${_escapeAttr(item.category)}" data-value="${item.value}" data-pct="${item.percentage}"/>`;
             
             currentAngle = endAngle;
         });
@@ -3257,6 +3262,7 @@ document.addEventListener('DOMContentLoaded', function() {
             refreshAnalyticsCharts();
         });
     }
+    _setupPieChartTooltip();
 });
 
 /**
@@ -5283,18 +5289,66 @@ function refreshAnalyticsCharts() {
  * Обновляет лейбл активного фильтра в шапке аналитики.
  */
 function _updateAnalyticsFilterLabel() {
-    const label = document.getElementById('analytics-filter-label');
-    if (!label) return;
     const typeFilter = document.getElementById('portfolio-type-filter');
     const selectedType = typeFilter ? typeFilter.value : '';
-    if (selectedType) {
-        label.textContent = `Фильтр: ${selectedType}`;
-        label.setAttribute('data-type', selectedType);
-        label.style.display = 'inline-block';
-    } else {
-        label.style.display = 'none';
-        label.removeAttribute('data-type');
-    }
+    const ids = [
+        'analytics-filter-label-asset-type',
+        'analytics-filter-label-category',
+        'analytics-filter-label-assets-share',
+    ];
+    ids.forEach(id => {
+        const label = document.getElementById(id);
+        if (!label) return;
+        if (selectedType) {
+            label.textContent = selectedType;
+            label.setAttribute('data-type', selectedType);
+            label.style.display = 'inline-block';
+        } else {
+            label.style.display = 'none';
+            label.removeAttribute('data-type');
+        }
+    });
+}
+
+function _setupPieChartTooltip() {
+    const chartView = document.getElementById('chart-view');
+    const tooltip = document.getElementById('pie-chart-tooltip');
+    if (!chartView || !tooltip) return;
+
+    chartView.addEventListener('mouseover', function(e) {
+        const slice = e.target.closest('.pie-slice');
+        if (!slice) return;
+        const label = slice.getAttribute('data-label') || slice.getAttribute('data-asset-type') || slice.getAttribute('data-category') || '';
+        const value = slice.getAttribute('data-value');
+        const pct = slice.getAttribute('data-pct');
+        if (label || value != null || pct != null) {
+            const valueStr = value != null && value !== '' ? formatCurrency(parseFloat(value), 2) : '';
+            tooltip.innerHTML = `<strong>${label}</strong><br>${pct != null ? pct + '%' : ''} ${valueStr ? valueStr : ''}`.trim();
+            tooltip.setAttribute('aria-hidden', 'false');
+            tooltip.style.left = (e.pageX + 12) + 'px';
+            tooltip.style.top = (e.pageY + 12) + 'px';
+            tooltip.classList.add('pie-chart-tooltip-visible');
+        }
+    }, true);
+
+    chartView.addEventListener('mouseleave', function(e) {
+        const fromSlice = e.target.closest('.pie-slice');
+        const toSlice = e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest('.pie-slice');
+        if (fromSlice && !toSlice) {
+            tooltip.classList.remove('pie-chart-tooltip-visible');
+            tooltip.setAttribute('aria-hidden', 'true');
+        }
+    }, true);
+
+    chartView.addEventListener('mousemove', function(e) {
+        const slice = e.target.closest('.pie-slice');
+        if (!slice) {
+            tooltip.classList.remove('pie-chart-tooltip-visible');
+            return;
+        }
+        tooltip.style.left = (e.pageX + 12) + 'px';
+        tooltip.style.top = (e.pageY + 12) + 'px';
+    });
 }
 
 const ANALYTICS_SECTIONS_META = [
@@ -5442,15 +5496,27 @@ function resetAnalyticsLayout() {
 
 let _portfolioValueChart = null;
 let _pvcActiveDays = 365;
+let _pvcDateFrom = null; // 'YYYY-MM-DD' или null
 
-async function loadPortfolioValueChart(days) {
-    _pvcActiveDays = days;
+async function loadPortfolioValueChart(daysOrDate) {
+    const isDate = typeof daysOrDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(daysOrDate);
+    const dateInput = document.getElementById('pvc-date-from');
 
-    // Подсветка активной кнопки периода
-    document.querySelectorAll('.period-btn').forEach(btn => btn.classList.remove('active'));
-    const allBtns = document.querySelectorAll('.period-btn');
-    const labels = [30, 90, 180, 365, 0];
-    labels.forEach((d, i) => { if (d === days && allBtns[i]) allBtns[i].classList.add('active'); });
+    if (isDate) {
+        _pvcDateFrom = daysOrDate;
+        _pvcActiveDays = null;
+        if (dateInput) dateInput.value = daysOrDate;
+        document.querySelectorAll('.period-btn').forEach(btn => btn.classList.remove('active'));
+    } else {
+        const days = daysOrDate == null ? _pvcActiveDays : Number(daysOrDate);
+        _pvcActiveDays = days;
+        _pvcDateFrom = null;
+        if (dateInput) dateInput.value = '';
+        document.querySelectorAll('.period-btn').forEach(btn => btn.classList.remove('active'));
+        const allBtns = document.querySelectorAll('.period-btn');
+        const labels = [30, 90, 180, 365, 0];
+        labels.forEach((d, i) => { if (d === days && allBtns[i]) allBtns[i].classList.add('active'); });
+    }
 
     const statusEl = document.getElementById('portfolio-value-chart-status');
     const perfLabel = document.getElementById('pvc-perf-label');
@@ -5458,7 +5524,9 @@ async function loadPortfolioValueChart(days) {
     if (perfLabel) perfLabel.textContent = '';
 
     try {
-        const url = days > 0 ? `/api/portfolio-value-history?days=${days}` : '/api/portfolio-value-history?days=3650';
+        const url = _pvcDateFrom
+            ? `/api/portfolio-value-history?date_from=${encodeURIComponent(_pvcDateFrom)}`
+            : (_pvcActiveDays > 0 ? `/api/portfolio-value-history?days=${_pvcActiveDays}` : '/api/portfolio-value-history?days=3650');
         const resp = await fetch(url);
         const data = await resp.json();
 
@@ -5735,10 +5803,10 @@ function _renderAssetsSharePie(items, palette) {
         const x2 = cx + r * Math.cos(endAngle);
         const y2 = cy + r * Math.sin(endAngle);
         const largeArc = seg.pct > 50 ? 1 : 0;
-        pathsHTML += `<path d="M${cx},${cy} L${x1.toFixed(2)},${y1.toFixed(2)} A${r},${r} 0 ${largeArc},1 ${x2.toFixed(2)},${y2.toFixed(2)} Z"
-            fill="${seg.color}" stroke="#fff" stroke-width="0.5" opacity="0.9">
-            <title>${seg.label}: ${seg.pct.toFixed(2)}% (${formatCurrency(seg.value)})</title>
-        </path>`;
+        const labelEsc = (seg.label || '').replace(/"/g, '&quot;');
+        pathsHTML += `<path class="pie-slice" d="M${cx},${cy} L${x1.toFixed(2)},${y1.toFixed(2)} A${r},${r} 0 ${largeArc},1 ${x2.toFixed(2)},${y2.toFixed(2)} Z"
+            fill="${seg.color}" stroke="#fff" stroke-width="0.5" opacity="0.9"
+            data-label="${labelEsc}" data-value="${seg.value}" data-pct="${seg.pct.toFixed(2)}"></path>`;
         cumulativePct += seg.pct;
     });
 

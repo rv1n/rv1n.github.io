@@ -241,10 +241,10 @@
 
             <!-- Представление диаграмм распределения -->
             <div id="chart-view" class="portfolio-view" style="display: none;">
+                <div id="pie-chart-tooltip" class="pie-chart-tooltip" aria-hidden="true"></div>
 
                 <!-- Панель управления аналитикой -->
                 <div class="analytics-toolbar">
-                    <span id="analytics-filter-label" class="analytics-filter-label" style="display:none;"></span>
                     <button class="btn btn-secondary btn-analytics-customize" onclick="openAnalyticsCustomizer()" title="Настроить отображение">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
                         Настроить
@@ -256,12 +256,18 @@
                 <div class="category-chart-container portfolio-value-chart-section">
                     <div class="portfolio-value-chart-header">
                         <h3 style="margin: 0;">📈 Динамика стоимости портфеля</h3>
-                        <div class="portfolio-value-period-btns">
-                            <button class="period-btn active" onclick="loadPortfolioValueChart(30)">1М</button>
-                            <button class="period-btn" onclick="loadPortfolioValueChart(90)">3М</button>
-                            <button class="period-btn" onclick="loadPortfolioValueChart(180)">6М</button>
-                            <button class="period-btn" onclick="loadPortfolioValueChart(365)">1Г</button>
-                            <button class="period-btn" onclick="loadPortfolioValueChart(0)">Всё</button>
+                        <div class="portfolio-value-chart-controls">
+                            <div class="portfolio-value-period-btns">
+                                <button class="period-btn active" onclick="loadPortfolioValueChart(30)" data-days="30">1М</button>
+                                <button class="period-btn" onclick="loadPortfolioValueChart(90)" data-days="90">3М</button>
+                                <button class="period-btn" onclick="loadPortfolioValueChart(180)" data-days="180">6М</button>
+                                <button class="period-btn" onclick="loadPortfolioValueChart(365)" data-days="365">1Г</button>
+                                <button class="period-btn" onclick="loadPortfolioValueChart(0)" data-days="0">Всё</button>
+                            </div>
+                            <div class="pvc-date-start-wrap">
+                                <label for="pvc-date-from" class="pvc-date-label">Дата старта:</label>
+                                <input type="date" id="pvc-date-from" class="pvc-date-input" title="Выберите точку старта графика" onchange="if(this.value) loadPortfolioValueChart(this.value)">
+                            </div>
                         </div>
                     </div>
                     <div id="portfolio-value-chart-status" class="portfolio-value-chart-status"></div>
@@ -284,7 +290,7 @@
                 <div id="analytics-section-asset-type" class="analytics-section">
                 <div class="category-chart-container">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                        <h3 style="margin: 0;">Распределение портфеля по видам активов</h3>
+                        <h3 style="margin: 0;">Распределение портфеля по видам активов <span id="analytics-filter-label-asset-type" class="analytics-filter-label" style="display:none;"></span></h3>
                         
                         <!-- Переключатель типа диаграммы -->
                         <div class="chart-type-toggle">
@@ -318,7 +324,7 @@
                 <div id="analytics-section-category" class="analytics-section">
                 <div class="category-chart-container">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                        <h3 style="margin: 0;">Распределение портфеля по категориям</h3>
+                        <h3 style="margin: 0;">Распределение портфеля по категориям <span id="analytics-filter-label-category" class="analytics-filter-label" style="display:none;"></span></h3>
                         
                         <!-- Переключатель типа диаграммы -->
                         <div class="chart-type-toggle">
@@ -351,12 +357,12 @@
                 <div id="analytics-section-assets-share" class="analytics-section">
                 <div class="category-chart-container">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 10px;">
-                        <h3 style="margin: 0;">Доля активов в портфеле</h3>
+                        <h3 style="margin: 0;">Доля активов в портфеле <span id="analytics-filter-label-assets-share" class="analytics-filter-label" style="display:none;"></span></h3>
                         <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
                             <!-- Тип диаграммы -->
                             <div class="chart-type-toggle">
-                                <button id="assets-share-type-bar" class="chart-toggle-btn" onclick="switchAssetsShareType('bar')">📊 Столбчатая</button>
                                 <button id="assets-share-type-pie" class="chart-toggle-btn active" onclick="switchAssetsShareType('pie')">🥧 Круговая</button>
+                                <button id="assets-share-type-bar" class="chart-toggle-btn" onclick="switchAssetsShareType('bar')">📊 Столбчатая</button>
                             </div>
                             <!-- Сортировка (только для bar) -->
                             <div class="chart-type-toggle" id="assets-share-sort-group" style="display: none;">
