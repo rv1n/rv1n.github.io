@@ -353,17 +353,22 @@ def check_and_log_prices():
     now_moscow = datetime.now(pytz.timezone('Europe/Moscow'))
 
     # В установленное время отдельная задача daily_price_logging сама пишет цены.
-    # Чтобы не было двойной записи, периодическая проверка в этот момент ничего не делает.
-    # Используем окно ±1 минута для предотвращения конфликтов
+    # Чтобы не было двойной записи, периодическая проверка:
+    # 1) не запускает логирование РАНЬШЕ времени ежедневного логирования;
+    # 2) пропускает окно ±1 минута вокруг основного запуска.
     logging_hour, logging_minute = get_logging_time()
     current_minute = now_moscow.minute
     current_hour = now_moscow.hour
-    
+
+    # Если текущее время раньше запланированного — ничего не делаем.
+    if (current_hour, current_minute) < (logging_hour, logging_minute):
+        print(f"[{now_moscow}] Периодическая проверка пропущена (еще не наступило основное время логирования {logging_hour:02d}:{logging_minute:02d})")
+        return
+
     # Проверяем, не находимся ли мы в окне ±1 минута от времени ежедневного логирования
-    if current_hour == logging_hour:
-        if abs(current_minute - logging_minute) <= 1:
-            print(f"[{now_moscow}] Периодическая проверка пропущена (сработает ежедневное логирование в {logging_hour:02d}:{logging_minute:02d})")
-            return
+    if current_hour == logging_hour and abs(current_minute - logging_minute) <= 1:
+        print(f"[{now_moscow}] Периодическая проверка пропущена (сработает ежедневное логирование в {logging_hour:02d}:{logging_minute:02d})")
+        return
     today_start = now_moscow.replace(hour=0, minute=0, second=0, microsecond=0)
     today_end = today_start + timedelta(days=1)
     

@@ -83,6 +83,13 @@ class PriceLogger:
             
             logged_count = 0
             skipped_count = 0
+            # Одна общая метка времени для всех записей текущего запуска
+            log_time = datetime.now(self.moscow_tz)
+            # Готовим bulk-запросы к MOEX для акций и облигаций
+            stock_tickers = [t for t, info in unique_tickers.items() if info['instrument_type'] == 'STOCK']
+            bond_tickers = [t for t, info in unique_tickers.items() if info['instrument_type'] == 'BOND']
+            bulk_prices_stock = self.moex_service.get_bulk_prices(stock_tickers, 'STOCK') if stock_tickers else {}
+            bulk_prices_bond = self.moex_service.get_bulk_prices(bond_tickers, 'BOND') if bond_tickers else {}
             
             # Логируем цену для каждого уникального тикера
             for ticker, ticker_info in unique_tickers.items():
@@ -96,22 +103,32 @@ class PriceLogger:
                     company_name = ticker_info['company_name']
                     instrument_type = ticker_info['instrument_type']
                     
-                    # Получаем текущую цену с MOEX
-                    # Если для первого типа инструмента данных нет (например, тикер облигации помечен как STOCK),
-                    # пробуем альтернативный тип, чтобы гарантировать получение цены
+                    # Сначала пробуем взять цену из bulk-результатов для STOCK/BOND
                     quote_data = None
-                    types_to_try = [instrument_type]
-                    if instrument_type == 'STOCK':
-                        types_to_try.append('BOND')
-                    elif instrument_type == 'BOND':
-                        types_to_try.append('STOCK')
-                    
                     used_instrument_type = instrument_type
-                    for itype in types_to_try:
-                        quote_data = self.moex_service.get_current_price(ticker, itype)
-                        if quote_data:
-                            used_instrument_type = itype
-                            break
+                    ticker_upper = ticker.upper()
+                    bulk_price = None
+                    if instrument_type == 'STOCK':
+                        bulk_price = bulk_prices_stock.get(ticker_upper)
+                    elif instrument_type == 'BOND':
+                        bulk_price = bulk_prices_bond.get(ticker_upper)
+
+                    if bulk_price is not None:
+                        quote_data = {'price': bulk_price, 'volume': 0}
+                    else:
+                        # Если в bulk-ответе данных нет (или инструмент не STOCK/BOND),
+                        # используем существующую поштучную логику с fallback по типам.
+                        types_to_try = [instrument_type]
+                        if instrument_type == 'STOCK':
+                            types_to_try.append('BOND')
+                        elif instrument_type == 'BOND':
+                            types_to_try.append('STOCK')
+                        
+                        for itype in types_to_try:
+                            quote_data = self.moex_service.get_current_price(ticker, itype)
+                            if quote_data:
+                                used_instrument_type = itype
+                                break
                     
                     if not quote_data:
                         print(f"[{datetime.now(self.moscow_tz)}] Не удалось получить данные для {ticker} (пробовали типы: {types_to_try})")
@@ -138,8 +155,7 @@ class PriceLogger:
                     
                     # Проверяем, нет ли уже записи для этого тикера в текущей минуте
                     # Это предотвращает дублирование при одновременных вызовах
-                    now_moscow = datetime.now(self.moscow_tz)
-                    current_minute_start = now_moscow.replace(second=0, microsecond=0)
+                    current_minute_start = log_time.replace(second=0, microsecond=0)
                     current_minute_end = current_minute_start.replace(second=59, microsecond=999999)
                     
                     existing_in_minute = db_session.query(PriceHistory).filter(
@@ -153,7 +169,7 @@ class PriceLogger:
                     # визуальных дублей в истории цен.
                     if existing_in_minute:
                         skipped_count += 1
-                        print(f"[{datetime.now(self.moscow_tz)}] Пропуск {ticker}: запись уже существует в текущей минуте")
+                        print(f"[{log_time}] Пропуск {ticker}: запись уже существует в текущей минуте")
                         continue
                     
                     # Создаем запись в истории
@@ -168,16 +184,16 @@ class PriceLogger:
                         change_percent=round(price_change_percent, 2),
                         volume=quote_data.get('volume', 0),
                         instrument_type=instrument_type_enum,
-                        logged_at=datetime.now(self.moscow_tz)
+                        logged_at=log_time
                     )
                     
                     db_session.add(price_log)
                     logged_count += 1
                     
-                    print(f"[{datetime.now(self.moscow_tz)}] Залогирована цена для {ticker}: {current_price} ₽ (изменение: {price_change:+.2f} ₽, {price_change_percent:+.2f}%)")
+                    print(f"[{log_time}] Залогирована цена для {ticker}: {current_price} ₽ (изменение: {price_change:+.2f} ₽, {price_change_percent:+.2f}%)")
                     
                 except Exception as e:
-                    print(f"[{datetime.now(self.moscow_tz)}] Ошибка логирования цены для {ticker}: {e}")
+                    print(f"[{log_time}] Ошибка логирования цены для {ticker}: {e}")
                     continue
             
             # Сохраняем все изменения в БД

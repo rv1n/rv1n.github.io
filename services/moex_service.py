@@ -71,6 +71,87 @@ class MOEXService:
             print(f"Неожиданная ошибка при запросе к MOEX: {e}")
             return None
     
+    def get_bulk_prices(self, tickers: list[str], instrument_type: str = 'STOCK') -> Dict[str, float]:
+        """
+        Получить текущие цены сразу для нескольких тикеров одним запросом к MOEX.
+        Используется для логирования истории цен. Поддерживаются только STOCK и BOND;
+        для остальных типов (металлы, индексы и т.п.) будет возвращен пустой результат.
+        
+        Returns:
+            Словарь { 'TICKER': price_float }
+        """
+        result: Dict[str, float] = {}
+        if not tickers:
+            return result
+        
+        instrument_type = (instrument_type or 'STOCK').upper()
+        if instrument_type == 'BOND':
+            engine, market = 'stock', 'bonds'
+        elif instrument_type == 'STOCK':
+            engine, market = 'stock', 'shares'
+        else:
+            # Для экзотики (металлы, валютные индексы) пока оставляем поштучные запросы
+            return result
+
+        # MOEX принимает список тикеров через параметр securities
+        securities_list = ','.join(sorted({t.upper().strip() for t in tickers if t}))
+        if not securities_list:
+            return result
+
+        url = f"{self.BASE_URL}/engines/{engine}/markets/{market}/securities.json"
+        params = {
+            'iss.meta': 'off',
+            'iss.only': 'marketdata',
+            # SECID нужен, чтобы различать тикеры
+            'marketdata.columns': 'SECID,LAST,MARKETPRICE,CLOSEPRICE,WAPRICE'
+        }
+
+        data = self._make_request(url, params | {'securities': securities_list})
+        if not data:
+            return result
+
+        marketdata = data.get('marketdata', {})
+        cols = marketdata.get('columns', [])
+        rows = marketdata.get('data', [])
+        try:
+            secid_idx = cols.index('SECID')
+        except ValueError:
+            return result
+
+        # Индексы нужных цен
+        def idx(name: str) -> Optional[int]:
+            try:
+                return cols.index(name)
+            except ValueError:
+                return None
+
+        last_idx = idx('LAST')
+        mp_idx = idx('MARKETPRICE')
+        close_idx = idx('CLOSEPRICE')
+        wap_idx = idx('WAPRICE')
+
+        for row in rows or []:
+            try:
+                secid = str(row[secid_idx]).upper()
+            except (TypeError, IndexError):
+                continue
+            if not secid:
+                continue
+
+            price_val = None
+            # Приоритет: LAST -> MARKETPRICE -> CLOSEPRICE -> WAPRICE
+            for i in (last_idx, mp_idx, close_idx, wap_idx):
+                if i is not None and i < len(row):
+                    val = row[i]
+                    if val is not None:
+                        price_val = float(val)
+                        break
+
+            if price_val is not None:
+                result[secid] = price_val
+
+        return result
+    
     def get_current_price(self, ticker: str, instrument_type: str = 'STOCK') -> Optional[Dict]:
         """
         Получить текущую цену и данные по тикеру
