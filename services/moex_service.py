@@ -4,7 +4,7 @@
 """
 import requests
 from datetime import datetime, timedelta
-from typing import Optional, Dict
+from typing import Optional, Dict, List
 import time
 
 
@@ -71,7 +71,7 @@ class MOEXService:
             print(f"Неожиданная ошибка при запросе к MOEX: {e}")
             return None
     
-    def get_bulk_prices(self, tickers: list[str], instrument_type: str = 'STOCK') -> Dict[str, float]:
+    def get_bulk_prices(self, tickers: List[str], instrument_type: str = 'STOCK') -> Dict[str, float]:
         """
         Получить текущие цены сразу для нескольких тикеров одним запросом к MOEX.
         Используется для логирования истории цен. Поддерживаются только STOCK и BOND;

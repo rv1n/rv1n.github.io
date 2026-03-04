@@ -5,7 +5,7 @@
 
 import requests
 from datetime import datetime, timedelta
-from typing import Optional, Dict
+from typing import Optional, Dict, List
 
 
 class CurrencyService:
@@ -83,7 +83,7 @@ class CurrencyService:
 
         return self._rates.get(code, 1.0)
 
-    def get_rates_info(self, codes: Optional[list[str]] = None) -> Dict[str, Dict[str, float]]:
+    def get_rates_info(self, codes: Optional[List[str]] = None) -> Dict[str, Dict[str, float]]:
         """
         Вернуть словарь по нескольким валютам:
         {
