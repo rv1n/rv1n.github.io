@@ -657,8 +657,9 @@ async function loadSparklines(portfolio) {
  */
 async function renderSparkline(container, ticker, isBond = false) {
     try {
-        // Получаем историю цен за последние 7 дней (берем больше записей, чтобы точно получить данные за каждый день)
-        const response = await fetch(`/api/price-history?ticker=${ticker}&days=7&limit=50`);
+        // Получаем историю цен за последние 30 календарных дней
+        // (чтобы собрать до 8 последних торговых дней с учетом выходных и праздников)
+        const response = await fetch(`/api/price-history?ticker=${ticker}&days=30&limit=200`);
         const data = await response.json();
         
         if (!data.success || !data.history || data.history.length === 0) {
@@ -704,8 +705,8 @@ async function renderSparkline(container, ticker, isBond = false) {
             return;
         }
         
-        // Ограничиваем до 7 дней (берем последние 7 дней)
-        const prices = dailyPrices.slice(-7);
+        // Ограничиваем до 8 дней (берем последние 8 дней)
+        const prices = dailyPrices.slice(-8);
         
         // Параметры графика
         const width = 80;
@@ -900,7 +901,9 @@ function createPortfolioRow(item, totalPortfolioValue = 0) {
     const assetTypeBadge = item.asset_type
         ? `<span class="asset-type-badge" data-type="${_escapeAttr(item.asset_type)}">${item.asset_type}</span>`
         : '';
-    const changeDecimals = (item.ticker === 'LQDT' || item.ticker === 'GOLD') ? 5 : 2;
+    // Для колонки "Изменение за период" используем до 5 знаков после запятой для цен
+    // (Intl.NumberFormat с minFractionDigits=0, maxFractionDigits=5 сам отбрасывает лишние нули справа)
+    const changeDecimals = 5;
 
     row.innerHTML = `
         <td>
@@ -934,7 +937,7 @@ function createPortfolioRow(item, totalPortfolioValue = 0) {
         </td>
         <td class="${changeClass}" style="text-align: center;">
             <div style="display: flex; flex-direction: column; align-items: center; gap: 2px;">
-                <span>${item.price_change >= 0 ? '+' : ''}${formatCurrency(item.price_change * item.quantity, changeDecimals)} (${item.price_change_percent >= 0 ? '+' : ''}${formatPercent(Math.abs(item.price_change_percent), changeDecimals)})</span>
+                <span>${item.price_change >= 0 ? '+' : ''}${formatCurrency(item.price_change * item.quantity, changeDecimals)} (${item.price_change_percent >= 0 ? '+' : '-'}${formatPercent(Math.abs(item.price_change_percent), 2)})</span>
                 <span style="font-size: 0.9em; color: #7f8c8d; white-space: nowrap;">${formatPrice(effectivePrice - item.price_change, changeDecimals)} → ${formatPrice(effectivePrice, changeDecimals)}</span>
             </div>
         </td>
