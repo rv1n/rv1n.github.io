@@ -2244,6 +2244,25 @@ def get_portfolio_value_history():
         tickers = [p.ticker for p in portfolio]
         quantities = {p.ticker: p.quantity for p in portfolio}
 
+        # Собираем информацию об облигациях из портфеля (номинал и валюта),
+        # чтобы корректно интерпретировать исторические цены в процентах.
+        bond_info = {}
+        for p in portfolio:
+            is_bond = False
+            if hasattr(p, 'instrument_type') and p.instrument_type:
+                if isinstance(p.instrument_type, InstrumentType):
+                    is_bond = p.instrument_type == InstrumentType.BOND
+                elif isinstance(p.instrument_type, str):
+                    is_bond = p.instrument_type == 'Облигация' or p.instrument_type == 'BOND'
+            # Дополнительная эвристика по тикеру
+            if not is_bond and (p.ticker.startswith('RU') or p.ticker.startswith('SU')) and len(p.ticker) > 10:
+                is_bond = True
+            if is_bond:
+                t = p.ticker.upper()
+                face = getattr(p, 'bond_facevalue', None) or 1000.0
+                curr = getattr(p, 'bond_currency', None) or 'SUR'
+                bond_info[t] = {'bond_facevalue': face, 'bond_currency': curr}
+
         date_to_end = date_to.replace(hour=23, minute=59, second=59, microsecond=999999) if hasattr(date_to, 'replace') else date_to
         history = db_session.query(PriceHistory).filter(
             PriceHistory.ticker.in_(tickers),
@@ -2251,11 +2270,29 @@ def get_portfolio_value_history():
             PriceHistory.logged_at <= date_to_end
         ).order_by(PriceHistory.logged_at).all()
 
+        # По каждому дню берём последнюю цену за день (как в скрипте portfolio_vs_history_snapshot),
+        # облигации переводим из % в рубли по номиналу и курсу.
         daily_prices = defaultdict(dict)
         for h in history:
             date_key = h.logged_at.strftime('%Y-%m-%d')
-            if h.ticker not in daily_prices[date_key]:
-                daily_prices[date_key][h.ticker] = h.price
+            ticker = (h.ticker or '').upper()
+
+            price_rub = h.price or 0
+            if ticker in bond_info:
+                info = bond_info[ticker]
+                face = info['bond_facevalue'] or 1000.0
+                curr = (info.get('bond_currency') or 'SUR').strip() or 'SUR'
+                price_percent = h.price or 0
+                price_in_nominal = (price_percent * face) / 100 if price_percent else 0
+                if curr not in ('SUR', 'RUB'):
+                    try:
+                        fx_rate = currency_service.get_rate_to_rub(curr)
+                        price_rub = (price_in_nominal * fx_rate) if fx_rate and fx_rate > 0 else price_in_nominal
+                    except Exception:
+                        price_rub = price_in_nominal
+                else:
+                    price_rub = price_in_nominal
+            daily_prices[date_key][ticker] = price_rub
 
         portfolio_data = []
         for date_str in sorted(daily_prices.keys()):
@@ -2272,6 +2309,16 @@ def get_portfolio_value_history():
                 )
             except Exception as e:
                 print(f"Ошибка получения IMOEX: {e}")
+
+        # IMOEX: если последняя дата портфеля — сегодня, добавляем/обновляем точку на сегодня
+        today_str = datetime.now(_MOSCOW_TZ).strftime('%Y-%m-%d')
+        if portfolio_data and portfolio_data[-1]['date'] == today_str:
+            imoex_now = moex_service.get_imoex_current()
+            if imoex_now and imoex_now.get('value') is not None:
+                if imoex_data and imoex_data[-1]['date'] == today_str:
+                    imoex_data[-1]['value'] = imoex_now['value']
+                else:
+                    imoex_data.append({'date': today_str, 'value': imoex_now['value']})
 
         return jsonify({'success': True, 'portfolio': portfolio_data, 'imoex': imoex_data})
     except Exception as e:
