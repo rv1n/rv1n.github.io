@@ -116,9 +116,6 @@
                     <button id="btn-chart-view" class="view-btn" onclick="switchView('chart')">
                         📈 Аналитика
                     </button>
-                    <button id="btn-transactions-view" class="view-btn" onclick="switchView('transactions')">
-                        💼 История покупок/продаж
-                    </button>
                 </div>
                 <!-- Кнопка «сэндвич» с меню -->
                 <div class="menu-wrapper">
@@ -128,6 +125,9 @@
                     <div id="main-menu" class="dropdown-menu">
                         <button type="button" class="dropdown-item" onclick="switchView('history'); closeMainMenu();">
                             📜 История цен
+                        </button>
+                        <button type="button" class="dropdown-item" onclick="switchView('transactions'); closeMainMenu();">
+                            💼 История покупок/продаж
                         </button>
                         <button type="button" class="dropdown-item" onclick="switchView('categories'); closeMainMenu();">
                             🏷️ Категории и виды

@@ -2326,8 +2326,8 @@ header h1 {
     margin-left: 0;
     padding: 10px 16px;
     border-radius: 8px 8px 0 0;
-    border: none;
-    background: transparent;
+    border: 1px solid rgba(0, 0, 0, 0.15);
+    background: #ffffff;
     color: #7f8c8d;
     font-size: 1em;
     font-weight: 500;
