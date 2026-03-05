@@ -1693,10 +1693,19 @@ async function handleBuy(e) {
             
             // Закрываем модальное окно
             closeBuyModal();
+
+            // Если пользователь находится на вкладке истории покупок/продаж —
+            // сразу (параллельно) обновляем таблицу транзакций, чтобы новая
+            // покупка появилась без ожидания запросов к MOEX при обновлении портфеля.
+            const transactionsView = document.getElementById('transactions-view');
+            if (transactionsView && transactionsView.style.display !== 'none') {
+                // Не ждём завершения, чтобы не блокировать остальную логику
+                loadTransactions();
+            }
             
             // Показываем загрузку на строке портфеля
             setRowLoading(ticker, true);
-            // Обновляем только строку портфеля для данного тикера
+            // Обновляем только строку портфеля для данного тикера (может включать запросы к MOEX)
             await refreshSinglePortfolioPosition(ticker);
             
             // Логируем результат в консоль вместо всплывающего окна
@@ -3453,34 +3462,29 @@ function renderTransactions(transactions) {
 }
 
 /**
- * Обновление фильтра тикеров для транзакций
+ * Обновление фильтра тикеров для транзакций.
+ * Использует уже загруженный портфель (currentPortfolioData),
+ * чтобы не делать лишний запрос к API — как в истории цен.
  */
-async function updateTransactionTickerFilter() {
+function updateTransactionTickerFilter() {
     const tickerFilter = document.getElementById('trans-ticker-filter');
     if (!tickerFilter) return;
-    
-    try {
-        const response = await fetch('/api/portfolio');
-        const data = await response.json();
-        
-        if (data.success && data.portfolio) {
-            const uniqueTickers = [...new Set(data.portfolio.map(item => item.ticker))];
-            const currentValue = tickerFilter.value;
-            
-            tickerFilter.innerHTML = '<option value="">Все тикеры</option>';
-            
-            uniqueTickers.sort().forEach(ticker => {
-                const option = document.createElement('option');
-                option.value = ticker;
-                option.textContent = ticker;
-                tickerFilter.appendChild(option);
-            });
-            
-            tickerFilter.value = currentValue;
-        }
-    } catch (error) {
-        console.error('Ошибка обновления фильтра тикеров:', error);
-    }
+
+    const portfolio = currentPortfolioData && currentPortfolioData.portfolio;
+    if (!portfolio || portfolio.length === 0) return;
+
+    const currentValue = tickerFilter.value;
+    const uniqueTickers = [...new Set(portfolio.map(item => item.ticker))].sort();
+
+    tickerFilter.innerHTML = '<option value="">Все тикеры</option>';
+    uniqueTickers.forEach(ticker => {
+        const option = document.createElement('option');
+        option.value = ticker;
+        option.textContent = ticker;
+        tickerFilter.appendChild(option);
+    });
+
+    tickerFilter.value = currentValue;
 }
 
 /**

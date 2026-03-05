@@ -117,7 +117,16 @@
                         📈 Аналитика
                     </button>
                 </div>
-                <!-- Кнопка «сэндвич» с меню -->
+                <!-- Фильтры по виду и категории актива -->
+                <div class="asset-type-filter">
+                    <select id="portfolio-type-filter" class="change-period-select" title="Фильтр по типу актива">
+                        <option value="">Все виды</option>
+                    </select>
+                    <select id="portfolio-category-filter" class="change-period-select category-filter-select" title="Фильтр по категории" style="margin-left: 6px;">
+                        <option value="">Все категории</option>
+                    </select>
+                </div>
+                <!-- Кнопка «сэндвич» с меню справа от фильтров -->
                 <div class="menu-wrapper">
                     <button id="menu-toggle" class="btn btn-menu" type="button" onclick="toggleMainMenu()" title="Дополнительные разделы">
                         ☰
@@ -145,15 +154,6 @@
                             🔍 Полные данные по RU000A105SG2
                         </button>
                     </div>
-                </div>
-                <!-- Фильтры по виду и категории актива, справа от меню -->
-                <div class="asset-type-filter">
-                    <select id="portfolio-type-filter" class="change-period-select" title="Фильтр по типу актива">
-                        <option value="">Все виды</option>
-                    </select>
-                    <select id="portfolio-category-filter" class="change-period-select category-filter-select" title="Фильтр по категории" style="margin-left: 6px;">
-                        <option value="">Все категории</option>
-                    </select>
                 </div>
                 <div class="cash-balance-display">
                     <span class="cash-balance-label">Свободные средства:</span>
