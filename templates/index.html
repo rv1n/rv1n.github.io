@@ -146,6 +146,15 @@
                         </button>
                     </div>
                 </div>
+                <!-- Фильтры по виду и категории актива, справа от меню -->
+                <div class="asset-type-filter">
+                    <select id="portfolio-type-filter" class="change-period-select" title="Фильтр по типу актива">
+                        <option value="">Все виды</option>
+                    </select>
+                    <select id="portfolio-category-filter" class="change-period-select category-filter-select" title="Фильтр по категории" style="margin-left: 6px;">
+                        <option value="">Все категории</option>
+                    </select>
+                </div>
                 <div class="cash-balance-display">
                     <span class="cash-balance-label">Свободные средства:</span>
                     <span class="cash-balance-value" id="cash-balance">0 ₽</span>
@@ -165,11 +174,6 @@
                             <th data-sort-key="company_name" class="sortable">
                                 <div class="th-label-group">
                                     <span>Название актива</span>
-                                    <div>
-                                        <select id="portfolio-type-filter" class="change-period-select" title="Фильтр по типу актива" style="margin-left: 0; margin-top: 6px;">
-                                            <option value="">Все виды</option>
-                                        </select>
-                                    </div>
                                 </div>
                                 <button type="button" class="sort-btn" aria-label="Сортировать по названию компании">⇅</button>
                             </th>

@@ -399,19 +399,24 @@ async function refreshSinglePortfolioPosition(ticker) {
             summary: data.summary
         };
         
-        // Учитываем текущий фильтр по виду актива
-        const typeFilter = document.getElementById('portfolio-type-filter');
-        const selectedType = typeFilter ? typeFilter.value : '';
-        let filteredPortfolio = currentPortfolioData.portfolio;
-        if (selectedType) {
-            filteredPortfolio = filteredPortfolio.filter(item => (item.asset_type || '') === selectedType);
-        }
+        // Учитываем текущие фильтры по виду актива и категории
+        const { type: selectedType, category: selectedCategory } = getPortfolioFilters();
+        let filteredPortfolio = applyPortfolioFilters(currentPortfolioData.portfolio);
         
-        // Если после операции портфель (с учётом фильтра) пуст — показываем сообщение как раньше
+        // Если после операции портфель (с учётом фильтров) пуст — показываем сообщение как раньше
         if (filteredPortfolio.length === 0) {
-            const message = selectedType ? 
-                `Нет активов вида "${selectedType}"` : 
-                'Портфель пуст. Добавьте первую позицию.';
+            const hasType = !!selectedType;
+            const hasCategory = !!selectedCategory;
+            let message;
+            if (hasType && hasCategory) {
+                message = `Нет активов вида "${selectedType}" в категории "${selectedCategory}"`;
+            } else if (hasType) {
+                message = `Нет активов вида "${selectedType}"`;
+            } else if (hasCategory) {
+                message = `Нет активов категории "${selectedCategory}"`;
+            } else {
+                message = 'Портфель пуст. Добавьте первую позицию.';
+            }
             tbody.innerHTML = `<tr><td colspan="9" style="text-align: center; padding: 40px; color: #7f8c8d;">${message}</td></tr>`;
             previousPrices = {};
             
@@ -563,26 +568,95 @@ function checkPriceChanges(portfolio) {
 }
 
 /**
+ * Возвращает текущие значения фильтров по виду и категории.
+ */
+function getPortfolioFilters() {
+    const typeFilter = document.getElementById('portfolio-type-filter');
+    const categoryFilter = document.getElementById('portfolio-category-filter');
+    return {
+        type: typeFilter ? typeFilter.value : '',
+        category: categoryFilter ? categoryFilter.value : '',
+    };
+}
+
+/**
+ * Применяет фильтры по виду актива и категории к массиву позиций.
+ * @param {Array} portfolio
+ * @returns {Array}
+ */
+function applyPortfolioFilters(portfolio) {
+    if (!portfolio || !Array.isArray(portfolio)) return [];
+    const { type, category } = getPortfolioFilters();
+    let filtered = portfolio;
+    if (type) {
+        filtered = filtered.filter(item => (item.asset_type || '') === type);
+    }
+    if (category) {
+        filtered = filtered.filter(item => {
+            const catName = item.category || 'Без категории';
+            return catName === category;
+        });
+    }
+    return filtered;
+}
+
+/**
+ * Обновляет список категорий в фильтре по категориям на основе текущего портфеля.
+ * @param {Array} portfolio
+ */
+function updatePortfolioCategoryFilter(portfolio) {
+    const categoryFilter = document.getElementById('portfolio-category-filter');
+    if (!categoryFilter || !portfolio || !Array.isArray(portfolio)) return;
+    
+    const currentValue = categoryFilter.value;
+    const categoriesSet = new Set();
+    portfolio.forEach(item => {
+        const name = (item && (item.category || 'Без категории')) || 'Без категории';
+        categoriesSet.add(name);
+    });
+    
+    categoryFilter.innerHTML = '<option value=\"\">Все категории</option>';
+    Array.from(categoriesSet)
+        .sort((a, b) => a.localeCompare(b, 'ru'))
+        .forEach(cat => {
+            const option = document.createElement('option');
+            option.value = cat;
+            option.textContent = cat;
+            if (cat === currentValue) {
+                option.selected = true;
+            }
+            categoryFilter.appendChild(option);
+        });
+}
+
+/**
  * Отображение портфеля в таблице
  */
 function displayPortfolio(portfolio, summary) {
     const tbody = document.getElementById('portfolio-tbody');
     tbody.innerHTML = '';
     
-    // Получаем выбранный фильтр по виду актива
-    const typeFilter = document.getElementById('portfolio-type-filter');
-    const selectedType = typeFilter ? typeFilter.value : '';
+    // Обновляем фильтр по категориям на основе текущего портфеля
+    updatePortfolioCategoryFilter(portfolio);
     
-    // Фильтруем портфель по виду актива (asset_type)
-    let filteredPortfolio = portfolio;
-    if (selectedType) {
-        filteredPortfolio = portfolio.filter(item => (item.asset_type || '') === selectedType);
-    }
+    const { type: selectedType, category: selectedCategory } = getPortfolioFilters();
+    
+    // Фильтруем портфель по виду актива и категории
+    let filteredPortfolio = applyPortfolioFilters(portfolio);
     
     if (filteredPortfolio.length === 0) {
-        const message = selectedType ? 
-            `Нет активов вида "${selectedType}"` : 
-            'Портфель пуст. Добавьте первую позицию.';
+        const hasType = !!selectedType;
+        const hasCategory = !!selectedCategory;
+        let message;
+        if (hasType && hasCategory) {
+            message = `Нет активов вида "${selectedType}" в категории "${selectedCategory}"`;
+        } else if (hasType) {
+            message = `Нет активов вида "${selectedType}"`;
+        } else if (hasCategory) {
+            message = `Нет активов категории "${selectedCategory}"`;
+        } else {
+            message = 'Портфель пуст. Добавьте первую позицию.';
+        }
         tbody.innerHTML = `<tr><td colspan="9" style="text-align: center; padding: 40px; color: #7f8c8d;">${message}</td></tr>`;
         if (portfolio.length === 0) {
             previousPrices = {}; // Очищаем сохраненные цены только если портфель действительно пуст
@@ -3270,6 +3344,15 @@ document.addEventListener('DOMContentLoaded', function() {
             refreshAnalyticsCharts();
         });
     }
+    const portfolioCategoryFilter = document.getElementById('portfolio-category-filter');
+    if (portfolioCategoryFilter) {
+        portfolioCategoryFilter.addEventListener('change', function() {
+            if (currentPortfolioData) {
+                displayPortfolio(currentPortfolioData.portfolio, currentPortfolioData.summary);
+            }
+            refreshAnalyticsCharts();
+        });
+    }
     _setupPieChartTooltip();
 });
 
@@ -5274,10 +5357,8 @@ const ANALYTICS_LAYOUT_KEY = 'analyticsLayout';
  */
 function getAnalyticsPortfolio() {
     if (!currentPortfolioData || !currentPortfolioData.portfolio) return [];
-    const typeFilter = document.getElementById('portfolio-type-filter');
-    const selectedType = typeFilter ? typeFilter.value : '';
-    if (!selectedType) return currentPortfolioData.portfolio;
-    return currentPortfolioData.portfolio.filter(item => (item.asset_type || '') === selectedType);
+    // Используем те же фильтры, что и в таблице портфеля (вид + категория)
+    return applyPortfolioFilters(currentPortfolioData.portfolio);
 }
 
 /**
@@ -5297,8 +5378,11 @@ function refreshAnalyticsCharts() {
  * Обновляет лейбл активного фильтра в шапке аналитики.
  */
 function _updateAnalyticsFilterLabel() {
-    const typeFilter = document.getElementById('portfolio-type-filter');
-    const selectedType = typeFilter ? typeFilter.value : '';
+    const { type: selectedType, category: selectedCategory } = getPortfolioFilters();
+    const labelTextParts = [];
+    if (selectedType) labelTextParts.push(selectedType);
+    if (selectedCategory) labelTextParts.push(selectedCategory);
+    const labelText = labelTextParts.join(' / ');
     const ids = [
         'analytics-filter-label-asset-type',
         'analytics-filter-label-category',
@@ -5307,8 +5391,8 @@ function _updateAnalyticsFilterLabel() {
     ids.forEach(id => {
         const label = document.getElementById(id);
         if (!label) return;
-        if (selectedType) {
-            label.textContent = selectedType;
+        if (labelText) {
+            label.textContent = labelText;
             label.setAttribute('data-type', selectedType);
             label.style.display = 'inline-block';
         } else {

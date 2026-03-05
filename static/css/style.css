@@ -187,8 +187,8 @@ header h1 {
 .btn-menu {
     background: transparent;
     border: none;
-    padding: 8px 10px;
-    font-size: 1.4em;
+    padding: 4px 6px;
+    font-size: 1.1em;
     cursor: pointer;
     color: #34495e;
     border-radius: 6px;
@@ -1416,8 +1416,11 @@ header h1 {
 }
 
 .view-controls .menu-wrapper {
+    display: inline-flex;
+    align-items: center;
     margin-left: 0;
-    margin-right: auto;
+    margin-right: 0;
+    flex: 0 0 auto;
 }
 
 /* Отображение свободных средств */
@@ -2310,6 +2313,33 @@ header h1 {
 .change-period-select:focus {
     outline: none;
     border-color: rgba(255, 255, 255, 0.9);
+}
+
+/* Фильтр по виду актива рядом с вкладками */
+.asset-type-filter {
+    display: inline-flex;
+    align-items: center;
+    margin-left: 12px;
+}
+
+.asset-type-filter .change-period-select {
+    margin-left: 0;
+    padding: 10px 16px;
+    border-radius: 8px 8px 0 0;
+    border: none;
+    background: transparent;
+    color: #7f8c8d;
+    font-size: 1em;
+    font-weight: 500;
+}
+
+.asset-type-filter .change-period-select:focus {
+    outline: none;
+    background: #f8f9fa;
+}
+
+.asset-type-filter .category-filter-select {
+    margin-left: 6px;
 }
 
 .portfolio-table td {
