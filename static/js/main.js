@@ -1682,10 +1682,11 @@ async function handleBuy(e) {
                 return;
             }
         
-            // Обновляем баланс из ответа сервера
+            // Обновляем баланс из ответа сервера в сохранённой сводке.
+            // Отдельные функции отображения (displayPortfolio / refreshSinglePortfolioPosition)
+            // затем пересчитают и отрисуют сводку с учётом активных фильтров.
             if (transData.cash_balance !== undefined && currentPortfolioData) {
                 currentPortfolioData.summary.cash_balance = transData.cash_balance;
-                updateSummary(currentPortfolioData.summary);
             }
             
             // Портфель уже пересчитывается на сервере (recalculate_portfolio_for_ticker),
