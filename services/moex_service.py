@@ -139,8 +139,10 @@ class MOEXService:
                 continue
 
             price_val = None
-            # Приоритет: LAST -> MARKETPRICE -> CLOSEPRICE -> WAPRICE
-            for i in (last_idx, mp_idx, close_idx, wap_idx):
+            # Для shares: MARKETPRICE = текущая рыночная цена (актуально для ETF), затем LAST
+            # Для bonds порядок не меняем (используется last_idx и т.д.)
+            price_order = (mp_idx, last_idx, close_idx, wap_idx) if instrument_type == 'STOCK' else (last_idx, mp_idx, close_idx, wap_idx)
+            for i in price_order:
                 if i is not None and i < len(row):
                     val = row[i]
                     if val is not None:
@@ -352,32 +354,45 @@ class MOEXService:
                 marketdata_dict = securities_dict.copy()
             
             # Получаем цену (приоритет marketdata, затем securities)
-            # Если decimals > 2, предпочитаем LAST (более точная цена), иначе WAPRICE
-            # Это нужно, потому что WAPRICE может быть округлен до 2 знаков, даже если decimals > 2
-            if decimals is not None and decimals > 2:
-                # Для активов с высокой точностью (3+ знака) используем LAST в приоритете
+            # Для рынка shares (акции, ETF): MARKETPRICE = текущая рыночная цена, LAST = последняя сделка.
+            # У ETF при редких сделках LAST может быть с прошлой сессии — предпочитаем MARKETPRICE для актуальности.
+            # Для облигаций и прочих рынков оставляем прежний приоритет (LAST / WAPRICE).
+            is_shares = used_market and used_market[1] == 'shares'
+            if is_shares:
                 last_price = (
-                    marketdata_dict.get('LAST') or 
-                    marketdata_dict.get('WAPRICE') or     # Средневзвешенная цена
-                    marketdata_dict.get('MARKETPRICE') or  # Рыночная цена (для ETF когда LAST null)
-                    marketdata_dict.get('CLOSEPRICE') or  # Цена закрытия
+                    marketdata_dict.get('MARKETPRICE') or  # Текущая рыночная цена (актуально для ETF)
+                    marketdata_dict.get('LAST') or
+                    marketdata_dict.get('WAPRICE') or
+                    marketdata_dict.get('CLOSEPRICE') or
                     securities_dict.get('LAST') or
-                    securities_dict.get('PREVPRICE') or   # Предыдущая цена закрытия
-                    securities_dict.get('PREVLEGALCLOSEPRICE') or  # Предыдущая официальная цена закрытия
+                    securities_dict.get('PREVPRICE') or
+                    securities_dict.get('PREVLEGALCLOSEPRICE') or
+                    securities_dict.get('PRICE') or
+                    securities_dict.get('WAPRICE') or
+                    securities_dict.get('CLOSE')
+                )
+            elif decimals is not None and decimals > 2:
+                last_price = (
+                    marketdata_dict.get('LAST') or
+                    marketdata_dict.get('WAPRICE') or
+                    marketdata_dict.get('MARKETPRICE') or
+                    marketdata_dict.get('CLOSEPRICE') or
+                    securities_dict.get('LAST') or
+                    securities_dict.get('PREVPRICE') or
+                    securities_dict.get('PREVLEGALCLOSEPRICE') or
                     securities_dict.get('PRICE') or
                     securities_dict.get('WAPRICE') or
                     securities_dict.get('CLOSE')
                 )
             else:
-                # Для активов с 2 знаками или меньше используем WAPRICE (средневзвешенная цена)
                 last_price = (
-                    marketdata_dict.get('WAPRICE') or     # Средневзвешенная цена (предпочтительнее для точности)
-                    marketdata_dict.get('LAST') or 
-                    marketdata_dict.get('MARKETPRICE') or  # Рыночная цена (для ETF когда LAST null)
-                    marketdata_dict.get('CLOSEPRICE') or  # Цена закрытия
+                    marketdata_dict.get('WAPRICE') or
+                    marketdata_dict.get('LAST') or
+                    marketdata_dict.get('MARKETPRICE') or
+                    marketdata_dict.get('CLOSEPRICE') or
                     securities_dict.get('LAST') or
-                    securities_dict.get('PREVPRICE') or   # Предыдущая цена закрытия
-                    securities_dict.get('PREVLEGALCLOSEPRICE') or  # Предыдущая официальная цена закрытия
+                    securities_dict.get('PREVPRICE') or
+                    securities_dict.get('PREVLEGALCLOSEPRICE') or
                     securities_dict.get('PRICE') or
                     securities_dict.get('WAPRICE') or
                     securities_dict.get('CLOSE')
