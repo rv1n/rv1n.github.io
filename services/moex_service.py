@@ -139,9 +139,9 @@ class MOEXService:
                 continue
 
             price_val = None
-            # Для shares: MARKETPRICE = текущая рыночная цена (актуально для ETF), затем LAST
-            # Для bonds порядок не меняем (используется last_idx и т.д.)
-            price_order = (mp_idx, last_idx, close_idx, wap_idx) if instrument_type == 'STOCK' else (last_idx, mp_idx, close_idx, wap_idx)
+            # Для shares: LAST = цена последней сделки (основная), затем MARKETPRICE и остальные
+            # Для bonds: LAST, MARKETPRICE, CLOSEPRICE, WAPRICE
+            price_order = (last_idx, mp_idx, close_idx, wap_idx)
             for i in price_order:
                 if i is not None and i < len(row):
                     val = row[i]
@@ -353,29 +353,18 @@ class MOEXService:
                 # Используем данные из securities, если marketdata пустой
                 marketdata_dict = securities_dict.copy()
             
-            # Получаем цену (приоритет marketdata, затем securities)
-            # Для рынка shares (акции, ETF): MARKETPRICE = текущая рыночная цена, LAST = последняя сделка.
-            # У ETF при редких сделках LAST может быть с прошлой сессии — предпочитаем MARKETPRICE для актуальности.
-            # Для облигаций и прочих рынков оставляем прежний приоритет (LAST / WAPRICE).
+            # Получаем цену (приоритет marketdata, затем securities).
+            # LAST (цена последней сделки) — основная для акций, фондов (ETF, биржевые ПИФы) и облигаций.
+            # - shares (акции и фонды): LAST, затем MARKETPRICE, WAPRICE, CLOSEPRICE.
+            # - bonds: LAST (если пустой — подставлен из marketdata_yields выше), затем WAPRICE и др.
+            # - currency/selt, indices: LAST, WAPRICE, ...; fallback на securities.
+            # - индексы (iNAV): отдельный API, CURRENTVALUE/LASTVALUE.
             is_shares = used_market and used_market[1] == 'shares'
             if is_shares:
                 last_price = (
-                    marketdata_dict.get('MARKETPRICE') or  # Текущая рыночная цена (актуально для ETF)
-                    marketdata_dict.get('LAST') or
-                    marketdata_dict.get('WAPRICE') or
-                    marketdata_dict.get('CLOSEPRICE') or
-                    securities_dict.get('LAST') or
-                    securities_dict.get('PREVPRICE') or
-                    securities_dict.get('PREVLEGALCLOSEPRICE') or
-                    securities_dict.get('PRICE') or
-                    securities_dict.get('WAPRICE') or
-                    securities_dict.get('CLOSE')
-                )
-            elif decimals is not None and decimals > 2:
-                last_price = (
-                    marketdata_dict.get('LAST') or
-                    marketdata_dict.get('WAPRICE') or
+                    marketdata_dict.get('LAST') or  # Цена последней сделки — акции и фонды (ETF, ПИФ)
                     marketdata_dict.get('MARKETPRICE') or
+                    marketdata_dict.get('WAPRICE') or
                     marketdata_dict.get('CLOSEPRICE') or
                     securities_dict.get('LAST') or
                     securities_dict.get('PREVPRICE') or
@@ -385,9 +374,10 @@ class MOEXService:
                     securities_dict.get('CLOSE')
                 )
             else:
+                # Облигации и прочие: LAST (цена последней сделки) — основная, затем WAPRICE и др.
                 last_price = (
-                    marketdata_dict.get('WAPRICE') or
                     marketdata_dict.get('LAST') or
+                    marketdata_dict.get('WAPRICE') or
                     marketdata_dict.get('MARKETPRICE') or
                     marketdata_dict.get('CLOSEPRICE') or
                     securities_dict.get('LAST') or
