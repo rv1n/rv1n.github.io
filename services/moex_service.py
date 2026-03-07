@@ -183,65 +183,67 @@ class MOEXService:
             return cached_data
         
         # Универсальный подход: пробуем разные рынки, если первый не дал результата
-        # Список рынков для проверки: shares, bonds, currency/selt (драгоценные металлы), currency/indices (валютные индексы)
+        # Порядок: shares, bonds, selt, indices. Если данные пришли с currency/indices (индекс),
+        # дополнительно проверяем stock/shares — там может торговаться ETF с тем же тикером;
+        # при наличии данных с shares берём их (цена ETF), чтобы не записывать индекс вместо цены бумаги.
         markets_to_try = []
-        
         if instrument_type == 'BOND':
             markets_to_try.append(('stock', 'bonds'))
         else:
             markets_to_try.append(('stock', 'shares'))
-        
-        # Добавляем альтернативные рынки для поиска
         markets_to_try.extend([
-            ('stock', 'shares'),  # Пробуем shares, если был BOND
-            ('stock', 'bonds'),  # Пробуем bonds, если был STOCK
-            ('currency', 'selt'),  # Драгоценные металлы (GOLD и т.д.)
-            ('currency', 'indices'),  # Валютные индексы (CNYM и т.д.)
+            ('stock', 'shares'),
+            ('stock', 'bonds'),
+            ('currency', 'selt'),
+            ('currency', 'indices'),
         ])
-        
-        # Убираем дубликаты, сохраняя порядок
         seen = set()
         unique_markets = []
         for market in markets_to_try:
             if market not in seen:
                 seen.add(market)
                 unique_markets.append(market)
-        
+
         data = None
         used_market = None
-        
-        # Пробуем каждый рынок, пока не найдем данные
+
         for engine, market in unique_markets:
             url = f"{self.BASE_URL}/engines/{engine}/markets/{market}/securities/{ticker}.json"
-            
-            # Параметры запроса: получаем данные о последней сделке
-            # Добавляем MARKETPRICE, CLOSEPRICE, WAPRICE для случаев, когда LAST null (ETF, драгоценные металлы)
-            # Добавляем DECIMALS для правильного форматирования цен
             params = {
                 'iss.meta': 'off',
                 'iss.json': 'extended',
                 'securities.columns': 'SECID,LAST,OPEN,CHANGE,LASTTOPREVPRICE,VALTODAY,PREVPRICE,PREVLEGALCLOSEPRICE,DECIMALS',
                 'marketdata.columns': 'LAST,OPEN,CHANGE,LASTTOPREVPRICE,VALTODAY,MARKETPRICE,CLOSEPRICE,WAPRICE'
             }
-            
-            # Для облигаций добавляем запрос marketdata_yields
             if market == 'bonds':
                 params['marketdata_yields.columns'] = 'SECID,PRICE,WAPRICE'
                 params['securities.columns'] = 'SECID,LAST,OPEN,CHANGE,LASTTOPREVPRICE,VALTODAY,FACEVALUE,CURRENCYID,FACEUNIT,DECIMALS'
-            
+
             data = self._make_request(url, params)
-            
-            # Проверяем, есть ли данные
             if data and len(data) >= 2:
                 data_dict = data[1]
-                # Проверяем, есть ли хотя бы securities или marketdata
                 if data_dict.get('securities') or data_dict.get('marketdata'):
                     used_market = (engine, market)
                     break
-        
+
+        # Универсально: если источник — currency/indices, пробуем взять цену с stock/shares (ETF)
+        if data and used_market == ('currency', 'indices'):
+            url_shares = f"{self.BASE_URL}/engines/stock/markets/shares/securities/{ticker}.json"
+            params_shares = {
+                'iss.meta': 'off',
+                'iss.json': 'extended',
+                'securities.columns': 'SECID,LAST,OPEN,CHANGE,LASTTOPREVPRICE,VALTODAY,PREVPRICE,PREVLEGALCLOSEPRICE,DECIMALS',
+                'marketdata.columns': 'LAST,OPEN,CHANGE,LASTTOPREVPRICE,VALTODAY,MARKETPRICE,CLOSEPRICE,WAPRICE'
+            }
+            data_shares = self._make_request(url_shares, params_shares)
+            if data_shares and len(data_shares) >= 2:
+                d = data_shares[1]
+                if d.get('securities') or d.get('marketdata'):
+                    data = data_shares
+                    used_market = ('stock', 'shares')
+
         if not data:
-            # Логируем только если это не стандартный рынок (чтобы не засорять логи)
-            if ticker in ['GOLD', 'CNYM'] or instrument_type not in ['STOCK', 'BOND']:
+            if instrument_type not in ['STOCK', 'BOND'] or ticker == 'GOLD':
                 print(f"[MOEXService] Не удалось получить данные для {ticker} ни на одном из рынков: {[f'{e}/{m}' for e, m in unique_markets]}")
             return None
         

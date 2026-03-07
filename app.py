@@ -862,14 +862,14 @@ def get_portfolio():
 
             if change_days and change_days > 0:
                 if change_days == 1:
-                    # День: предыдущая цена — последняя запись за сегодня (из кэша)
+                    # День: предыдущая цена — последняя запись за вчера (из кэша)
                     ticker_history = price_history_cache.get(item.ticker.upper(), {})
-                    latest_entry_today = ticker_history.get('today')
+                    latest_entry_yesterday = ticker_history.get('yesterday')
 
-                    if latest_entry_today:
-                        previous_price = latest_entry_today.price
+                    if latest_entry_yesterday:
+                        previous_price = latest_entry_yesterday.price
                     else:
-                        # Нет сегодняшней — любая последняя доступная запись
+                        # Нет вчерашней — любая последняя доступная запись до сегодня
                         any_previous = db_session.query(PriceHistory).filter(
                             PriceHistory.ticker == item.ticker
                         ).order_by(PriceHistory.logged_at.desc()).first()
@@ -891,12 +891,12 @@ def get_portfolio():
                         ).order_by(PriceHistory.logged_at.desc()).first()
                         previous_price = any_entry.price if any_entry else latest_price
             else:
-                # Без периода — дневное изменение (аналогично change_days == 1)
+                # Без периода — дневное изменение: берём цену за вчера (аналогично change_days == 1)
                 ticker_history = price_history_cache.get(item.ticker.upper(), {})
-                latest_entry_today = ticker_history.get('today')
+                latest_entry_yesterday = ticker_history.get('yesterday')
 
-                if latest_entry_today:
-                    previous_price = latest_entry_today.price
+                if latest_entry_yesterday:
+                    previous_price = latest_entry_yesterday.price
                 else:
                     any_previous = db_session.query(PriceHistory).filter(
                         PriceHistory.ticker == item.ticker

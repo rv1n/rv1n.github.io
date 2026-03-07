@@ -86,14 +86,13 @@ class PriceLogger:
             # Одна общая метка времени для всех записей текущего запуска
             log_time = datetime.now(self.moscow_tz)
 
-            # Готовим bulk-запросы к MOEX для акций и облигаций.
-            # Для ручного логирования (force=True) используем поштучные запросы,
-            # чтобы задействовать полную логику get_current_price для «особых» инструментов (CNYM, GOLD, LQDT и т.п.).
+            # Готовим bulk-запросы к MOEX только для облигаций.
+            # Для акций/ETF не используем bulk: поштучный get_current_price даёт единую логику
+            # (shares вместо indices для валютных ETF вроде CNYM) и для планировщика, и для ручного запуска.
             if not force:
-                stock_tickers = [t for t, info in unique_tickers.items() if info['instrument_type'] == 'STOCK']
                 bond_tickers = [t for t, info in unique_tickers.items() if info['instrument_type'] == 'BOND']
-                bulk_prices_stock = self.moex_service.get_bulk_prices(stock_tickers, 'STOCK') if stock_tickers else {}
                 bulk_prices_bond = self.moex_service.get_bulk_prices(bond_tickers, 'BOND') if bond_tickers else {}
+                bulk_prices_stock = {}  # акции/ETF — всегда через get_current_price
             else:
                 bulk_prices_stock = {}
                 bulk_prices_bond = {}
