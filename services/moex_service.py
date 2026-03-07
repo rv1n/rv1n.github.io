@@ -493,6 +493,38 @@ class MOEXService:
             traceback.print_exc()
             return None
     
+    def get_raw_market_securities(self, ticker: str, instrument_type: str = 'STOCK') -> Optional[Dict]:
+        """
+        Получить сырые блоки marketdata и securities из ISS для отображения во вкладках отладки.
+        Returns: { 'securities': [...], 'marketdata': [...], 'marketdata_yields': [...] or None }
+        """
+        ticker = ticker.upper().strip()
+        engine = 'stock'
+        market = 'bonds' if instrument_type == 'BOND' else 'shares'
+        url = f"{self.BASE_URL}/engines/{engine}/markets/{market}/securities/{ticker}.json"
+        params = {
+            'iss.meta': 'off',
+            'iss.json': 'extended',
+            'securities.columns': 'SECID,BOARDID,SHORTNAME,SECNAME,PREVPRICE,PREVLEGALCLOSEPRICE,STATUS,LOTSIZE,CURRENCYID,DECIMALS,MINSTEP,STEPPRICE,LISTLEVEL,PREVDATE',
+            'marketdata.columns': 'SECID,BOARDID,LAST,OPEN,HIGH,LOW,CHANGE,LASTCHANGEPRC,VALUE,MARKETPRICE,CLOSEPRICE,WAPRICE,VALTODAY,VOLTODAY,LASTTOPREVPRICE'
+        }
+        if market == 'bonds':
+            params['securities.columns'] = 'SECID,BOARDID,SHORTNAME,SECNAME,PREVPRICE,PREVLEGALCLOSEPRICE,FACEVALUE,CURRENCYID,FACEUNIT,DECIMALS,LOTSIZE,MATDATE'
+            params['marketdata_yields.columns'] = 'SECID,BOARDID,PRICE,WAPRICE,YIELD,ACCRUEDINT'
+        data = self._make_request(url, params)
+        if not data or len(data) < 2:
+            return None
+        data_dict = data[1]
+        result = {
+            'securities': data_dict.get('securities', []),
+            'marketdata': data_dict.get('marketdata', [])
+        }
+        if market == 'bonds':
+            result['marketdata_yields'] = data_dict.get('marketdata_yields', [])
+        else:
+            result['marketdata_yields'] = None
+        return result
+    
     def get_security_info(self, ticker: str, instrument_type: str = 'STOCK') -> Optional[Dict]:
         """
         Получить общую информацию о ценной бумаге
@@ -663,6 +695,34 @@ class MOEXService:
             traceback.print_exc()
         
         return None
+
+    def get_raw_index_marketdata(self, secid: str) -> Optional[Dict]:
+        """
+        Сырые данные индекса (marketdata) с ISS для отладки (например LQDTM iNAV).
+        Возвращает marketdata как список dict (нормализовано для отображения в таблице).
+        """
+        try:
+            url = f"{self.BASE_URL}/engines/stock/markets/index/boards/SNDX/securities/{secid}.json"
+            data = self._make_request(url, {'iss.meta': 'off'})
+            if not data:
+                return None
+            if isinstance(data, list) and len(data) >= 2:
+                data_dict = data[1]
+            else:
+                data_dict = data if isinstance(data, dict) else {}
+            md = data_dict.get('marketdata')
+            if not md:
+                return None
+            # ISS без extended возвращает { 'columns': [...], 'data': [[...], ...] }
+            if isinstance(md, dict) and 'columns' in md and 'data' in md:
+                cols = md['columns']
+                rows = md.get('data', [])
+                out = [dict(zip(cols, row)) for row in rows]
+                return {'marketdata': out}
+            return {'marketdata': md if isinstance(md, list) else []}
+        except Exception as e:
+            print(f"Ошибка получения сырых данных индекса {secid}: {e}")
+            return None
 
     def _get_index_current(self, secid: str) -> Optional[Dict]:
         """

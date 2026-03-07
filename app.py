@@ -1402,6 +1402,44 @@ def get_ticker_info(ticker):
         }), 500
 
 
+@app.route('/api/ticker-raw/<ticker>', methods=['GET'])
+def get_ticker_raw(ticker):
+    """
+    Сырые блоки MARKETDATA и SECURITIES из MOEX ISS для отображения во вкладках LQDT/CNYM.
+    Для LQDT дополнительно возвращает inav_marketdata (LQDTM).
+    """
+    try:
+        ticker = ticker.upper().strip()
+        if not ticker:
+            return jsonify({'success': False, 'error': 'Тикер не указан'}), 400
+        instrument_type = request.args.get('instrument_type', 'STOCK')
+        if instrument_type not in ('STOCK', 'BOND'):
+            instrument_type = 'STOCK'
+        raw = moex_service.get_raw_market_securities(ticker, instrument_type)
+        if not raw:
+            return jsonify({
+                'success': False,
+                'error': 'Нет данных по тикеру',
+                'ticker': ticker
+            }), 404
+        result = {
+            'success': True,
+            'ticker': ticker,
+            'securities': raw.get('securities', []),
+            'marketdata': raw.get('marketdata', []),
+            'marketdata_yields': raw.get('marketdata_yields')
+        }
+        if ticker == 'LQDT':
+            inav = moex_service.get_raw_index_marketdata('LQDTM')
+            if inav:
+                result['inav_marketdata'] = inav.get('marketdata', [])
+            else:
+                result['inav_marketdata'] = []
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @app.route('/api/server-status', methods=['GET'])
 def get_server_status():
     """

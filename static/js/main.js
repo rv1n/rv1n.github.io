@@ -101,7 +101,7 @@ document.addEventListener('DOMContentLoaded', async function() {
  */
 function setupPortfolioTableHeight() {
     const updateHeight = () => {
-        const wrappers = document.querySelectorAll('.transactions-content, .categories-content, .price-history-content, #chart-view, #server-view, #ticker-sber-view, #ticker-ru-view');
+        const wrappers = document.querySelectorAll('.transactions-content, .categories-content, .price-history-content, #chart-view, #server-view, #ticker-sber-view, #ticker-ru-view, #ticker-cnym-view, #ticker-lqdt-view');
         if (!wrappers.length) return;
 
         const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
@@ -2122,6 +2122,8 @@ function switchView(viewType) {
     const serverView = document.getElementById('server-view');
     const tickerSberView = document.getElementById('ticker-sber-view');
     const tickerRuView = document.getElementById('ticker-ru-view');
+    const tickerCnymView = document.getElementById('ticker-cnym-view');
+    const tickerLqdtView = document.getElementById('ticker-lqdt-view');
     const btnTable = document.getElementById('btn-table-view');
     const btnChart = document.getElementById('btn-chart-view');
     const btnHistory = document.getElementById('btn-history-view');
@@ -2137,6 +2139,8 @@ function switchView(viewType) {
         if (serverView) serverView.style.display = 'none';
         if (tickerSberView) tickerSberView.style.display = 'none';
         if (tickerRuView) tickerRuView.style.display = 'none';
+        if (tickerCnymView) tickerCnymView.style.display = 'none';
+        if (tickerLqdtView) tickerLqdtView.style.display = 'none';
         if (btnTable) btnTable.classList.add('active');
         if (btnChart) btnChart.classList.remove('active');
         if (btnHistory) btnHistory.classList.remove('active');
@@ -2156,6 +2160,8 @@ function switchView(viewType) {
         if (serverView) serverView.style.display = 'none';
         if (tickerSberView) tickerSberView.style.display = 'none';
         if (tickerRuView) tickerRuView.style.display = 'none';
+        if (tickerCnymView) tickerCnymView.style.display = 'none';
+        if (tickerLqdtView) tickerLqdtView.style.display = 'none';
         if (btnTable) btnTable.classList.remove('active');
         if (btnChart) btnChart.classList.add('active');
         if (btnHistory) btnHistory.classList.remove('active');
@@ -2195,6 +2201,8 @@ function switchView(viewType) {
         if (serverView) serverView.style.display = 'none';
         if (tickerSberView) tickerSberView.style.display = 'none';
         if (tickerRuView) tickerRuView.style.display = 'none';
+        if (tickerCnymView) tickerCnymView.style.display = 'none';
+        if (tickerLqdtView) tickerLqdtView.style.display = 'none';
         if (btnTable) btnTable.classList.remove('active');
         if (btnChart) btnChart.classList.remove('active');
         if (btnHistory) btnHistory.classList.add('active');
@@ -2213,6 +2221,8 @@ function switchView(viewType) {
         if (serverView) serverView.style.display = 'none';
         if (tickerSberView) tickerSberView.style.display = 'none';
         if (tickerRuView) tickerRuView.style.display = 'none';
+        if (tickerCnymView) tickerCnymView.style.display = 'none';
+        if (tickerLqdtView) tickerLqdtView.style.display = 'none';
         if (btnTable) btnTable.classList.remove('active');
         if (btnChart) btnChart.classList.remove('active');
         if (btnHistory) btnHistory.classList.remove('active');
@@ -2229,6 +2239,8 @@ function switchView(viewType) {
         if (serverView) serverView.style.display = 'none';
         if (tickerSberView) tickerSberView.style.display = 'none';
         if (tickerRuView) tickerRuView.style.display = 'none';
+        if (tickerCnymView) tickerCnymView.style.display = 'none';
+        if (tickerLqdtView) tickerLqdtView.style.display = 'none';
         if (btnTable) btnTable.classList.remove('active');
         if (btnChart) btnChart.classList.remove('active');
         if (btnHistory) btnHistory.classList.remove('active');
@@ -2261,6 +2273,8 @@ function switchView(viewType) {
         if (serverView) serverView.style.display = 'flex';
         if (tickerSberView) tickerSberView.style.display = 'none';
         if (tickerRuView) tickerRuView.style.display = 'none';
+        if (tickerCnymView) tickerCnymView.style.display = 'none';
+        if (tickerLqdtView) tickerLqdtView.style.display = 'none';
 
         if (btnTable) btnTable.classList.remove('active');
         if (btnChart) btnChart.classList.remove('active');
@@ -2279,6 +2293,8 @@ function switchView(viewType) {
         if (categoriesView) categoriesView.style.display = 'none';
         if (serverView) serverView.style.display = 'none';
         if (tickerRuView) tickerRuView.style.display = 'none';
+        if (tickerCnymView) tickerCnymView.style.display = 'none';
+        if (tickerLqdtView) tickerLqdtView.style.display = 'none';
         if (tickerSberView) tickerSberView.style.display = 'block';
 
         if (btnTable) btnTable.classList.remove('active');
@@ -2296,6 +2312,8 @@ function switchView(viewType) {
         if (categoriesView) categoriesView.style.display = 'none';
         if (serverView) serverView.style.display = 'none';
         if (tickerSberView) tickerSberView.style.display = 'none';
+        if (tickerCnymView) tickerCnymView.style.display = 'none';
+        if (tickerLqdtView) tickerLqdtView.style.display = 'none';
         if (tickerRuView) tickerRuView.style.display = 'block';
 
         if (btnTable) btnTable.classList.remove('active');
@@ -2305,6 +2323,44 @@ function switchView(viewType) {
         if (btnCategories) btnCategories.classList.remove('active');
 
         loadTickerDebug('RU000A105SG2', 'ticker-ru-content', 'BOND');
+    } else if (viewType === 'ticker-cnym') {
+        tableView.style.display = 'none';
+        chartView.style.display = 'none';
+        historyView.style.display = 'none';
+        transactionsView.style.display = 'none';
+        if (categoriesView) categoriesView.style.display = 'none';
+        if (serverView) serverView.style.display = 'none';
+        if (tickerSberView) tickerSberView.style.display = 'none';
+        if (tickerRuView) tickerRuView.style.display = 'none';
+        if (tickerLqdtView) tickerLqdtView.style.display = 'none';
+        if (tickerCnymView) tickerCnymView.style.display = 'block';
+
+        if (btnTable) btnTable.classList.remove('active');
+        if (btnChart) btnChart.classList.remove('active');
+        if (btnHistory) btnHistory.classList.remove('active');
+        if (btnTransactions) btnTransactions.classList.remove('active');
+        if (btnCategories) btnCategories.classList.remove('active');
+
+        loadTickerDebug('CNYM', 'ticker-cnym-content', 'STOCK');
+    } else if (viewType === 'ticker-lqdt') {
+        tableView.style.display = 'none';
+        chartView.style.display = 'none';
+        historyView.style.display = 'none';
+        transactionsView.style.display = 'none';
+        if (categoriesView) categoriesView.style.display = 'none';
+        if (serverView) serverView.style.display = 'none';
+        if (tickerSberView) tickerSberView.style.display = 'none';
+        if (tickerRuView) tickerRuView.style.display = 'none';
+        if (tickerCnymView) tickerCnymView.style.display = 'none';
+        if (tickerLqdtView) tickerLqdtView.style.display = 'block';
+
+        if (btnTable) btnTable.classList.remove('active');
+        if (btnChart) btnChart.classList.remove('active');
+        if (btnHistory) btnHistory.classList.remove('active');
+        if (btnTransactions) btnTransactions.classList.remove('active');
+        if (btnCategories) btnCategories.classList.remove('active');
+
+        loadTickerDebug('LQDT', 'ticker-lqdt-content', 'STOCK');
     }
 
     // После переключения представления пересчитываем высоту прокручиваемых блоков,
@@ -2313,26 +2369,92 @@ function switchView(viewType) {
 }
 
 /**
- * Загрузка и отображение полных данных по конкретному тикеру
+ * Преобразовать массив объектов (MOEX securities/marketdata) в HTML-таблицу
+ */
+function renderRawTable(arr, title) {
+    if (!arr || !Array.isArray(arr) || arr.length === 0) {
+        return `<div class="ticker-raw-section"><h4>${title}</h4><p>Нет данных</p></div>`;
+    }
+    const first = arr[0];
+    const keys = typeof first === 'object' && first !== null ? Object.keys(first) : [];
+    let html = `<div class="ticker-raw-section"><h4>${title}</h4><div class="ticker-raw-table-wrap"><table class="ticker-raw-table"><thead><tr>`;
+    keys.forEach(k => { html += `<th>${escapeHtml(String(k))}</th>`; });
+    html += '</tr></thead><tbody>';
+    arr.forEach(row => {
+        html += '<tr>';
+        keys.forEach(k => {
+            const v = row && row[k];
+            const str = v === null || v === undefined ? '' : String(v);
+            html += `<td>${escapeHtml(str)}</td>`;
+        });
+        html += '</tr>';
+    });
+    html += '</tbody></table></div></div>';
+    return html;
+}
+
+function escapeHtml(s) {
+    const div = document.createElement('div');
+    div.textContent = s;
+    return div.innerHTML;
+}
+
+/**
+ * Загрузка и отображение полных данных по конкретному тикеру.
+ * Для CNYM и LQDT дополнительно запрашивает сырые MARKETDATA и SECURITIES и выводит их таблицами.
  */
 async function loadTickerDebug(ticker, containerId, instrumentType) {
     const container = document.getElementById(containerId);
     if (!container) return;
 
+    const isExtended = (containerId === 'ticker-cnym-content' || containerId === 'ticker-lqdt-content');
     container.textContent = `Загрузка данных по ${ticker}...`;
 
     try {
         const params = instrumentType ? `?instrument_type=${encodeURIComponent(instrumentType)}` : '';
-        const response = await fetch(`/api/ticker-info/${encodeURIComponent(ticker)}${params}`);
-        const data = await response.json();
+        if (isExtended) {
+            const [infoRes, rawRes] = await Promise.all([
+                fetch(`/api/ticker-info/${encodeURIComponent(ticker)}${params}`),
+                fetch(`/api/ticker-raw/${encodeURIComponent(ticker)}${params}`)
+            ]);
+            const info = await infoRes.json();
+            const raw = await rawRes.json();
 
-        if (!data || data.success === false) {
-            container.textContent = `Ошибка загрузки данных по ${ticker}: ${data && data.error ? data.error : 'нет данных'}`;
-            return;
+            if (!info || info.success === false) {
+                container.textContent = `Ошибка: ${info && info.error ? info.error : 'нет данных'}`;
+                return;
+            }
+
+            let html = '<div class="ticker-debug-extended">';
+            html += '<div class="ticker-raw-section"><h4>Сводка (ticker-info)</h4>';
+            html += '<pre class="ticker-raw-content">' + escapeHtml(JSON.stringify(info, null, 2)) + '</pre></div>';
+
+            if (raw && raw.success) {
+                html += renderRawTable(raw.securities, 'SECURITIES');
+                html += renderRawTable(raw.marketdata, 'MARKETDATA');
+                if (raw.marketdata_yields && raw.marketdata_yields.length) {
+                    html += renderRawTable(raw.marketdata_yields, 'MARKETDATA_YIELDS');
+                }
+                if (raw.inav_marketdata && raw.inav_marketdata.length) {
+                    html += renderRawTable(raw.inav_marketdata, 'iNAV (LQDTM) MARKETDATA');
+                }
+            } else {
+                html += '<div class="ticker-raw-section"><h4>SECURITIES / MARKETDATA</h4><p>Не удалось загрузить сырые данные</p></div>';
+            }
+            html += '</div>';
+            container.innerHTML = html;
+        } else {
+            const response = await fetch(`/api/ticker-info/${encodeURIComponent(ticker)}${params}`);
+            const data = await response.json();
+
+            if (!data || data.success === false) {
+                container.textContent = `Ошибка загрузки данных по ${ticker}: ${data && data.error ? data.error : 'нет данных'}`;
+                return;
+            }
+
+            const prettyJson = JSON.stringify(data, null, 2);
+            container.innerHTML = `<pre class="ticker-raw-content">${escapeHtml(prettyJson)}</pre>`;
         }
-
-        const prettyJson = JSON.stringify(data, null, 2);
-        container.innerHTML = `<pre class="ticker-raw-content">${prettyJson}</pre>`;
     } catch (error) {
         console.error('Ошибка загрузки данных по тикеру:', error);
         container.textContent = `Ошибка загрузки данных по ${ticker}`;

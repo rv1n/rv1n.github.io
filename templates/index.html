@@ -153,6 +153,12 @@
                         <button type="button" class="dropdown-item" onclick="switchView('ticker-ru'); closeMainMenu();">
                             🔍 Полные данные по RU000A105SG2
                         </button>
+                        <button type="button" class="dropdown-item" onclick="switchView('ticker-cnym'); closeMainMenu();">
+                            🔍 Полные данные по CNYM
+                        </button>
+                        <button type="button" class="dropdown-item" onclick="switchView('ticker-lqdt'); closeMainMenu();">
+                            🔍 Полные данные по LQDT
+                        </button>
                     </div>
                 </div>
                 <div class="cash-balance-display">
@@ -500,6 +506,32 @@
                     </p>
                     <div id="ticker-ru-content" class="server-status-content">
                         Загрузка данных по RU000A105SG2...
+                    </div>
+                </div>
+            </div>
+
+            <!-- Полные данные по тикеру CNYM -->
+            <div id="ticker-cnym-view" class="portfolio-view" style="display: none;">
+                <div class="server-status-container">
+                    <h3>Полные данные по тикеру CNYM</h3>
+                    <p style="margin-top: 8px; color: #7f8c8d; font-size: 0.9em;">
+                        Здесь отображаются все данные, которые приложение получает по тикеру CNYM из MOEX API и базы.
+                    </p>
+                    <div id="ticker-cnym-content" class="server-status-content">
+                        Загрузка данных по CNYM...
+                    </div>
+                </div>
+            </div>
+
+            <!-- Полные данные по тикеру LQDT -->
+            <div id="ticker-lqdt-view" class="portfolio-view" style="display: none;">
+                <div class="server-status-container">
+                    <h3>Полные данные по тикеру LQDT</h3>
+                    <p style="margin-top: 8px; color: #7f8c8d; font-size: 0.9em;">
+                        Здесь отображаются все данные, которые приложение получает по тикеру LQDT из MOEX API и базы.
+                    </p>
+                    <div id="ticker-lqdt-content" class="server-status-content">
+                        Загрузка данных по LQDT...
                     </div>
                 </div>
             </div>

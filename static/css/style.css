@@ -524,6 +524,54 @@ header h1 {
     border-radius: 8px;
 }
 
+.ticker-debug-extended {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
+.ticker-raw-section {
+    margin-bottom: 8px;
+}
+
+.ticker-raw-section h4 {
+    margin: 0 0 10px 0;
+    font-size: 1.05em;
+    color: var(--color-text, #1e3a5f);
+}
+
+.ticker-raw-table-wrap {
+    overflow-x: auto;
+    max-height: 400px;
+    overflow-y: auto;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    background: #fff;
+}
+
+.ticker-raw-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85em;
+}
+
+.ticker-raw-table th,
+.ticker-raw-table td {
+    padding: 8px 12px;
+    text-align: left;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.ticker-raw-table th {
+    background: #f3f4f6;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.ticker-raw-table tbody tr:hover {
+    background: #f9fafb;
+}
+
 .summary-card {
     display: flex;
     flex-direction: column;
