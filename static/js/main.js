@@ -1233,7 +1233,8 @@ function updateSummary(summary) {
     
     if (totalPnlPercentEl) {
         const pnlPercent = summary.total_pnl_percent || 0;
-        totalPnlPercentEl.textContent = `${pnlPercent >= 0 ? '+' : ''}${formatPercent(Math.abs(pnlPercent), 2)}`;
+        const pnlSign = pnlPercent >= 0 ? '+' : '- ';
+        totalPnlPercentEl.textContent = `${pnlSign}${formatPercent(Math.abs(pnlPercent), 2)}`;
         totalPnlPercentEl.className = `summary-percent ${pnlPercent >= 0 ? 'profit' : 'loss'}`;
     }
     
@@ -1246,7 +1247,7 @@ function updateSummary(summary) {
     
     if (totalPriceChangePercentEl) {
         const rawPercent = summary.total_price_change_percent || 0;
-        const sign = priceChange >= 0 ? '+' : ''; // Процент подчиняем знаку рублёвого изменения
+        const sign = priceChange >= 0 ? '+' : '- '; // Пробел после минуса при убытке
         totalPriceChangePercentEl.textContent = `${sign}${formatPercent(Math.abs(rawPercent), 2)}`;
         totalPriceChangePercentEl.className = `summary-percent ${priceChange >= 0 ? 'profit' : 'loss'}`;
     }
