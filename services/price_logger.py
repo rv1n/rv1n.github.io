@@ -61,21 +61,21 @@ class PriceLogger:
                         'instrument_type': instrument_type
                     }
             
-            # Проверяем, были ли уже залогированы цены сегодня
+            # Проверяем, были ли уже залогированы цены сегодня.
             # Используем начало текущего дня по московскому времени
             now_moscow = datetime.now(self.moscow_tz)
             today_start = now_moscow.replace(hour=0, minute=0, second=0, microsecond=0)
             today_end = today_start + timedelta(days=1)
-            
+
             # Проверяем наличие записей за сегодня для всех тикеров
             existing_logs_today = db_session.query(PriceHistory).filter(
                 PriceHistory.logged_at >= today_start,
                 PriceHistory.logged_at < today_end
             ).all()
-            
+
             # Создаем множество тикеров, для которых уже есть записи сегодня
             tickers_logged_today = {log.ticker for log in existing_logs_today}
-            
+
             # Если для всех тикеров уже есть записи сегодня и не принудительное логирование, пропускаем
             if not force and tickers_logged_today.issuperset(unique_tickers.keys()):
                 print(f"[{datetime.now(self.moscow_tz)}] Цены уже залогированы сегодня для всех тикеров. Пропускаем дублирование.")
@@ -100,12 +100,14 @@ class PriceLogger:
             # Логируем цену для каждого уникального тикера
             for ticker, ticker_info in unique_tickers.items():
                 try:
-                    # Пропускаем, если для этого тикера уже есть запись сегодня (если не принудительное логирование)
+                    # В автоматическом режиме (force=False) пропускаем тикеры,
+                    # для которых уже есть запись сегодня — чтобы не перезаписывать историю.
+                    # В ручном режиме (force=True) наоборот хотим уметь обновлять сегодняшнюю цену.
                     if not force and ticker in tickers_logged_today:
                         skipped_count += 1
                         print(f"[{datetime.now(self.moscow_tz)}] Пропуск {ticker}: цена уже залогирована сегодня")
                         continue
-                    
+
                     company_name = ticker_info['company_name']
                     instrument_type = ticker_info['instrument_type']
                     
@@ -159,44 +161,41 @@ class PriceLogger:
                         price_change = 0
                         price_change_percent = 0
                     
-                    # Проверяем, нет ли уже записи для этого тикера в текущей минуте
-                    # Это предотвращает дублирование при одновременных вызовах
-                    current_minute_start = log_time.replace(second=0, microsecond=0)
-                    current_minute_end = current_minute_start.replace(second=59, microsecond=999999)
-                    
-                    existing_in_minute = db_session.query(PriceHistory).filter(
+                    # Ищем запись за сегодняшний день: хотим хранить одну запись в день (последнюю)
+                    existing_today = db_session.query(PriceHistory).filter(
                         PriceHistory.ticker == ticker,
-                        PriceHistory.logged_at >= current_minute_start,
-                        PriceHistory.logged_at <= current_minute_end
-                    ).first()
-                    
-                    # Даже при принудительном логировании (force=True) не создаем
-                    # несколько записей в одну и ту же минуту, чтобы избежать
-                    # визуальных дублей в истории цен.
-                    if existing_in_minute:
-                        skipped_count += 1
-                        print(f"[{log_time}] Пропуск {ticker}: запись уже существует в текущей минуте")
-                        continue
-                    
-                    # Создаем запись в истории
+                        PriceHistory.logged_at >= today_start,
+                        PriceHistory.logged_at < today_end
+                    ).order_by(PriceHistory.logged_at.desc()).first()
+
                     from models.portfolio import InstrumentType
                     instrument_type_enum = InstrumentType[used_instrument_type] if used_instrument_type in ['STOCK', 'BOND'] else InstrumentType.STOCK
-                    
-                    price_log = PriceHistory(
-                        ticker=ticker,
-                        company_name=company_name,
-                        price=current_price,
-                        change=round(price_change, 2),
-                        change_percent=round(price_change_percent, 2),
-                        volume=quote_data.get('volume', 0),
-                        instrument_type=instrument_type_enum,
-                        logged_at=log_time
-                    )
-                    
-                    db_session.add(price_log)
-                    logged_count += 1
-                    
-                    print(f"[{log_time}] Залогирована цена для {ticker}: {current_price} ₽ (изменение: {price_change:+.2f} ₽, {price_change_percent:+.2f}%)")
+                    if existing_today:
+                        # Обновляем существующую дневную запись (в истории остаётся только последняя цена за день)
+                        existing_today.company_name = company_name
+                        existing_today.price = current_price
+                        existing_today.change = round(price_change, 2)
+                        existing_today.change_percent = round(price_change_percent, 2)
+                        existing_today.volume = quote_data.get('volume', 0)
+                        existing_today.instrument_type = instrument_type_enum
+                        existing_today.logged_at = log_time
+                        logged_count += 1
+                        print(f"[{log_time}] Обновлена дневная запись для {ticker}: {current_price} ₽ (изменение: {price_change:+.2f} ₽, {price_change_percent:+.2f}%)")
+                    else:
+                        # Создаем новую запись в истории
+                        price_log = PriceHistory(
+                            ticker=ticker,
+                            company_name=company_name,
+                            price=current_price,
+                            change=round(price_change, 2),
+                            change_percent=round(price_change_percent, 2),
+                            volume=quote_data.get('volume', 0),
+                            instrument_type=instrument_type_enum,
+                            logged_at=log_time
+                        )
+                        db_session.add(price_log)
+                        logged_count += 1
+                        print(f"[{log_time}] Залогирована цена для {ticker}: {current_price} ₽ (изменение: {price_change:+.2f} ₽, {price_change_percent:+.2f}%)")
                     
                 except Exception as e:
                     print(f"[{log_time}] Ошибка логирования цены для {ticker}: {e}")
