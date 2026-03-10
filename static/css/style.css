@@ -161,6 +161,16 @@ header h1 {
     height: 50px;
 }
 
+.btn-header-icon-lg svg {
+    width: 48px;
+    height: 48px;
+}
+
+.btn-header-icon.is-loading {
+    opacity: 0.7;
+    cursor: wait;
+}
+
 .btn-header-icon svg {
     width: 18px;
     height: 18px;
@@ -170,6 +180,12 @@ header h1 {
     stroke-linecap: round;
     stroke-linejoin: round;
     flex-shrink: 0;
+}
+
+/* Увеличенная иконка внутри большой кнопки обновления */
+.btn-header-icon.btn-header-icon-lg svg {
+    width: 25px;
+    height: 25px;
 }
 
 .btn-header-icon:hover {
@@ -2313,7 +2329,7 @@ header h1 {
 }
 
 .portfolio-table th {
-    padding: 15px 10px;
+    padding: 15px 8px;
     text-align: center;
     font-weight: 600;
     font-size: 0.85em;
@@ -2397,7 +2413,7 @@ header h1 {
 }
 
 .portfolio-table td {
-    padding: 15px 10px;
+    padding: 15px 8px;
     border-bottom: 1px solid #e0e0e0;
     vertical-align: middle;
     white-space: nowrap;
@@ -2442,16 +2458,17 @@ header h1 {
 /* Ячейка с мини-графиком */
 .sparkline-cell {
     text-align: center;
-    padding: 10px 5px !important;
+    padding: 10px 6px !important;
     vertical-align: middle;
+    min-width: 140px;
 }
 
 .sparkline-container {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 80px;
-    height: 30px;
+    width: 140px;
+    height: 36px;
 }
 
 /* Ячейка с действиями - одна кнопка по центру в колонке */

@@ -251,7 +251,7 @@ function manualRefresh() {
     const refreshBtn = document.getElementById('refresh-btn');
     if (refreshBtn) {
         refreshBtn.disabled = true;
-        refreshBtn.textContent = '⏳';
+        refreshBtn.classList.add('is-loading');
     }
     
     Promise.all([
@@ -260,7 +260,7 @@ function manualRefresh() {
     ]).finally(() => {
         if (refreshBtn) {
             refreshBtn.disabled = false;
-            refreshBtn.textContent = '🔄';
+            refreshBtn.classList.remove('is-loading');
         }
         updateLastUpdateTime();
     });
@@ -779,12 +779,12 @@ async function renderSparkline(container, ticker, isBond = false) {
             return;
         }
         
-        // Ограничиваем до 8 дней (берем последние 8 дней)
-        const prices = dailyPrices.slice(-8);
+        // Ограничиваем до 15 дней (берем последние 15 дней)
+        const prices = dailyPrices.slice(-15);
         
         // Параметры графика
-        const width = 80;
-        const height = 30;
+        const width = 140;
+        const height = 36;
         const padding = 2;
         const graphWidth = width - padding * 2;
         const graphHeight = height - padding * 2;
