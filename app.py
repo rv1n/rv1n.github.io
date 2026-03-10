@@ -18,7 +18,7 @@ from services.price_logger import PriceLogger
 from services.currency_service import CurrencyService
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 import atexit
 import pytz
 import os
@@ -1476,6 +1476,20 @@ def get_server_status():
             # psutil не установлен — просто не возвращаем эти поля
             pass
 
+        # Дата окончания аренды хостинга из настроек
+        settings = db_session.query(Settings).filter(Settings.id == 1).first()
+        hosting_date_iso = None
+        hosting_days_left = None
+        if settings and settings.hosting_expiration_date:
+            hd = settings.hosting_expiration_date
+            try:
+                d = hd.date()
+            except AttributeError:
+                d = hd
+            if isinstance(d, date):
+                hosting_date_iso = d.isoformat()
+                hosting_days_left = (d - date.today()).days
+
         return jsonify({
             'success': True,
             'disk': {
@@ -1492,6 +1506,10 @@ def get_server_status():
             'system': {
                 'cpu_percent': cpu_percent,
                 'memory_percent': memory_percent
+            },
+            'hosting': {
+                'date': hosting_date_iso,
+                'days_left': hosting_days_left,
             }
         })
     except Exception as e:
@@ -2517,9 +2535,8 @@ def set_logging_time_setting():
         if not settings:
             settings = Settings(id=1, price_logging_hour=hour, price_logging_minute=minute)
             db_session.add(settings)
-        else:
-            settings.price_logging_hour = hour
-            settings.price_logging_minute = minute
+        settings.price_logging_hour = hour
+        settings.price_logging_minute = minute
         
         db_session.commit()
         
@@ -2539,6 +2556,53 @@ def set_logging_time_setting():
             'success': False,
             'error': str(e)
         }), 500
+
+
+@app.route('/api/settings/hosting-expiration', methods=['GET'])
+def get_hosting_expiration():
+    """
+    Получить дату окончания аренды хостинга.
+    """
+    try:
+        settings = db_session.query(Settings).filter(Settings.id == 1).first()
+        if not settings or not settings.hosting_expiration_date:
+            return jsonify({'success': True, 'date': None})
+        hd = settings.hosting_expiration_date
+        try:
+            d = hd.date()
+        except AttributeError:
+            d = hd
+        return jsonify({'success': True, 'date': d.isoformat()})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/settings/hosting-expiration', methods=['POST'])
+def set_hosting_expiration():
+    """
+    Установить дату окончания аренды хостинга.
+    
+    Body JSON:
+    { "date": "YYYY-MM-DD" } или null/"" чтобы очистить.
+    """
+    try:
+        data = request.get_json() or {}
+        date_str = data.get('date')
+        hosting_date = None
+        if date_str:
+            try:
+                hosting_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+            except ValueError:
+                return jsonify({'success': False, 'error': 'Некорректный формат даты, ожидается YYYY-MM-DD'}), 400
+        settings = db_session.query(Settings).filter(Settings.id == 1).first()
+        if not settings:
+            settings = Settings(id=1, price_logging_hour=0, price_logging_minute=0)
+            db_session.add(settings)
+        settings.hosting_expiration_date = hosting_date
+        db_session.commit()
+        return jsonify({'success': True, 'date': hosting_date.isoformat() if hosting_date else None})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 @app.teardown_appcontext

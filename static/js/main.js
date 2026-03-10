@@ -2484,6 +2484,7 @@ async function loadServerStatus() {
         const disk = data.disk || {};
         const app = data.app || {};
         const system = data.system || {};
+        const hosting = data.hosting || {};
 
         let html = '';
         html += '<div class="server-status-grid">';
@@ -2507,12 +2508,60 @@ async function loadServerStatus() {
         html += '<p><strong>Использование RAM:</strong> ' + (system.memory_percent != null ? system.memory_percent + '%' : 'требуется psutil') + '</p>';
         html += '</div>';
 
+        html += '<div class="server-status-section">';
+        html += '<h4>Хостинг</h4>';
+        if (hosting.date) {
+            const d = new Date(hosting.date);
+            const human = d.toLocaleDateString('ru-RU');
+            const daysLeft = hosting.days_left;
+            html += '<p><strong>Окончание аренды:</strong> ' + human + '</p>';
+            if (typeof daysLeft === 'number') {
+                html += '<p><strong>Осталось дней:</strong> ' + daysLeft + '</p>';
+            }
+        } else {
+            html += '<p><strong>Окончание аренды:</strong> не задано</p>';
+        }
+        html += '<div style="margin-top:8px;">';
+        html += '<label for="hosting-expiration-input" style="font-size:0.85em;color:#555;margin-right:6px;">Изменить дату:</label>';
+        html += '<input type="date" id="hosting-expiration-input" style="padding:4px 6px;font-size:0.9em;border-radius:6px;border:1px solid #ccd;">';
+        html += '<button type="button" class="btn btn-refresh" style="margin-left:6px;padding:4px 10px;font-size:0.85em;" onclick="saveHostingExpiration()">Сохранить</button>';
+        html += '</div>';
+        html += '</div>';
+
         html += '</div>';
 
         container.innerHTML = html;
+        // Устанавливаем значение даты в инпут, если есть
+        const hostingInput = document.getElementById('hosting-expiration-input');
+        if (hostingInput && hosting.date) {
+            hostingInput.value = hosting.date;
+        }
     } catch (error) {
         console.error('Ошибка загрузки мониторинга сервера:', error);
         container.textContent = 'Ошибка загрузки данных о сервере';
+    }
+}
+
+async function saveHostingExpiration() {
+    const input = document.getElementById('hosting-expiration-input');
+    if (!input) return;
+    const value = input.value || null;
+    try {
+        const resp = await fetch('/api/settings/hosting-expiration', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ date: value }),
+        });
+        const data = await resp.json();
+        if (!resp.ok || !data.success) {
+            console.error('Ошибка сохранения даты хостинга:', data.error || resp.status);
+            alert('Не удалось сохранить дату окончания хостинга: ' + (data.error || 'ошибка запроса'));
+            return;
+        }
+        await loadServerStatus();
+    } catch (error) {
+        console.error('Ошибка сохранения даты хостинга:', error);
+        alert('Ошибка подключения при сохранении даты хостинга');
     }
 }
 

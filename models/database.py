@@ -34,7 +34,16 @@ def init_db():
     from models.user import User
     from models.access_log import AccessLog
     Base.metadata.create_all(bind=engine)
-    
+
+    # Миграция: добавляем недостающие колонки вручную (SQLite не знает ALTER TABLE ... ADD COLUMN IF NOT EXISTS)
+    from sqlalchemy import text
+    with engine.connect() as conn:
+        # Проверяем, есть ли колонка hosting_expiration_date в таблице settings
+        result = conn.execute(text("PRAGMA table_info(settings)"))
+        columns = [row[1] for row in result]  # row[1] = name
+        if 'hosting_expiration_date' not in columns:
+            conn.execute(text("ALTER TABLE settings ADD COLUMN hosting_expiration_date DATETIME"))
+
     # Создаем настройки по умолчанию, если их еще нет
     settings = db_session.query(Settings).filter(Settings.id == 1).first()
     if not settings:
