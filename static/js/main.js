@@ -92,7 +92,10 @@ document.addEventListener('DOMContentLoaded', async function() {
     startPriceLogMonitoring(); // Запускаем мониторинг новых записей цен
     loadCurrencyRates(); // Загружаем курсы валют для отображения
     setupStickyTableHeader(); // Настраиваем фиксацию шапки таблицы
-    setupPortfolioTableHeight(); // Подгоняем высоту таблицы под нижнюю границу окна
+    // На мобильных не ограничиваем высоту по viewport, даём странице скроллиться целиком
+    if (!window.IS_MOBILE) {
+        setupPortfolioTableHeight(); // Подгоняем высоту таблицы под нижнюю границу окна
+    }
 });
 
 /**
