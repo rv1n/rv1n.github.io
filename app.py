@@ -496,7 +496,9 @@ def change_password():
 def index():
     """Главная страница с портфелем"""
     write_access_log('page_open', username=current_user.username, success=True)
-    return render_template('index.html')
+    ua = request.user_agent.string or ''
+    is_mobile = any(device in ua for device in ['Android', 'iPhone', 'iPad', 'iPod', 'Windows Phone'])
+    return render_template('index.html', is_mobile=is_mobile)
 
 
 @app.before_request
