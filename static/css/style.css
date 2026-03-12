@@ -62,7 +62,7 @@ body {
 header {
     display: flex;
     justify-content: space-between;
-    align-items: center;
+    align-items: flex-start; /* кнопки на одном уровне с заголовком */
     margin-bottom: 30px;
     padding-bottom: 20px;
     border-bottom: 2px solid transparent;
@@ -93,6 +93,14 @@ header h1 {
     gap: 8px;
     font-size: 0.95em;
     color: #34495e;
+}
+
+.header-currencies-group {
+    display: inline;
+}
+
+.mobile-break {
+    display: none;
 }
 
 .last-update {
@@ -2307,6 +2315,24 @@ header h1 {
     border-radius: 8px;
 }
 
+/* Мобильная адаптация таблицы: на телефоне растягиваем на всю ширину экрана,
+   убираем излишний минимальный размер и даём таблице ужаться */
+@media (max-width: 768px) {
+    .portfolio-table-container {
+        margin-top: 20px;
+    }
+
+    .portfolio-table-wrapper {
+        width: 100%;
+    }
+
+    .portfolio-table {
+        min-width: 100%;
+        border-radius: 0;
+        box-shadow: none;
+    }
+}
+
 .portfolio-table thead {
     background: linear-gradient(to right, var(--color-panels) 0%, var(--color-panels-hover) 100%);
     color: var(--color-header-text);
@@ -2658,12 +2684,14 @@ tr.row-loading td:first-child::after {
 
 /* Адаптивность */
 @media (max-width: 768px) {
+    html,
     body {
+        width: 100%;
+        max-width: 100%;
         height: auto;
         min-height: 100vh;
-        overflow-y: auto;
-        overflow-x: hidden; /* убираем горизонтальный скролл и белую полосу справа */
-        width: 100%;
+        overflow-y: auto;   /* нормальный вертикальный скролл */
+        overflow-x: hidden; /* убираем паразитную полосу/скролл по X */
     }
 
     .container {
@@ -2690,9 +2718,23 @@ tr.row-loading td:first-child::after {
     }
     
     .header-controls {
-        flex-direction: column;
-        align-items: flex-start;
+        flex-direction: column-reverse; /* кнопки сверху, даты/курсы ниже на телефоне */
+        align-items: flex-end;
         width: 100%;
+        gap: 8px;
+    }
+
+    /* Только на мобилке: IMOEX и IMOEX2 в первой строке, валюты — во второй */
+    .header-currency-rates {
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: 4px;
+    }
+
+    .mobile-break {
+        display: block;
+        flex-basis: 100%; /* переносим последующие элементы на новую строку */
+        height: 0;
     }
     
     .btn-refresh {
@@ -2720,7 +2762,8 @@ tr.row-loading td:first-child::after {
     
     .view-controls {
         flex-direction: column;
-        gap: 10px;
+        gap: 12px;
+        align-items: stretch;
     }
     
     .view-switcher {
@@ -2732,9 +2775,37 @@ tr.row-loading td:first-child::after {
         width: 100%;
         text-align: center;
     }
+
+    .asset-type-filter {
+        width: 100%;
+        margin-left: 0;
+        flex-direction: column;      /* селекты друг под другом */
+        align-items: stretch;
+        gap: 8px;
+    }
+
+    .asset-type-filter select {
+        flex: 1;
+        width: 100%;
+    }
+    
+    .cash-balance-display {
+        width: 100%;
+        margin: 0;
+        justify-content: space-between;
+    }
     
     .btn-buy {
         align-self: stretch;
+        width: 100%;
+    }
+
+    /* Центруем кнопку-меню (три полоски) как кнопку "+" ниже */
+    .view-controls .menu-wrapper {
+        display: flex;
+        justify-content: center;
+        margin: 0;
+        width: 100%;
     }
     
     .form-row {
