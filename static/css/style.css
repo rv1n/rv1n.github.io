@@ -2336,10 +2336,10 @@ header h1 {
 .portfolio-table thead {
     background: linear-gradient(to right, var(--color-panels) 0%, var(--color-panels-hover) 100%);
     color: var(--color-header-text);
-    position: -webkit-sticky; /* Для Safari */
+    position: -webkit-sticky; /* прилипает к верху области прокрутки таблицы */
     position: sticky;
     top: 0;
-    z-index: 1000;
+    z-index: 5;
     margin: 0;
     border-radius: 8px 8px 0 0;
     overflow: hidden;
@@ -2364,10 +2364,6 @@ header h1 {
     white-space: nowrap;
     vertical-align: top; /* выравниваем все заголовки по верхнему краю */
     background: transparent;
-    position: -webkit-sticky; /* Для Safari */
-    position: sticky;
-    top: 0;
-    z-index: 1001;
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
@@ -2387,6 +2383,12 @@ header h1 {
 .portfolio-table thead.sticky-scrolled tr:first-child th:last-child {
     border-top-right-radius: 8px;
     border-bottom-right-radius: 8px;
+}
+
+/* Таблица в фиксированной шапке (JS-клон) */
+.sticky-header-table {
+    box-shadow: none;
+    border-radius: 0;
 }
 
 /* Выбор периода для колонки "Изменение" */
@@ -2713,22 +2715,42 @@ tr.row-loading td:first-child::after {
     
     header {
         flex-direction: column;
-        align-items: flex-start;
+        align-items: center;
         gap: 10px;
     }
     
     .header-controls {
         flex-direction: column-reverse; /* кнопки сверху, даты/курсы ниже на телефоне */
-        align-items: flex-end;
+        align-items: center;
         width: 100%;
         gap: 8px;
     }
 
     /* Только на мобилке: IMOEX и IMOEX2 в первой строке, валюты — во второй */
+    .header-info-vertical {
+        align-items: center;
+        text-align: center;
+        width: 100%;
+    }
+
+    /* На мобильной версии отображаем курсы как три центрированные строки:
+       IMOEX, IMOEX2, затем валюта в отдельной строке */
     .header-currency-rates {
-        flex-wrap: wrap;
-        justify-content: flex-end;
-        gap: 4px;
+        display: block;
+        width: 100%;
+        max-width: 100%;
+        margin: 0 auto;
+        text-align: center;
+        font-size: 0.9em;
+        white-space: normal;
+        word-break: break-word;
+    }
+
+    #rate-imoex,
+    #rate-imoex2,
+    .header-currencies-group {
+        display: block;
+        margin: 0;
     }
 
     .mobile-break {
