@@ -2870,7 +2870,8 @@ body.is-mobile {
 body.is-mobile .container {
     width: 100%;
     max-width: 100%;
-    padding: 15px 0;
+    /* Небольшие боковые отступы по 3px слева и справа */
+    padding: 15px 3px;
     border-radius: 0;
     box-shadow: none;
     height: auto;
