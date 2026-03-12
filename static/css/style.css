@@ -2661,13 +2661,15 @@ tr.row-loading td:first-child::after {
     body {
         height: auto;
         min-height: 100vh;
-        overflow: auto;
+        overflow-y: auto;
+        overflow-x: hidden; /* убираем горизонтальный скролл и белую полосу справа */
+        width: 100%;
     }
 
     .container {
         width: 100%;
         max-width: 100%;
-        padding: 15px 0; /* убираем боковые отступы, чтобы не было белой полосы */
+        padding: 15px 0; /* без боковых отступов */
         border-radius: 0;
         box-shadow: none;
         height: auto;
