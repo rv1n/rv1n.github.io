@@ -2667,7 +2667,7 @@ tr.row-loading td:first-child::after {
     .container {
         width: 100%;
         max-width: 100%;
-        padding: 15px 10px;
+        padding: 15px 0; /* убираем боковые отступы, чтобы не было белой полосы */
         border-radius: 0;
         box-shadow: none;
         height: auto;
@@ -2750,6 +2750,36 @@ tr.row-loading td:first-child::after {
     
     .portfolio-summary {
         grid-template-columns: 1fr;
+    }
+}
+
+/* Дополнительная адаптация под узкие телефоны */
+@media (max-width: 480px) {
+    body {
+        font-size: 14px;
+    }
+
+    .header-currency-rates {
+        flex-wrap: wrap;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 2px;
+        margin: 0 4px;
+    }
+
+    .portfolio-summary {
+        margin-bottom: 16px;
+    }
+
+    /* Чуть компактнее таблица и график по ширине */
+    .sparkline-container {
+        width: 110px;
+        height: 32px;
+    }
+
+    .portfolio-table th,
+    .portfolio-table td {
+        padding: 8px 4px;
     }
 }
 
