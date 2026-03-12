@@ -2658,8 +2658,21 @@ tr.row-loading td:first-child::after {
 
 /* Адаптивность */
 @media (max-width: 768px) {
+    body {
+        height: auto;
+        min-height: 100vh;
+        overflow: auto;
+    }
+
     .container {
-        padding: 15px;
+        width: 100%;
+        max-width: 100%;
+        padding: 15px 10px;
+        border-radius: 0;
+        box-shadow: none;
+        height: auto;
+        min-height: 100vh;
+        overflow: visible;
     }
     
     header {
