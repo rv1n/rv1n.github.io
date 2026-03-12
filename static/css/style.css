@@ -3059,3 +3059,11 @@ svg:has(.pie-slice:hover) .pie-slice:hover {
     display: flex;
     gap: 8px;
 }
+
+/* Дополнительное правило: на мобильных всегда скрываем панель цветовой настройки,
+   перекрывая базовый стиль ниже по файлу */
+@media (max-width: 768px) {
+    .color-customizer {
+        display: none !important;
+    }
+}
