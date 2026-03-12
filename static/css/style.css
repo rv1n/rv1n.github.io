@@ -2708,10 +2708,10 @@ tr.row-loading td:first-child::after {
     }
 
     /* На телефоне вертикальный скролл только у всей страницы,
-       а не у таблицы — убираем внутренний скролл обёртки */
+       а не у таблицы — убираем внутренний скролл обёртки полностью */
     .portfolio-table-wrapper {
-        overflow-y: visible;
-        max-height: none;
+        overflow-y: visible !important;
+        max-height: none !important;
         flex: 0;
     }
 
