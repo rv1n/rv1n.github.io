@@ -2856,6 +2856,34 @@ tr.row-loading td:first-child::after {
     }
 }
 
+/* Явный мобильный режим по классу body.is-mobile —
+   применяем те же правила независимо от ширины viewport */
+body.is-mobile {
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    min-height: 100vh;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+body.is-mobile .container {
+    width: 100%;
+    max-width: 100%;
+    padding: 15px 0;
+    border-radius: 0;
+    box-shadow: none;
+    height: auto;
+    min-height: 100vh;
+    overflow: visible;
+}
+
+body.is-mobile .portfolio-table-wrapper {
+    overflow-y: visible !important;
+    max-height: none !important;
+    flex: 0;
+}
+
 /* Дополнительная адаптация под узкие телефоны */
 @media (max-width: 480px) {
     body {
