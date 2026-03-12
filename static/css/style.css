@@ -2707,6 +2707,14 @@ tr.row-loading td:first-child::after {
         overflow: visible;
     }
 
+    /* На телефоне вертикальный скролл только у всей страницы,
+       а не у таблицы — убираем внутренний скролл обёртки */
+    .portfolio-table-wrapper {
+        overflow-y: visible;
+        max-height: none;
+        flex: 0;
+    }
+
     /* Прячем панель настройки цветов на телефонах,
        чтобы не было белой полосы и выезжающей панели сбоку */
     .color-customizer {
