@@ -2,14 +2,23 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="{% if is_mobile %}width=device-width, initial-scale=1.0, minimum-scale=0.25, maximum-scale=5.0, user-scalable=yes{% else %}width=device-width, initial-scale=1.0{% endif %}">
+    <!--
+        Для мобильных устройств задаём фиксированную ширину (как на десктопе),
+        чтобы отключить мобильные media-запросы и показывать полную версию сайта.
+    -->
+    <meta name="viewport"
+          content="{% if is_mobile %}
+                   width=1200, initial-scale=1.0, user-scalable=yes
+                   {% else %}
+                   width=device-width, initial-scale=1.0
+                   {% endif %}">
     <title>Портфель акций MOEX</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <link rel="icon" type="image/x-icon" href="/favicon.ico">
     <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='favicon-32x32.png') }}">
     <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='favicon-16x16.png') }}">
     <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css', v='2') }}">
     <script>
         window.IS_MOBILE = {{ 'true' if is_mobile else 'false' }};
     </script>
