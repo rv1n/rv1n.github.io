@@ -2674,6 +2674,12 @@ tr.row-loading td:first-child::after {
         min-height: 100vh;
         overflow: visible;
     }
+
+    /* Прячем панель настройки цветов на телефонах,
+       чтобы не было белой полосы и выезжающей панели сбоку */
+    .color-customizer {
+        display: none;
+    }
     
     header {
         flex-direction: column;
