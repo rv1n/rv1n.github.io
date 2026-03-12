@@ -54,12 +54,43 @@ function _updateBtnSwatch(key, value) {
     }
 }
 
-function initColorCustomizer() {
-    Object.keys(COLOR_DEFAULTS).forEach(key => {
-        const saved = localStorage.getItem(`uiColor_${key}`);
-        const value = saved || COLOR_DEFAULTS[key];
-        _applyColor(key, value);
+let CURRENT_THEME_COLORS = { ...COLOR_DEFAULTS };
+
+async function loadUserTheme() {
+    try {
+        const resp = await fetch('/api/user-theme', { credentials: 'same-origin' });
+        if (!resp.ok) throw new Error('Failed to load theme');
+        const data = await resp.json();
+        const colors = (data && data.colors) || {};
+        CURRENT_THEME_COLORS = {
+            panels: colors.panels || COLOR_DEFAULTS.panels,
+            'header-text': colors.header_text || COLOR_DEFAULTS['header-text'],
+            subtext: colors.subtext || COLOR_DEFAULTS.subtext,
+        };
+    } catch (e) {
+        CURRENT_THEME_COLORS = { ...COLOR_DEFAULTS };
+    }
+
+    Object.keys(CURRENT_THEME_COLORS).forEach(key => {
+        _applyColor(key, CURRENT_THEME_COLORS[key]);
     });
+}
+
+async function saveUserTheme() {
+    try {
+        await fetch('/api/user-theme', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({
+                panels: CURRENT_THEME_COLORS.panels,
+                header_text: CURRENT_THEME_COLORS['header-text'],
+                subtext: CURRENT_THEME_COLORS.subtext,
+            }),
+        });
+    } catch (e) {
+        // тихо игнорируем ошибки сохранения
+    }
 }
 
 let _currentPickerKey = null;
@@ -102,16 +133,18 @@ function applyColorPicker() {
     const input = document.getElementById('color-picker-input');
     if (!input) return;
     const value = input.value;
-    localStorage.setItem(`uiColor_${_currentPickerKey}`, value);
+    CURRENT_THEME_COLORS[_currentPickerKey] = value;
     _applyColor(_currentPickerKey, value);
+    saveUserTheme();
     closeColorPicker();
 }
 
 function resetColorPicker() {
     if (!_currentPickerKey) return;
     const def = COLOR_DEFAULTS[_currentPickerKey];
-    localStorage.removeItem(`uiColor_${_currentPickerKey}`);
+    CURRENT_THEME_COLORS[_currentPickerKey] = def;
     _applyColor(_currentPickerKey, def);
+    saveUserTheme();
     const input = document.getElementById('color-picker-input');
     if (input) input.value = def;
     closeColorPicker();
@@ -119,9 +152,10 @@ function resetColorPicker() {
 
 function resetAllColors() {
     Object.keys(COLOR_DEFAULTS).forEach(key => {
-        localStorage.removeItem(`uiColor_${key}`);
+        CURRENT_THEME_COLORS[key] = COLOR_DEFAULTS[key];
         _applyColor(key, COLOR_DEFAULTS[key]);
     });
+    saveUserTheme();
     closeColorPicker();
 
     // Анимация кнопки
@@ -142,5 +176,5 @@ document.addEventListener('click', function(e) {
 });
 
 document.addEventListener('DOMContentLoaded', function() {
-    initColorCustomizer();
+    loadUserTheme();
 });

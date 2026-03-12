@@ -2885,6 +2885,11 @@ body.is-mobile .portfolio-table-wrapper {
     flex: 0;
 }
 
+/* На телефоне полностью скрываем панель настройки цветов */
+body.is-mobile .color-customizer {
+    display: none !important;
+}
+
 /* Дополнительная адаптация под узкие телефоны */
 @media (max-width: 480px) {
     body {

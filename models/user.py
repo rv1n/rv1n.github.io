@@ -14,6 +14,10 @@ class User(Base):
     username = Column(String(80), unique=True, nullable=False)
     password_hash = Column(String(256), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+    # Пользовательские настройки темы интерфейса (цветовая схема)
+    theme_color_panels = Column(String(7), nullable=True)       # основной цвет панелей, напр. "#1e3a5f"
+    theme_color_header_text = Column(String(7), nullable=True)  # цвет заголовков столбцов
+    theme_color_subtext = Column(String(7), nullable=True)      # цвет подписи в шапке таблиц
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)

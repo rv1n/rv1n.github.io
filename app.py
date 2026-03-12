@@ -138,18 +138,8 @@ def load_user(user_id):
 # Инициализация БД
 init_db()
 
-# Создаём пользователя admin по умолчанию, если пользователей нет
-def init_default_user():
-    for username, password in [('admin', 'admin'), ('dev', 'dev')]:
-        if not db_session.query(User).filter_by(username=username).first():
-            user = User(username=username)
-            user.set_password(password)
-            db_session.add(user)
-    db_session.commit()
 
-init_default_user()
-
-# Миграция: добавляем новые колонки и пересоздаём таблицы при необходимости
+# Миграция: добавляем недостающие колонки / пересоздаём таблицы при необходимости
 def migrate_portfolio_columns():
     from sqlalchemy import text
     with db_session.bind.connect() as conn:
@@ -256,7 +246,29 @@ def migrate_portfolio_columns():
             conn.execute(text('UPDATE cash_balance SET user_id = 1'))
             conn.commit()
 
+        # --- ALTER TABLE для users: добавляем поля темы интерфейса ---
+        cols = [row[1] for row in conn.execute(text('PRAGMA table_info(users)')).fetchall()]
+        if 'theme_color_panels' not in cols:
+            conn.execute(text("ALTER TABLE users ADD COLUMN theme_color_panels VARCHAR(7)"))
+        if 'theme_color_header_text' not in cols:
+            conn.execute(text("ALTER TABLE users ADD COLUMN theme_color_header_text VARCHAR(7)"))
+        if 'theme_color_subtext' not in cols:
+            conn.execute(text("ALTER TABLE users ADD COLUMN theme_color_subtext VARCHAR(7)"))
+        conn.commit()
+
 migrate_portfolio_columns()
+
+
+# Создаём пользователя admin по умолчанию, если пользователей нет
+def init_default_user():
+    for username, password in [('admin', 'admin'), ('dev', 'dev')]:
+        if not db_session.query(User).filter_by(username=username).first():
+            user = User(username=username)
+            user.set_password(password)
+            db_session.add(user)
+    db_session.commit()
+
+init_default_user()
 
 # Инициализация категорий при первом запуске (для каждого пользователя)
 def init_categories():
@@ -498,7 +510,14 @@ def index():
     write_access_log('page_open', username=current_user.username, success=True)
     ua = request.user_agent.string or ''
     is_mobile = any(device in ua for device in ['Android', 'iPhone', 'iPad', 'iPod', 'Windows Phone'])
-    return render_template('index.html', is_mobile=is_mobile)
+
+    # Цветовая тема для текущего пользователя
+    theme_colors = {
+        'panels': current_user.theme_color_panels or '#1e3a5f',
+        'header_text': current_user.theme_color_header_text or '#ffffff',
+        'subtext': current_user.theme_color_subtext or '#e6c200',
+    }
+    return render_template('index.html', is_mobile=is_mobile, theme_colors=theme_colors)
 
 
 @app.before_request
@@ -2604,6 +2623,65 @@ def set_hosting_expiration():
         db_session.commit()
         return jsonify({'success': True, 'date': hosting_date.isoformat() if hosting_date else None})
     except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/user-theme', methods=['GET'])
+@login_required
+def get_user_theme():
+    """
+    Получить текущую цветовую тему пользователя.
+    """
+    try:
+        theme = {
+            'panels': current_user.theme_color_panels or '#1e3a5f',
+            'header_text': current_user.theme_color_header_text or '#ffffff',
+            'subtext': current_user.theme_color_subtext or '#e6c200',
+        }
+        return jsonify({'success': True, 'colors': theme})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/user-theme', methods=['POST'])
+@login_required
+def set_user_theme():
+    """
+    Сохранить цветовую тему для текущего пользователя.
+
+    Ожидаемый JSON:
+    {
+      "panels": "#1e3a5f",
+      "header_text": "#ffffff",
+      "subtext": "#e6c200"
+    }
+    Любое поле можно опустить, чтобы не менять его.
+    """
+    try:
+        data = request.get_json() or {}
+        panels = data.get('panels')
+        header_text = data.get('header_text')
+        subtext = data.get('subtext')
+
+        if panels is not None:
+            current_user.theme_color_panels = panels
+        if header_text is not None:
+            current_user.theme_color_header_text = header_text
+        if subtext is not None:
+            current_user.theme_color_subtext = subtext
+
+        db_session.commit()
+
+        return jsonify({
+            'success': True,
+            'colors': {
+                'panels': current_user.theme_color_panels,
+                'header_text': current_user.theme_color_header_text,
+                'subtext': current_user.theme_color_subtext,
+            }
+        })
+    except Exception as e:
+        db_session.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
