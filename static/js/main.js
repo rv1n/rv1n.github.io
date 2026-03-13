@@ -10,6 +10,21 @@ let tickerValidationTimeout = null; // Таймаут для валидации 
 let lastValidatedTicker = ''; // Последний валидированный тикер
 let isMainMenuOpen = false;   // Состояние выпадающего меню в шапке
 
+// Настройки отображения колонок таблицы портфеля
+// v2: по умолчанию скрываем колонку "Цена приобретения"
+const COLUMN_VISIBILITY_STORAGE_KEY = 'portfolioColumnVisibility_v2';
+const PORTFOLIO_COLUMNS = [
+    { key: 'name',         index: 1 },
+    { key: 'buy_price',    index: 2 },
+    { key: 'quantity',     index: 3 },
+    { key: 'invest_sum',   index: 4 },
+    { key: 'current_value', index: 5 },
+    { key: 'profit',       index: 6 },
+    { key: 'change',       index: 7 },
+    { key: 'sparkline',    index: 8 },
+    { key: 'actions',      index: 9 },
+];
+
 function toggleMainMenu() {
     const menu = document.getElementById('main-menu');
     if (!menu) return;
@@ -36,6 +51,51 @@ let portfolioSortState = {
     column: null,   // buy_price, quantity, invest_sum, current_value, day_change, profit
     direction: 'asc'
 };
+
+function getStoredColumnVisibility() {
+    try {
+        const raw = localStorage.getItem(COLUMN_VISIBILITY_STORAGE_KEY);
+        if (!raw) {
+            // Значения по умолчанию: скрываем колонку "Цена приобретения"
+            return { buy_price: false };
+        }
+        const parsed = JSON.parse(raw);
+        return parsed && typeof parsed === 'object' ? parsed : { buy_price: false };
+    } catch {
+        return { buy_price: false };
+    }
+}
+
+function applyColumnVisibility() {
+    const table = document.getElementById('portfolio-table');
+    if (!table) return;
+
+    const visibility = getStoredColumnVisibility();
+
+    PORTFOLIO_COLUMNS.forEach(col => {
+        const visible = visibility[col.key] !== false; // по умолчанию колонка видна
+        const selector = `#portfolio-table thead th:nth-child(${col.index}), #portfolio-table tbody td:nth-child(${col.index})`;
+        table.querySelectorAll(selector).forEach(el => {
+            el.style.display = visible ? '' : 'none';
+        });
+    });
+}
+
+function initColumnVisibilityControls() {
+    const visibility = getStoredColumnVisibility();
+    document.querySelectorAll('.settings-column-toggle').forEach(input => {
+        const key = input.dataset.colKey;
+        if (!key) return;
+        input.checked = visibility[key] !== false;
+
+        input.addEventListener('change', () => {
+            const current = getStoredColumnVisibility();
+            current[key] = input.checked;
+            localStorage.setItem(COLUMN_VISIBILITY_STORAGE_KEY, JSON.stringify(current));
+            applyColumnVisibility();
+        });
+    });
+}
 
 /**
  * Текущий период изменения цен (в днях) для колонки "Изменение"
@@ -96,6 +156,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     if (!window.IS_MOBILE) {
         setupPortfolioTableHeight(); // Подгоняем высоту таблицы под нижнюю границу окна
     }
+    initColumnVisibilityControls(); // Инициализация тумблеров колонок
 });
 
 /**
@@ -328,6 +389,8 @@ async function loadPortfolio(silent = false, useCachedPrices = false) {
             }
             // Настраиваем фиксацию шапки после отображения таблицы
             setTimeout(setupStickyTableHeader, 100);
+            // Применяем настройки видимости колонок
+            applyColumnVisibility();
         } else {
             if (!silent) {
                 showError(data.error || 'Ошибка загрузки портфеля');
@@ -2128,6 +2191,7 @@ function switchView(viewType) {
     const tickerRuView = document.getElementById('ticker-ru-view');
     const tickerCnymView = document.getElementById('ticker-cnym-view');
     const tickerLqdtView = document.getElementById('ticker-lqdt-view');
+    const settingsView = document.getElementById('settings-view');
     const btnTable = document.getElementById('btn-table-view');
     const btnChart = document.getElementById('btn-chart-view');
     const btnHistory = document.getElementById('btn-history-view');
@@ -2141,6 +2205,7 @@ function switchView(viewType) {
         transactionsView.style.display = 'none';
         categoriesView.style.display = 'none';
         if (serverView) serverView.style.display = 'none';
+        if (settingsView) settingsView.style.display = 'none';
         if (tickerSberView) tickerSberView.style.display = 'none';
         if (tickerRuView) tickerRuView.style.display = 'none';
         if (tickerCnymView) tickerCnymView.style.display = 'none';
@@ -2162,6 +2227,7 @@ function switchView(viewType) {
         transactionsView.style.display = 'none';
         categoriesView.style.display = 'none';
         if (serverView) serverView.style.display = 'none';
+        if (settingsView) settingsView.style.display = 'none';
         if (tickerSberView) tickerSberView.style.display = 'none';
         if (tickerRuView) tickerRuView.style.display = 'none';
         if (tickerCnymView) tickerCnymView.style.display = 'none';
@@ -2203,6 +2269,7 @@ function switchView(viewType) {
         transactionsView.style.display = 'none';
         categoriesView.style.display = 'none';
         if (serverView) serverView.style.display = 'none';
+        if (settingsView) settingsView.style.display = 'none';
         if (tickerSberView) tickerSberView.style.display = 'none';
         if (tickerRuView) tickerRuView.style.display = 'none';
         if (tickerCnymView) tickerCnymView.style.display = 'none';
@@ -2223,6 +2290,7 @@ function switchView(viewType) {
         transactionsView.style.display = 'flex';
         categoriesView.style.display = 'none';
         if (serverView) serverView.style.display = 'none';
+        if (settingsView) settingsView.style.display = 'none';
         if (tickerSberView) tickerSberView.style.display = 'none';
         if (tickerRuView) tickerRuView.style.display = 'none';
         if (tickerCnymView) tickerCnymView.style.display = 'none';
@@ -2241,6 +2309,7 @@ function switchView(viewType) {
         transactionsView.style.display = 'none';
         categoriesView.style.display = 'flex';
         if (serverView) serverView.style.display = 'none';
+        if (settingsView) settingsView.style.display = 'none';
         if (tickerSberView) tickerSberView.style.display = 'none';
         if (tickerRuView) tickerRuView.style.display = 'none';
         if (tickerCnymView) tickerCnymView.style.display = 'none';
@@ -2275,6 +2344,7 @@ function switchView(viewType) {
         transactionsView.style.display = 'none';
         if (categoriesView) categoriesView.style.display = 'none';
         if (serverView) serverView.style.display = 'flex';
+        if (settingsView) settingsView.style.display = 'none';
         if (tickerSberView) tickerSberView.style.display = 'none';
         if (tickerRuView) tickerRuView.style.display = 'none';
         if (tickerCnymView) tickerCnymView.style.display = 'none';
@@ -2296,6 +2366,7 @@ function switchView(viewType) {
         transactionsView.style.display = 'none';
         if (categoriesView) categoriesView.style.display = 'none';
         if (serverView) serverView.style.display = 'none';
+        if (settingsView) settingsView.style.display = 'none';
         if (tickerRuView) tickerRuView.style.display = 'none';
         if (tickerCnymView) tickerCnymView.style.display = 'none';
         if (tickerLqdtView) tickerLqdtView.style.display = 'none';
@@ -2315,6 +2386,7 @@ function switchView(viewType) {
         transactionsView.style.display = 'none';
         if (categoriesView) categoriesView.style.display = 'none';
         if (serverView) serverView.style.display = 'none';
+        if (settingsView) settingsView.style.display = 'none';
         if (tickerSberView) tickerSberView.style.display = 'none';
         if (tickerCnymView) tickerCnymView.style.display = 'none';
         if (tickerLqdtView) tickerLqdtView.style.display = 'none';
@@ -2334,6 +2406,7 @@ function switchView(viewType) {
         transactionsView.style.display = 'none';
         if (categoriesView) categoriesView.style.display = 'none';
         if (serverView) serverView.style.display = 'none';
+        if (settingsView) settingsView.style.display = 'none';
         if (tickerSberView) tickerSberView.style.display = 'none';
         if (tickerRuView) tickerRuView.style.display = 'none';
         if (tickerLqdtView) tickerLqdtView.style.display = 'none';
@@ -2365,6 +2438,27 @@ function switchView(viewType) {
         if (btnCategories) btnCategories.classList.remove('active');
 
         loadTickerDebug('LQDT', 'ticker-lqdt-content', 'STOCK');
+    } else if (viewType === 'settings') {
+        tableView.style.display = 'none';
+        chartView.style.display = 'none';
+        historyView.style.display = 'none';
+        transactionsView.style.display = 'none';
+        if (categoriesView) categoriesView.style.display = 'none';
+        if (serverView) serverView.style.display = 'none';
+        if (tickerSberView) tickerSberView.style.display = 'none';
+        if (tickerRuView) tickerRuView.style.display = 'none';
+        if (tickerCnymView) tickerCnymView.style.display = 'none';
+        if (tickerLqdtView) tickerLqdtView.style.display = 'none';
+        if (settingsView) settingsView.style.display = 'block';
+
+        if (btnTable) btnTable.classList.remove('active');
+        if (btnChart) btnChart.classList.remove('active');
+        if (btnHistory) btnHistory.classList.remove('active');
+        if (btnTransactions) btnTransactions.classList.remove('active');
+        if (btnCategories) btnCategories.classList.remove('active');
+
+        // Загружаем текущее время логирования при открытии настроек
+        loadLoggingSettings();
     }
 
     // После переключения представления пересчитываем высоту прокручиваемых блоков,
@@ -5248,12 +5342,9 @@ function displayTickerInfo(data, ticker, instrumentType) {
 }
 
 /**
- * Открытие модального окна настройки времени логирования
+ * Загрузка текущего времени логирования в форму общих настроек
  */
-async function openLoggingTimeModal() {
-    const modal = document.getElementById('logging-time-modal');
-    if (!modal) return;
-    
+async function loadLoggingSettings() {
     // Загружаем текущее время логирования
     try {
         const response = await fetch('/api/settings/logging-time');
@@ -5268,18 +5359,6 @@ async function openLoggingTimeModal() {
         }
     } catch (error) {
         console.error('Ошибка загрузки настроек времени:', error);
-    }
-    
-    modal.style.display = 'flex';
-}
-
-/**
- * Закрытие модального окна настройки времени логирования
- */
-function closeLoggingTimeModal() {
-    const modal = document.getElementById('logging-time-modal');
-    if (modal) {
-        modal.style.display = 'none';
     }
 }
 
@@ -5323,7 +5402,6 @@ async function saveLoggingTime() {
         if (data.success) {
             alert(`Время логирования установлено: ${data.time} МСК\n\nПланировщик обновлен. Следующее логирование произойдет в ${data.time} МСК.`);
             document.getElementById('current-logging-time').textContent = data.time;
-            closeLoggingTimeModal();
         } else {
             alert('Ошибка сохранения: ' + (data.error || 'Неизвестная ошибка'));
         }

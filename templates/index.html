@@ -169,20 +169,8 @@
                         <button type="button" class="dropdown-item" onclick="switchView('categories'); closeMainMenu();">
                             🏷️ Категории и виды
                         </button>
-                        <button type="button" class="dropdown-item" onclick="openLoggingTimeModal(); closeMainMenu();">
-                            ⏰ Настройка времени автоматического обновления цен
-                        </button>
-                        <button type="button" class="dropdown-item" onclick="switchView('ticker-sber'); closeMainMenu();">
-                            🔍 Полные данные по SBER
-                        </button>
-                        <button type="button" class="dropdown-item" onclick="switchView('ticker-ru'); closeMainMenu();">
-                            🔍 Полные данные по RU000A105SG2
-                        </button>
-                        <button type="button" class="dropdown-item" onclick="switchView('ticker-cnym'); closeMainMenu();">
-                            🔍 Полные данные по CNYM
-                        </button>
-                        <button type="button" class="dropdown-item" onclick="switchView('ticker-lqdt'); closeMainMenu();">
-                            🔍 Полные данные по LQDT
+                        <button type="button" class="dropdown-item" onclick="switchView('settings'); closeMainMenu();">
+                            ⚙️ Общие настройки
                         </button>
                     </div>
                 </div>
@@ -212,7 +200,7 @@
                                 <div class="th-label-group">
                                     <span>Цена приобретения</span>
                                     <div class="th-sub-label">
-                                        за 1 лот / акцию
+                                        за 1 бумагу
                                     </div>
                                 </div>
                                 <button type="button" class="sort-btn" aria-label="Сортировать по цене приобретения">⇅</button>
@@ -646,6 +634,96 @@
                         <div id="no-transactions" class="no-data-message" style="display: none;">
                             <p>📝 История транзакций пуста</p>
                             <p>Нажмите "➕ Добавить операцию" для создания первой записи</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Общие настройки (время автоматического обновления цен и др.) -->
+            <div id="settings-view" class="portfolio-view" style="display: none;">
+                <div class="server-status-container">
+                    <div style="margin-bottom: 16px;">
+                        <h3 style="margin: 0;">⚙️ Общие настройки</h3>
+                    </div>
+                    <div class="server-status-content">
+                        <div class="server-status-grid">
+                            <div class="server-status-section">
+                                <h4>Время автоматического обновления цен</h4>
+                                <p style="margin-bottom: 8px; color: #4b5563;">
+                                    Установите время, когда будут автоматически обновляться цены всех активов из вашего портфеля.
+                                </p>
+                                <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 20px; flex-wrap: wrap;">
+                                    <label for="logging-hour" style="font-weight: bold;">Час (0-23):</label>
+                                    <input type="number" id="logging-hour" min="0" max="23" value="0"
+                                           style="width: 80px; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                                    <label for="logging-minute" style="font-weight: bold;">Минута (0-59):</label>
+                                    <input type="number" id="logging-minute" min="0" max="59" value="0"
+                                           style="width: 80px; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                                </div>
+                                <div style="margin-bottom: 20px; padding: 10px; background-color: #ecf0f1; border-radius: 4px;">
+                                    <strong>Текущее время обновления:</strong> <span id="current-logging-time">-</span>
+                                </div>
+                                <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                                    <button class="btn btn-primary" onclick="saveLoggingTime()">Сохранить</button>
+                                </div>
+                            </div>
+
+                            <div class="server-status-section">
+                                <h4>Отображение колонок в таблице «Мой портфель»</h4>
+                                <p style="margin-bottom: 8px; color: #4b5563;">
+                                    Включите или отключите отображение колонок в главной таблице портфеля.
+                                </p>
+                                <div class="columns-toggle-list">
+                                    <label class="settings-toggle">
+                                        <input type="checkbox" class="settings-column-toggle" data-col-key="name" data-col-index="1" checked>
+                                        <span class="settings-toggle-switch"></span>
+                                        <span class="settings-toggle-label">Название актива</span>
+                                    </label>
+                                    <label class="settings-toggle">
+                                        <input type="checkbox" class="settings-column-toggle" data-col-key="buy_price" data-col-index="2">
+                                        <span class="settings-toggle-switch"></span>
+                                        <span class="settings-toggle-label">Цена приобретения</span>
+                                    </label>
+                                    <label class="settings-toggle">
+                                        <input type="checkbox" class="settings-column-toggle" data-col-key="quantity" data-col-index="3" checked>
+                                        <span class="settings-toggle-switch"></span>
+                                        <span class="settings-toggle-label">Количество</span>
+                                    </label>
+                                    <label class="settings-toggle">
+                                        <input type="checkbox" class="settings-column-toggle" data-col-key="invest_sum" data-col-index="4" checked>
+                                        <span class="settings-toggle-switch"></span>
+                                        <span class="settings-toggle-label">Сумма инвестиций</span>
+                                    </label>
+                                    <label class="settings-toggle">
+                                        <input type="checkbox" class="settings-column-toggle" data-col-key="current_value" data-col-index="5" checked>
+                                        <span class="settings-toggle-switch"></span>
+                                        <span class="settings-toggle-label">Текущая стоимость</span>
+                                    </label>
+                                    <label class="settings-toggle">
+                                        <input type="checkbox" class="settings-column-toggle" data-col-key="profit" data-col-index="6" checked>
+                                        <span class="settings-toggle-switch"></span>
+                                        <span class="settings-toggle-label">Прибыль</span>
+                                    </label>
+                                    <label class="settings-toggle">
+                                        <input type="checkbox" class="settings-column-toggle" data-col-key="change" data-col-index="7" checked>
+                                        <span class="settings-toggle-switch"></span>
+                                        <span class="settings-toggle-label">Изменение</span>
+                                    </label>
+                                    <label class="settings-toggle">
+                                        <input type="checkbox" class="settings-column-toggle" data-col-key="sparkline" data-col-index="8" checked>
+                                        <span class="settings-toggle-switch"></span>
+                                        <span class="settings-toggle-label">График (15 дней)</span>
+                                    </label>
+                                    <label class="settings-toggle">
+                                        <input type="checkbox" class="settings-column-toggle" data-col-key="actions" data-col-index="9" checked>
+                                        <span class="settings-toggle-switch"></span>
+                                        <span class="settings-toggle-label">Действия</span>
+                                    </label>
+                                </div>
+                                <p class="settings-toggle-hint">
+                                    Скрытие колонок влияет только на отображение. Все данные и расчёты остаются доступными.
+                                </p>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -1115,34 +1193,6 @@
             <h2 id="ticker-info-title">Информация о тикере</h2>
             <div id="ticker-info-content" style="margin-top: 20px;">
                 <div class="loading">Загрузка данных...</div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Модальное окно настройки времени автоматического обновления цен -->
-    <div id="logging-time-modal" class="modal" style="display: none;">
-        <div class="modal-content" style="max-width: 500px;">
-            <span class="close" onclick="closeLoggingTimeModal()">&times;</span>
-            <h2>⏰ Настройка времени автоматического обновления цен</h2>
-            <div style="margin-top: 20px;">
-                <p style="margin-bottom: 15px; color: #7f8c8d;">
-                    Установите время, когда будут автоматически обновлять цены всех активов из вашего портфеля.
-                </p>
-                <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 20px;">
-                    <label for="logging-hour" style="font-weight: bold;">Час (0-23):</label>
-                    <input type="number" id="logging-hour" min="0" max="23" value="0" 
-                           style="width: 80px; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
-                    <label for="logging-minute" style="font-weight: bold;">Минута (0-59):</label>
-                    <input type="number" id="logging-minute" min="0" max="59" value="0" 
-                           style="width: 80px; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
-                </div>
-                <div style="margin-bottom: 20px; padding: 10px; background-color: #ecf0f1; border-radius: 4px;">
-                    <strong>Текущее время обновления:</strong> <span id="current-logging-time">-</span>
-                </div>
-                <div style="display: flex; gap: 10px; justify-content: flex-end;">
-                    <button class="btn btn-secondary" onclick="closeLoggingTimeModal()">Отмена</button>
-                    <button class="btn btn-primary" onclick="saveLoggingTime()">Сохранить</button>
-                </div>
             </div>
         </div>
     </div>

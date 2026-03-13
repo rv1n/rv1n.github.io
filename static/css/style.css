@@ -2063,6 +2063,67 @@ header h1 {
 }
 .btn-delete-history:active { transform: translateY(0); }
 
+/* Переключатели (тумблеры) в общих настройках */
+.columns-toggle-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.settings-toggle {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+}
+
+.settings-toggle input {
+    display: none;
+}
+
+.settings-toggle-switch {
+    width: 40px;
+    height: 22px;
+    border-radius: 999px;
+    background: #e5e7eb;
+    position: relative;
+    transition: background-color 0.2s ease;
+    flex-shrink: 0;
+}
+
+.settings-toggle-switch::before {
+    content: '';
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 16px;
+    height: 16px;
+    border-radius: 999px;
+    background: #ffffff;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    transition: transform 0.2s ease;
+}
+
+.settings-toggle input:checked + .settings-toggle-switch {
+    background: var(--color-panels);
+}
+
+.settings-toggle input:checked + .settings-toggle-switch::before {
+    transform: translateX(18px);
+}
+
+.settings-toggle-label {
+    font-size: 0.9em;
+    color: #374151;
+}
+
+.settings-toggle-hint {
+    margin-top: 8px;
+    font-size: 0.8em;
+    color: #6b7280;
+}
+
 /* ======= Модальное окно Hard Reset ======= */
 .hard-reset-list {
     list-style: none;
