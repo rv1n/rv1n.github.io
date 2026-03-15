@@ -1171,6 +1171,7 @@ function handlePortfolioSort(columnKey) {
 
     // Перерисовываем портфель с учетом сортировки
     displayPortfolio(currentPortfolioData.portfolio, currentPortfolioData.summary);
+    applyColumnVisibility();
 }
 
 /**
@@ -1412,6 +1413,7 @@ async function updateAllCategoryViews() {
             
             // Перерисовываем таблицу портфеля, чтобы гарантировать корректные данные
             displayPortfolio(currentPortfolioData.portfolio, currentPortfolioData.summary);
+            applyColumnVisibility();
             
             // Обновляем диаграмму "Аналитика"
             updateCategoryChart(currentPortfolioData.portfolio);
@@ -3618,6 +3620,7 @@ document.addEventListener('DOMContentLoaded', function() {
             // Перерисовываем портфель с учетом фильтра
             if (currentPortfolioData) {
                 displayPortfolio(currentPortfolioData.portfolio, currentPortfolioData.summary);
+                applyColumnVisibility();
             }
             // Перерисовываем аналитику, если она открыта
             refreshAnalyticsCharts();
@@ -3628,6 +3631,7 @@ document.addEventListener('DOMContentLoaded', function() {
         portfolioCategoryFilter.addEventListener('change', function() {
             if (currentPortfolioData) {
                 displayPortfolio(currentPortfolioData.portfolio, currentPortfolioData.summary);
+                applyColumnVisibility();
             }
             refreshAnalyticsCharts();
         });
