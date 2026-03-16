@@ -288,7 +288,7 @@ header h1 {
 
 /* Подсказки в шапке таблицы */
 .th-sub-label {
-    font-size: 0.8em;
+    font-size: 12px;
     font-weight: 600;
     color: var(--color-subtext); /* темно-желтый цвет */
     margin-top: 2px;
