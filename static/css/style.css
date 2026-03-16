@@ -2124,6 +2124,24 @@ header h1 {
     color: #6b7280;
 }
 
+/* Переключатели режима сортировки ₽ / % в заголовках таблицы */
+.sort-metric-option {
+    cursor: pointer;
+    font-weight: 600;
+    opacity: 0.5;
+    margin: 0 4px;
+    font-size: 1.1em;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 20px;
+}
+
+.sort-metric-option.active {
+    opacity: 1;
+    color: #fbbf24; /* жёлтый акцент, как в подписях */
+}
+
 /* ======= Модальное окно Hard Reset ======= */
 .hard-reset-list {
     list-style: none;

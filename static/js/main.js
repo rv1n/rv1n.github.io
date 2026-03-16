@@ -43,8 +43,17 @@ let heightListenersAttached = false; // Флаг, чтобы не навешив
 let currentPortfolioData = null; // Текущие данные портфеля
 let currentChartType = localStorage.getItem('chartType') || 'pie'; // Текущий тип диаграммы (pie/bar)
 let currentAssetTypeChartType = localStorage.getItem('assetTypeChartType') || 'pie'; // Текущий тип диаграммы видов активов (pie/bar)
+// Режим сортировки для колонок "Прибыль" и "Изменение": 'rub' или 'pct'
+let profitSortMode = localStorage.getItem('profitSortMode') || 'rub';
+let changeSortMode = localStorage.getItem('changeSortMode') || 'rub';
 let lastPriceLogCheck = null; // Последняя проверка записи цен
 let priceLogCheckInterval = null; // Интервал проверки новых записей цен
+
+// Режимы сортировки для колонок "Прибыль" и "Изменение"
+// profitSortMetric: 'rub' | 'percent'
+// changeSortMetric: 'rub' | 'percent'
+let profitSortMetric = localStorage.getItem('profitSortMetric') || 'rub';
+let changeSortMetric = localStorage.getItem('changeSortMetric') || 'rub';
 
 // Состояние сортировки таблицы портфеля
 let portfolioSortState = {
@@ -95,6 +104,131 @@ function initColumnVisibilityControls() {
             applyColumnVisibility();
         });
     });
+}
+
+function initSortModeControls() {
+    // Устанавливаем активные состояния и обработчики для ₽ / %
+    const profitRub = document.getElementById('profit-sort-rub');
+    const profitPct = document.getElementById('profit-sort-percent');
+    const changeRub = document.getElementById('change-sort-rub');
+    const changePct = document.getElementById('change-sort-percent');
+
+    function updateUI() {
+        if (profitRub && profitPct) {
+            profitRub.classList.toggle('active', profitSortMode === 'rub');
+            profitPct.classList.toggle('active', profitSortMode === 'pct');
+        }
+        if (changeRub && changePct) {
+            changeRub.classList.toggle('active', changeSortMode === 'rub');
+            changePct.classList.toggle('active', changeSortMode === 'pct');
+        }
+    }
+
+    if (profitRub && profitPct) {
+        profitRub.addEventListener('click', () => {
+            profitSortMode = 'rub';
+            localStorage.setItem('profitSortMode', profitSortMode);
+            updateUI();
+            if (currentPortfolioData) {
+                displayPortfolio(currentPortfolioData.portfolio, currentPortfolioData.summary);
+                applyColumnVisibility();
+            }
+        });
+        profitPct.addEventListener('click', () => {
+            profitSortMode = 'pct';
+            localStorage.setItem('profitSortMode', profitSortMode);
+            updateUI();
+            if (currentPortfolioData) {
+                displayPortfolio(currentPortfolioData.portfolio, currentPortfolioData.summary);
+                applyColumnVisibility();
+            }
+        });
+    }
+
+    if (changeRub && changePct) {
+        changeRub.addEventListener('click', () => {
+            changeSortMode = 'rub';
+            localStorage.setItem('changeSortMode', changeSortMode);
+            updateUI();
+            if (currentPortfolioData) {
+                displayPortfolio(currentPortfolioData.portfolio, currentPortfolioData.summary);
+                applyColumnVisibility();
+            }
+        });
+        changePct.addEventListener('click', () => {
+            changeSortMode = 'pct';
+            localStorage.setItem('changeSortMode', changeSortMode);
+            updateUI();
+            if (currentPortfolioData) {
+                displayPortfolio(currentPortfolioData.portfolio, currentPortfolioData.summary);
+                applyColumnVisibility();
+            }
+        });
+    }
+
+    updateUI();
+}
+
+function initSortMetricControls() {
+    const profitRub = document.getElementById('profit-sort-rub');
+    const profitPct = document.getElementById('profit-sort-percent');
+    const changeRub = document.getElementById('change-sort-rub');
+    const changePct = document.getElementById('change-sort-percent');
+
+    const applyActiveState = () => {
+        if (profitRub && profitPct) {
+            profitRub.classList.toggle('active', profitSortMetric === 'rub');
+            profitPct.classList.toggle('active', profitSortMetric === 'percent');
+        }
+        if (changeRub && changePct) {
+            changeRub.classList.toggle('active', changeSortMetric === 'rub');
+            changePct.classList.toggle('active', changeSortMetric === 'percent');
+        }
+    };
+
+    applyActiveState();
+
+    if (profitRub && profitPct) {
+        profitRub.addEventListener('click', () => {
+            profitSortMetric = 'rub';
+            localStorage.setItem('profitSortMetric', profitSortMetric);
+            applyActiveState();
+            if (portfolioSortState.column === 'profit' && currentPortfolioData) {
+                displayPortfolio(currentPortfolioData.portfolio, currentPortfolioData.summary);
+                applyColumnVisibility();
+            }
+        });
+        profitPct.addEventListener('click', () => {
+            profitSortMetric = 'percent';
+            localStorage.setItem('profitSortMetric', profitSortMetric);
+            applyActiveState();
+            if (portfolioSortState.column === 'profit' && currentPortfolioData) {
+                displayPortfolio(currentPortfolioData.portfolio, currentPortfolioData.summary);
+                applyColumnVisibility();
+            }
+        });
+    }
+
+    if (changeRub && changePct) {
+        changeRub.addEventListener('click', () => {
+            changeSortMetric = 'rub';
+            localStorage.setItem('changeSortMetric', changeSortMetric);
+            applyActiveState();
+            if (portfolioSortState.column === 'day_change' && currentPortfolioData) {
+                displayPortfolio(currentPortfolioData.portfolio, currentPortfolioData.summary);
+                applyColumnVisibility();
+            }
+        });
+        changePct.addEventListener('click', () => {
+            changeSortMetric = 'percent';
+            localStorage.setItem('changeSortMetric', changeSortMetric);
+            applyActiveState();
+            if (portfolioSortState.column === 'day_change' && currentPortfolioData) {
+                displayPortfolio(currentPortfolioData.portfolio, currentPortfolioData.summary);
+                applyColumnVisibility();
+            }
+        });
+    }
 }
 
 /**
@@ -157,6 +291,8 @@ document.addEventListener('DOMContentLoaded', async function() {
         setupPortfolioTableHeight(); // Подгоняем высоту таблицы под нижнюю границу окна
     }
     initColumnVisibilityControls(); // Инициализация тумблеров колонок
+    initSortModeControls(); // Инициализация переключателей ₽ / % для сортировки
+    initSortMetricControls(); // Инициализация переключателей режима сортировки ₽ / %
 });
 
 /**
@@ -1211,14 +1347,24 @@ function comparePortfolioItems(a, b, sortState) {
             bVal = parseFloat(b.total_cost) || ((parseFloat(b.quantity) || 0) * (parseFloat(b.current_price) || 0));
             break;
         case 'day_change':
-            // Изменение за период — сортировка по % изменению цены
-            aVal = parseFloat(a.price_change_percent) || 0;
-            bVal = parseFloat(b.price_change_percent) || 0;
+            // Изменение за период — сортировка по рублям или по % в зависимости от настройки
+            if (changeSortMetric === 'rub') {
+                aVal = (parseFloat(a.price_change) || 0) * (parseFloat(a.quantity) || 0);
+                bVal = (parseFloat(b.price_change) || 0) * (parseFloat(b.quantity) || 0);
+            } else {
+                aVal = parseFloat(a.price_change_percent) || 0;
+                bVal = parseFloat(b.price_change_percent) || 0;
+            }
             break;
         case 'profit':
-            // Прибыль — profit_loss в деньгах
-            aVal = parseFloat(a.profit_loss) || 0;
-            bVal = parseFloat(b.profit_loss) || 0;
+            // Прибыль — сортировка по рублям или по % в зависимости от настройки
+            if (profitSortMetric === 'rub') {
+                aVal = parseFloat(a.profit_loss) || 0;
+                bVal = parseFloat(b.profit_loss) || 0;
+            } else {
+                aVal = parseFloat(a.profit_loss_percent) || 0;
+                bVal = parseFloat(b.profit_loss_percent) || 0;
+            }
             break;
         default:
             aVal = 0;

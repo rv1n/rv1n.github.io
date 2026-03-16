@@ -234,12 +234,24 @@
                             <th data-sort-key="profit" class="sortable">
                                 <div class="th-label-group">
                                     <span>Прибыль</span>
+                                    <div class="th-sub-label">
+                                        сортировать:
+                                        <span id="profit-sort-rub" class="sort-metric-option">₽</span>
+                                        /
+                                        <span id="profit-sort-percent" class="sort-metric-option">%</span>
+                                    </div>
                                 </div>
                                 <button type="button" class="sort-btn" aria-label="Сортировать по прибыли">⇅</button>
                             </th>
                             <th data-sort-key="day_change" class="sortable">
                                 <div class="th-label-group">
                                     <span>Изменение</span>
+                                    <div class="th-sub-label">
+                                        сортировать:
+                                        <span id="change-sort-rub" class="sort-metric-option">₽</span>
+                                        /
+                                        <span id="change-sort-percent" class="sort-metric-option">%</span>
+                                    </div>
                                     <div>
                                         <select id="change-period-select" class="change-period-select" title="Период изменения" style="margin-left: 0; margin-top: 6px;">
                                             <option value="1">день</option>
