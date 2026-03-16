@@ -280,6 +280,12 @@ header h1 {
     padding-right: 20px; /* чтобы текст / селект не налезали на кнопку */
 }
 
+/* Центрируем заголовок и подпись только в колонке "Прибыль" */
+.portfolio-table th[data-sort-key="profit"] .th-label-group {
+    text-align: center;
+    margin: 0 auto;
+}
+
 /* Подсказки в шапке таблицы */
 .th-sub-label {
     font-size: 0.8em;
@@ -2127,19 +2133,23 @@ header h1 {
 /* Переключатели режима сортировки ₽ / % в заголовках таблицы */
 .sort-metric-option {
     cursor: pointer;
-    font-weight: 600;
+    font-weight: 700;
     opacity: 0.5;
     margin: 0 4px;
-    font-size: 1.4em;
+    font-size: 1.5em;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 24px;
+    min-width: 26px;
 }
 
 .sort-metric-option.active {
     opacity: 1;
     color: #fbbf24; /* жёлтый акцент, как в подписях */
+    border: 1px solid #fbbf24;
+    border-radius: 6px;
+    padding: 0 4px;
+    background-color: rgba(0, 0, 0, 0.1);
 }
 
 /* ======= Модальное окно Hard Reset ======= */
