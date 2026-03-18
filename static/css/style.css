@@ -343,7 +343,7 @@ header h1 {
 
 /* Быстрый взгляд: компактные панели сверху */
 .portfolio-summary.portfolio-summary-quicklook {
-    grid-template-columns: repeat(3, minmax(210px, 1fr));
+    grid-template-columns: 1fr 1fr 1.6fr;
     gap: 14px;
 }
 
@@ -352,29 +352,14 @@ header h1 {
     border-radius: 12px;
 }
 
-.summary-card.summary-card-compact .summary-value {
-    font-size: 1.55em;
-    margin-bottom: 4px;
-}
-
-.summary-card.summary-card-compact .summary-percent,
-.summary-card.summary-card-compact .summary-count {
-    font-size: 1.02em;
-}
-
-.summary-card-change {
-    display: grid;
-    grid-template-columns: 1fr 200px;
-    gap: 14px;
-    align-items: start;
-}
-
 .summary-change-side {
     background: rgba(255, 255, 255, 0.12);
     border: 1px solid rgba(255, 255, 255, 0.18);
     border-radius: 10px;
     padding: 10px 12px;
-    min-height: 86px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center; /* визуально равные отступы сверху/снизу */
 }
 
 .summary-side-title {
@@ -396,8 +381,9 @@ header h1 {
     align-items: baseline;
     justify-content: space-between;
     gap: 10px;
-    font-size: 0.88em;
+    font-size: 0.96em;
     line-height: 1.15;
+    max-width: 100%;
 }
 
 .summary-type-change-name {
@@ -412,7 +398,9 @@ header h1 {
 .summary-type-change-value {
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
+    text-align: right;
     font-weight: 700;
+    max-width: 100%;
 }
 
 @media (max-width: 768px) {
@@ -714,6 +702,15 @@ header h1 {
     flex-direction: row;
     gap: 0;
     padding: 0;
+}
+
+/* Третья панель сводки: "Изменение за ..." + "По видам" в одной строке.
+   Важно: ставим после базового .summary-card, чтобы перебить display:flex. */
+.summary-card.summary-card-change {
+    display: grid;
+    grid-template-columns: 1.1fr 1.3fr;
+    gap: 14px;
+    align-items: stretch;
 }
 
 .summary-card-half {

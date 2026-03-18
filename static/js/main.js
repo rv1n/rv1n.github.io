@@ -2147,13 +2147,14 @@ function initTodayDate() {
 
 function _getSummaryTarget(field) {
     if (field === 'value') {
-        // Карточка "Общая стоимость" — первая карточка без split-класса
-        return document.querySelector('.summary-card:not(.summary-card-split)');
+        // Карточка "Общая стоимость" — находим по #total-value
+        const el = document.getElementById('total-value');
+        return el ? el.closest('.summary-card') : null;
     }
     if (field === 'pnl') {
-        // Половина карточки, содержащая #total-pnl — ищем ближайшего родителя .summary-card-half
+        // Карточка "Общая прибыль/убыток" — находим по #total-pnl
         const el = document.getElementById('total-pnl');
-        return el ? el.closest('.summary-card-half') : null;
+        return el ? el.closest('.summary-card') : null;
     }
     return null;
 }
