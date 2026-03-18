@@ -55,11 +55,16 @@ let priceLogCheckInterval = null; // Интервал проверки новы�
 let profitSortMetric = localStorage.getItem('profitSortMetric') || 'rub';
 let changeSortMetric = localStorage.getItem('changeSortMetric') || 'rub';
 
-// Состояние сортировки таблицы портфеля
-let portfolioSortState = {
-    column: null,   // buy_price, quantity, invest_sum, current_value, day_change, profit
-    direction: 'asc'
-};
+// Состояние сортировки таблицы портфеля (восстанавливаем из localStorage)
+let portfolioSortState = (() => {
+    const savedColumn = localStorage.getItem('portfolioSortColumn');
+    const savedDirection = localStorage.getItem('portfolioSortDirection');
+    return {
+        // buy_price, quantity, invest_sum, current_value, day_change, profit
+        column: savedColumn || null,
+        direction: savedDirection === 'desc' ? 'desc' : 'asc'
+    };
+})();
 
 function getStoredColumnVisibility() {
     try {
@@ -235,7 +240,7 @@ function initSortMetricControls() {
  * Текущий период изменения цен (в днях) для колонки "Изменение"
  * 1 — день, 7 — неделя, 30 — месяц, 182 — полгода, 365 — год
  */
-let currentChangeDays = 1;
+let currentChangeDays = parseInt(localStorage.getItem('changeDays') || '1', 10) || 1;
 
 /**
  * Безопасный парсинг JSON ответа с обработкой ошибок сервера
@@ -394,35 +399,18 @@ function setupEventListeners() {
     // Смена периода для колонки "Изменение"
     const changePeriodSelect = document.getElementById('change-period-select');
     if (changePeriodSelect) {
+        // Инициализация селекта из сохранённого периода
+        if ([1, 7, 30, 182, 365].includes(currentChangeDays)) {
+            changePeriodSelect.value = String(currentChangeDays);
+        }
+        updateSummaryChangePeriodLabel(changePeriodSelect.value);
+
         changePeriodSelect.addEventListener('change', () => {
             const days = parseInt(changePeriodSelect.value, 10);
             currentChangeDays = !isNaN(days) && days > 0 ? days : 1;
+            localStorage.setItem('changeDays', String(currentChangeDays));
             loadPortfolio(true, true); // тихое обновление, только пересчёт периода — без запросов к MOEX
-
-            // Обновляем подпись в верхней панели "Изменение за ..."
-            const labelSpan = document.getElementById('summary-change-period-label');
-            if (labelSpan) {
-                switch (changePeriodSelect.value) {
-                    case '1':
-                        labelSpan.textContent = 'день';
-                        break;
-                    case '7':
-                        labelSpan.textContent = 'неделю';
-                        break;
-                    case '30':
-                        labelSpan.textContent = 'месяц';
-                        break;
-                    case '182':
-                        labelSpan.textContent = 'полгода';
-                        break;
-                    case '365':
-                        labelSpan.textContent = 'год';
-                        break;
-                    default:
-                        labelSpan.textContent = 'период';
-                        break;
-                }
-            }
+            updateSummaryChangePeriodLabel(changePeriodSelect.value);
         });
     }
 
@@ -464,6 +452,31 @@ function manualRefresh() {
         }
         updateLastUpdateTime();
     });
+}
+
+function updateSummaryChangePeriodLabel(value) {
+    const labelSpan = document.getElementById('summary-change-period-label');
+    if (!labelSpan) return;
+    switch (value) {
+        case '1':
+            labelSpan.textContent = 'день';
+            break;
+        case '7':
+            labelSpan.textContent = 'неделю';
+            break;
+        case '30':
+            labelSpan.textContent = 'месяц';
+            break;
+        case '182':
+            labelSpan.textContent = 'полгода';
+            break;
+        case '365':
+            labelSpan.textContent = 'год';
+            break;
+        default:
+            labelSpan.textContent = 'период';
+            break;
+    }
 }
 
 /**
@@ -1405,6 +1418,10 @@ function handlePortfolioSort(columnKey) {
         portfolioSortState.column = columnKey;
         portfolioSortState.direction = 'asc';
     }
+
+    // Сохраняем состояние сортировки
+    localStorage.setItem('portfolioSortColumn', portfolioSortState.column || '');
+    localStorage.setItem('portfolioSortDirection', portfolioSortState.direction);
 
     // Перерисовываем портфель с учетом сортировки
     displayPortfolio(currentPortfolioData.portfolio, currentPortfolioData.summary);
