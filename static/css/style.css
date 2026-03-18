@@ -341,6 +341,92 @@ header h1 {
     margin-bottom: 30px;
 }
 
+/* Быстрый взгляд: компактные панели сверху */
+.portfolio-summary.portfolio-summary-quicklook {
+    grid-template-columns: repeat(3, minmax(210px, 1fr));
+    gap: 14px;
+}
+
+.summary-card.summary-card-compact {
+    padding: 16px 18px;
+    border-radius: 12px;
+}
+
+.summary-card.summary-card-compact .summary-value {
+    font-size: 1.55em;
+    margin-bottom: 4px;
+}
+
+.summary-card.summary-card-compact .summary-percent,
+.summary-card.summary-card-compact .summary-count {
+    font-size: 1.02em;
+}
+
+.summary-card-change {
+    display: grid;
+    grid-template-columns: 1fr 200px;
+    gap: 14px;
+    align-items: start;
+}
+
+.summary-change-side {
+    background: rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 10px;
+    padding: 10px 12px;
+    min-height: 86px;
+}
+
+.summary-side-title {
+    font-size: 0.82em;
+    font-weight: 700;
+    opacity: 0.9;
+    margin-bottom: 6px;
+    letter-spacing: 0.2px;
+}
+
+.summary-type-changes {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.summary-type-change-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    font-size: 0.88em;
+    line-height: 1.15;
+}
+
+.summary-type-change-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    opacity: 0.95;
+}
+
+.summary-type-change-value {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    font-weight: 700;
+}
+
+@media (max-width: 768px) {
+    .portfolio-summary.portfolio-summary-quicklook {
+        grid-template-columns: 1fr;
+    }
+    .summary-card-change {
+        grid-template-columns: 1fr;
+    }
+    .summary-change-side {
+        margin-top: 10px;
+    }
+}
+
 /* Мониторинг сервера */
 .server-status-container {
     margin-top: 20px;

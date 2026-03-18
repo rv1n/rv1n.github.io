@@ -100,9 +100,9 @@
         </div>
     </div>
 
-        <!-- Сводка портфеля -->
-        <div class="portfolio-summary" id="portfolio-summary">
-            <div class="summary-card">
+        <!-- Сводка портфеля (быстрый взгляд) -->
+        <div class="portfolio-summary portfolio-summary-quicklook" id="portfolio-summary">
+            <div class="summary-card summary-card-compact">
                 <div class="summary-label">
                     Общая стоимость
                     <button class="summary-toggle-btn" id="toggle-value-btn" onclick="toggleSummaryField('value')" title="Скрыть/показать"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
@@ -110,22 +110,27 @@
                 <div class="summary-value" id="total-value">0 ₽</div>
                 <div class="summary-count" id="total-count">0 активов</div>
             </div>
-                <div class="summary-card summary-card-split">
-                <div class="summary-card-half">
-                    <div class="summary-label">
-                        Общая прибыль/убыток
-                        <button class="summary-toggle-btn" id="toggle-pnl-btn" onclick="toggleSummaryField('pnl')" title="Скрыть/показать"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
-                    </div>
-                    <div class="summary-value" id="total-pnl">0 ₽</div>
-                    <div class="summary-percent" id="total-pnl-percent">0%</div>
+
+            <div class="summary-card summary-card-compact">
+                <div class="summary-label">
+                    Общая прибыль/убыток
+                    <button class="summary-toggle-btn" id="toggle-pnl-btn" onclick="toggleSummaryField('pnl')" title="Скрыть/показать"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
                 </div>
-                <div class="summary-card-divider"></div>
-                <div class="summary-card-half">
+                <div class="summary-value" id="total-pnl">0 ₽</div>
+                <div class="summary-percent" id="total-pnl-percent">0%</div>
+            </div>
+
+            <div class="summary-card summary-card-compact summary-card-change">
+                <div class="summary-change-main">
                     <div class="summary-label">
                         Изменение за <span id="summary-change-period-label">день</span>
                     </div>
                     <div class="summary-value" id="total-price-change">0 ₽</div>
                     <div class="summary-percent" id="total-price-change-percent">0%</div>
+                </div>
+                <div class="summary-change-side" aria-label="Изменение по видам активов">
+                    <div class="summary-side-title">По видам</div>
+                    <div id="summary-type-changes" class="summary-type-changes"></div>
                 </div>
             </div>
         </div>

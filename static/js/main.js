@@ -870,6 +870,9 @@ function displayPortfolio(portfolio, summary) {
             emptySummary.cash_balance = summary.cash_balance;
         }
         updateSummary(emptySummary);
+        // Быстрый взгляд: изменения по видам активов показываем по всему портфелю,
+        // даже если текущий фильтр даёт пустой результат.
+        renderQuicklookTypeChanges(portfolio);
         return;
     }
     
@@ -908,12 +911,96 @@ function displayPortfolio(portfolio, summary) {
     
     // Обновление сводки на основе отфильтрованных данных
     updateSummary(filteredSummary);
+
+    // Быстрый взгляд: изменения по видам активов — всегда по полному портфелю (без фильтров)
+    renderQuicklookTypeChanges(portfolio);
     
     // Обновление диаграммы категорий
     updateCategoryChart(portfolio);
 
     // Обновляем визуальные индикаторы сортировки в заголовках
     updatePortfolioSortIndicators();
+}
+
+/**
+ * Быстрый взгляд: показать изменения по видам активов в правой колонке сводки.
+ * Рассчитывается по полному портфелю (без фильтров), с учётом текущего периода change_days,
+ * т.к. поля item.price_change / item.price_change_percent уже приходят пересчитанными сервером.
+ */
+function renderQuicklookTypeChanges(portfolio) {
+    const host = document.getElementById('summary-type-changes');
+    if (!host) return;
+
+    if (!Array.isArray(portfolio) || portfolio.length === 0) {
+        host.innerHTML = '<div class="summary-type-change-row"><span class="summary-type-change-name">Нет данных</span><span class="summary-type-change-value">—</span></div>';
+        return;
+    }
+
+    // Группируем по виду актива (asset_type), иначе "Без вида"
+    const groups = new Map();
+    for (const item of portfolio) {
+        const nameRaw = (item && item.asset_type) ? String(item.asset_type).trim() : '';
+        const name = nameRaw || 'Без вида';
+        if (!groups.has(name)) {
+            groups.set(name, { name, changeRub: 0, valueRub: 0, weightedPctSum: 0 });
+        }
+        const g = groups.get(name);
+        const qty = Number(item.quantity) || 0;
+        const change = Number(item.price_change) || 0;
+        const value = Number(item.total_cost) || 0;
+        const pct = Number(item.price_change_percent) || 0;
+
+        g.changeRub += change * qty;
+        g.valueRub += value;
+        g.weightedPctSum += pct * value;
+    }
+
+    const rows = Array.from(groups.values()).map(g => {
+        const pct = g.valueRub > 0 ? (g.weightedPctSum / g.valueRub) : 0;
+        return { name: g.name, changeRub: g.changeRub, pct };
+    });
+
+    // Сортируем по абсолютному изменению в рублях (чтобы сверху были самые заметные)
+    rows.sort((a, b) => Math.abs(b.changeRub) - Math.abs(a.changeRub));
+
+    // Чтобы блок оставался компактным — показываем топ-6, остальные объединяем
+    const MAX_ROWS = 6;
+    let visible = rows;
+    if (rows.length > MAX_ROWS) {
+        const head = rows.slice(0, MAX_ROWS - 1);
+        const tail = rows.slice(MAX_ROWS - 1);
+        const otherChange = tail.reduce((s, r) => s + (r.changeRub || 0), 0);
+        // Процент для "прочих" считаем как взвешенное среднее по стоимости — но у нас нет сумм стоимостей в rows,
+        // поэтому оставим только ₽, а % не показываем, чтобы не вводить в заблуждение.
+        head.push({ name: `Прочие (${tail.length})`, changeRub: otherChange, pct: null });
+        visible = head;
+    }
+
+    host.innerHTML = visible.map(r => {
+        const isProfit = (r.changeRub || 0) >= 0;
+        const cls = isProfit ? 'profit' : 'loss';
+        const sign = isProfit ? '+' : '';
+        const changeText = `${sign}${formatCurrency(r.changeRub, 2)}`;
+        const pctText = (r.pct === null || r.pct === undefined)
+            ? ''
+            : ` (${r.pct >= 0 ? '+' : '- '}${formatPercent(Math.abs(r.pct), 2)})`;
+        return `
+            <div class="summary-type-change-row ${cls}">
+                <span class="summary-type-change-name" title="${escapeHtml(r.name)}">${escapeHtml(r.name)}</span>
+                <span class="summary-type-change-value">${changeText}${pctText}</span>
+            </div>
+        `;
+    }).join('');
+}
+
+// Мини-экранирование для вставки строк в HTML (используем только для быстрых подписей)
+function escapeHtml(str) {
+    return String(str)
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#039;');
 }
 
 /**
