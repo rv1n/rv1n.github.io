@@ -885,9 +885,9 @@ function displayPortfolio(portfolio, summary) {
             emptySummary.cash_balance = summary.cash_balance;
         }
         updateSummary(emptySummary);
-        // Быстрый взгляд: изменения по видам активов показываем по всему портфелю,
-        // даже если текущий фильтр даёт пустой результат.
-        renderQuicklookTypeChanges(portfolio);
+        // Быстрый взгляд: учитываем текущие фильтры — если после отбора ничего нет,
+        // в блоке по видам тоже показываем "Нет данных".
+        renderQuicklookTypeChanges(filteredPortfolio);
         return;
     }
     
@@ -924,11 +924,9 @@ function displayPortfolio(portfolio, summary) {
     // Загружаем и отрисовываем мини-графики для всех позиций
     loadSparklines(filteredPortfolio);
     
-    // Обновление сводки на основе отфильтрованных данных
+    // Обновление сводки и блока "по видам" на основе отфильтрованных данных
     updateSummary(filteredSummary);
-
-    // Быстрый взгляд: изменения по видам активов — всегда по полному портфелю (без фильтров)
-    renderQuicklookTypeChanges(portfolio);
+    renderQuicklookTypeChanges(filteredPortfolio);
     
     // Обновление диаграммы категорий
     updateCategoryChart(portfolio);
