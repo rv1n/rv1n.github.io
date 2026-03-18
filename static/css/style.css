@@ -354,7 +354,7 @@ header h1 {
 
 .summary-change-side {
     /* без отдельного фона/рамки — используем фон общей карточки */
-    padding: 4px 0 2px 18px;
+    padding: 4px 0 2px 8px; /* чуть ближе к левому краю, больше места под цифры */
     display: flex;
     flex-direction: column;
     justify-content: center; /* визуально равные отступы сверху/снизу */
@@ -378,7 +378,7 @@ header h1 {
     display: flex;
     align-items: baseline;
     justify-content: space-between;
-    gap: 10px;
+    gap: 6px;
     font-size: 1.02em;
     line-height: 1.15;
     max-width: 100%;
@@ -387,6 +387,7 @@ header h1 {
 .summary-type-change-name {
     flex: 1;
     min-width: 0;
+    max-width: 45%; /* ограничиваем ширину названия, чтобы числа справа влезали */
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
