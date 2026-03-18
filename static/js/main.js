@@ -960,8 +960,22 @@ function renderQuicklookTypeChanges(portfolio) {
         return { name: g.name, changeRub: g.changeRub, pct };
     });
 
-    // Сортируем по абсолютному изменению в рублях (чтобы сверху были самые заметные)
-    rows.sort((a, b) => Math.abs(b.changeRub) - Math.abs(a.changeRub));
+    // Приоритетный порядок видов для быстрого взгляда
+    const TYPE_ORDER = ['Акции', 'Облигации', 'Фонды'];
+    const orderIndex = (name) => {
+        const idx = TYPE_ORDER.indexOf(name);
+        return idx === -1 ? TYPE_ORDER.length : idx;
+    };
+
+    // Сортируем: сначала по заданному порядку, внутри группы — по абсолютному изменению
+    rows.sort((a, b) => {
+        const oa = orderIndex(a.name);
+        const ob = orderIndex(b.name);
+        if (oa !== ob) return oa - ob;
+        const da = Math.abs(a.changeRub || 0);
+        const db = Math.abs(b.changeRub || 0);
+        return db - da;
+    });
 
     // Чтобы блок оставался компактным — показываем топ-6, остальные объединяем
     const MAX_ROWS = 6;
