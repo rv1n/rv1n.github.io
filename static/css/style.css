@@ -353,10 +353,8 @@ header h1 {
 }
 
 .summary-change-side {
-    background: rgba(255, 255, 255, 0.12);
-    border: 1px solid rgba(255, 255, 255, 0.18);
-    border-radius: 10px;
-    padding: 10px 12px;
+    /* без отдельного фона/рамки — используем фон общей карточки */
+    padding: 4px 0 2px 18px;
     display: flex;
     flex-direction: column;
     justify-content: center; /* визуально равные отступы сверху/снизу */
@@ -381,7 +379,7 @@ header h1 {
     align-items: baseline;
     justify-content: space-between;
     gap: 10px;
-    font-size: 0.96em;
+    font-size: 1.02em;
     line-height: 1.15;
     max-width: 100%;
 }
