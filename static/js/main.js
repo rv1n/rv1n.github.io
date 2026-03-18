@@ -823,7 +823,9 @@ function updatePortfolioCategoryFilter(portfolio) {
     const categoryFilter = document.getElementById('portfolio-category-filter');
     if (!categoryFilter || !portfolio || !Array.isArray(portfolio)) return;
     
-    const currentValue = categoryFilter.value;
+    // Текущее значение берём из localStorage (если есть) либо из самого селекта
+    const storedValue = localStorage.getItem('portfolioFilterCategory') || '';
+    const currentValue = storedValue || categoryFilter.value;
     const categoriesSet = new Set();
     portfolio.forEach(item => {
         const name = (item && (item.category || 'Без категории')) || 'Без категории';
@@ -3881,7 +3883,13 @@ document.addEventListener('DOMContentLoaded', function() {
     // Обработчик фильтра по типу инструмента в портфеле
     const portfolioTypeFilter = document.getElementById('portfolio-type-filter');
     if (portfolioTypeFilter) {
+        // Восстанавливаем сохранённое значение типа, если есть
+        const savedType = localStorage.getItem('portfolioFilterType') || '';
+        if (savedType) {
+            portfolioTypeFilter.value = savedType;
+        }
         portfolioTypeFilter.addEventListener('change', function() {
+            localStorage.setItem('portfolioFilterType', portfolioTypeFilter.value || '');
             // Перерисовываем портфель с учетом фильтра
             if (currentPortfolioData) {
                 displayPortfolio(currentPortfolioData.portfolio, currentPortfolioData.summary);
@@ -3893,7 +3901,13 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     const portfolioCategoryFilter = document.getElementById('portfolio-category-filter');
     if (portfolioCategoryFilter) {
+        // Восстанавливаем сохранённое значение категории, если есть
+        const savedCategory = localStorage.getItem('portfolioFilterCategory') || '';
+        if (savedCategory) {
+            portfolioCategoryFilter.value = savedCategory;
+        }
         portfolioCategoryFilter.addEventListener('change', function() {
+            localStorage.setItem('portfolioFilterCategory', portfolioCategoryFilter.value || '');
             if (currentPortfolioData) {
                 displayPortfolio(currentPortfolioData.portfolio, currentPortfolioData.summary);
                 applyColumnVisibility();
@@ -5214,7 +5228,8 @@ function updateAssetTypeSelects() {
     // Обновляем фильтр "Типы" в разделе "Мой портфель" на основе видов активов
     const portfolioTypeFilter = document.getElementById('portfolio-type-filter');
     if (portfolioTypeFilter) {
-        const currentValue = portfolioTypeFilter.value;
+        const storedType = localStorage.getItem('portfolioFilterType') || '';
+        const currentValue = storedType || portfolioTypeFilter.value;
         portfolioTypeFilter.innerHTML = '<option value=\"\">Все виды</option>';
         ASSET_TYPES.forEach(at => {
             const option = document.createElement('option');
