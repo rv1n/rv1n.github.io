@@ -294,6 +294,15 @@ header h1 {
     margin-top: 2px;
 }
 
+.sparkline-column-th .th-label-group {
+    text-align: center;
+    padding-right: 0;
+}
+
+.sparkline-days-select {
+    max-width: 100%;
+}
+
 .portfolio-table th.sortable {
     position: relative;
 }

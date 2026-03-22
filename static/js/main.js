@@ -25,6 +25,32 @@ const PORTFOLIO_COLUMNS = [
     { key: 'actions',      index: 9 },
 ];
 
+/** Количество дней на мини-графике в таблице портфеля: 8, 15 или 30 */
+const SPARKLINE_DAYS_OPTIONS = [8, 15, 30];
+const SPARKLINE_DAYS_STORAGE_KEY = 'sparklinePortfolioDays';
+
+function getSparklineDays() {
+    const v = parseInt(localStorage.getItem(SPARKLINE_DAYS_STORAGE_KEY), 10);
+    return SPARKLINE_DAYS_OPTIONS.includes(v) ? v : 15;
+}
+
+/** Выбор 8 / 15 / 30 дней для мини-графиков в колонке «График» */
+function initSparklineDaysSelect() {
+    const sel = document.getElementById('sparkline-days-select');
+    if (!sel) return;
+    const days = getSparklineDays();
+    sel.value = String(days);
+    sel.addEventListener('change', () => {
+        const v = parseInt(sel.value, 10);
+        if (!SPARKLINE_DAYS_OPTIONS.includes(v)) return;
+        localStorage.setItem(SPARKLINE_DAYS_STORAGE_KEY, String(v));
+        if (currentPortfolioData && currentPortfolioData.portfolio) {
+            const filtered = applyPortfolioFilters(currentPortfolioData.portfolio);
+            loadSparklines(filtered);
+        }
+    });
+}
+
 function toggleMainMenu() {
     const menu = document.getElementById('main-menu');
     if (!menu) return;
@@ -298,6 +324,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     initColumnVisibilityControls(); // Инициализация тумблеров колонок
     initSortModeControls(); // Инициализация переключателей ₽ / % для сортировки
     initSortMetricControls(); // Инициализация переключателей режима сортировки ₽ / %
+    initSparklineDaysSelect(); // Выбор 8 / 15 / 30 дней для колонки «График»
 });
 
 /**
@@ -1047,9 +1074,10 @@ async function loadSparklines(portfolio) {
  */
 async function renderSparkline(container, ticker, isBond = false) {
     try {
-        // Получаем историю цен за последние 30 календарных дней
-        // (чтобы собрать до 8 последних торговых дней с учетом выходных и праздников)
-        const response = await fetch(`/api/price-history?ticker=${ticker}&days=30&limit=200`);
+        const sparklineDays = getSparklineDays();
+        // Календарных дней запрашиваем больше, чтобы набрать нужное число дневных точек (выходные без котировок)
+        const fetchCalendarDays = Math.min(365, Math.max(40, sparklineDays * 4));
+        const response = await fetch(`/api/price-history?ticker=${ticker}&days=${fetchCalendarDays}&limit=500`);
         const data = await response.json();
         
         if (!data.success || !data.history || data.history.length === 0) {
@@ -1095,8 +1123,7 @@ async function renderSparkline(container, ticker, isBond = false) {
             return;
         }
         
-        // Ограничиваем до 15 дней (берем последние 15 дней)
-        const prices = dailyPrices.slice(-15);
+        const prices = dailyPrices.slice(-sparklineDays);
         
         // Параметры графика
         const width = 140;

@@ -266,7 +266,18 @@
                                 </div>
                                 <button type="button" class="sort-btn" aria-label="Сортировать по изменению за период">⇅</button>
                             </th>
-                            <th>График (15 дней)</th>
+                            <th class="sparkline-column-th">
+                                <div class="th-label-group">
+                                    <span>График</span>
+                                    <div class="th-sub-label" style="margin-top: 6px;">
+                                        <select id="sparkline-days-select" class="change-period-select sparkline-days-select" title="Период мини-графика">
+                                            <option value="8">8 дней</option>
+                                            <option value="15">15 дней</option>
+                                            <option value="30">30 дней</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </th>
                             <th>Действия</th>
                         </tr>
                     </thead>
@@ -726,7 +737,7 @@
                                     <label class="settings-toggle">
                                         <input type="checkbox" class="settings-column-toggle" data-col-key="sparkline" data-col-index="8" checked>
                                         <span class="settings-toggle-switch"></span>
-                                        <span class="settings-toggle-label">График (15 дней)</span>
+                                        <span class="settings-toggle-label">График (мини-график)</span>
                                     </label>
                                     <label class="settings-toggle">
                                         <input type="checkbox" class="settings-column-toggle" data-col-key="actions" data-col-index="9" checked>
