@@ -179,6 +179,40 @@ def get_adjusted_price_for_date(raw_price: float, price_dt: datetime, ticker: st
         return raw_price
     return raw_price * factor
 
+
+def _get_cumulative_split_factor_until(ticker: str, dt_obj, split_coeffs_map: dict) -> float:
+    """
+    Накопленный коэффициент сплитов на дату (включительно).
+    Используется для пересчета количества и цен в текущей шкале:
+      quantity_adj = quantity / factor
+      price_adj = price * factor
+    """
+    ticker_norm = _normalize_ticker(ticker)
+    coeffs = split_coeffs_map.get(ticker_norm, []) if split_coeffs_map else []
+    if not coeffs:
+        return 1.0
+
+    if isinstance(dt_obj, datetime):
+        target_date = dt_obj.date()
+    else:
+        target_date = dt_obj
+    if not target_date:
+        return 1.0
+
+    factor = 1.0
+    for c in coeffs:
+        eff_date = c.get('effective_date')
+        if isinstance(eff_date, str):
+            try:
+                eff_date = datetime.strptime(eff_date, '%Y-%m-%d').date()
+            except Exception:
+                eff_date = None
+        coeff = float(c.get('coefficient') or 1.0)
+        if eff_date and eff_date <= target_date and coeff > 0:
+            factor *= coeff
+
+    return factor if factor > 0 else 1.0
+
 def write_access_log(event: str, username: str = None, success: bool = True):
     """Записать событие доступа в базу данных."""
     try:
@@ -966,9 +1000,21 @@ def get_portfolio():
             # previous_price = самая ранняя запись в истории за выбранный период
             bond_nominal = bond_facevalue if bond_facevalue else 1000.0
 
-            # Конечная точка — текущая цена актива (в тех же единицах, что и история:
-            # проценты для облигаций, рубли для акций)
-            latest_price = current_price if current_price_data else None
+            # Конечная точка — текущая цена актива в приведенной (актуальной) шкале,
+            # с учетом коэффициентов сплитов по дате.
+            split_factor_now = _get_cumulative_split_factor_until(
+                item.ticker, datetime.now(_MOSCOW_TZ).date(), split_coeffs_map
+            )
+            latest_price_raw = current_price if current_price_data else None
+            latest_price = (
+                get_adjusted_price_for_date(
+                    latest_price_raw,
+                    datetime.now(_MOSCOW_TZ),
+                    item.ticker,
+                    split_coeffs_map
+                )
+                if latest_price_raw is not None else None
+            )
             previous_price = None
 
             if change_days and change_days > 0:
@@ -1076,22 +1122,32 @@ def get_portfolio():
             else:
                 current_price_rub = current_price
                 avg_price_rub = calculated_avg_price
+
+            # Применяем коэффициент сплита к ценам и количеству:
+            # количество делим на коэффициент.
+            # Средняя цена покупки остаётся пересчитанной (умножается),
+            # а текущую цену оставляем "как с биржи", без умножения.
+            effective_quantity = item.quantity / split_factor_now if split_factor_now > 0 else item.quantity
+            avg_price_rub = (avg_price_rub or 0) * split_factor_now
             
-            total_current_value = item.quantity * current_price_rub
+            total_current_value = effective_quantity * current_price_rub
             
             # Используем реальную сумму из транзакций для точности (избегаем ошибок округления)
             # Если количество в портфеле равно количеству из транзакций - используем total_cost напрямую
             # Иначе пропорционально пересчитываем
             if total_cost_from_transactions is not None and total_buy_quantity > 0:
-                if abs(item.quantity - total_buy_quantity) < 0.01:  # Практически равны (с учетом округления)
+                effective_total_buy_quantity = (
+                    total_buy_quantity / split_factor_now if split_factor_now > 0 else total_buy_quantity
+                )
+                if abs(effective_quantity - effective_total_buy_quantity) < 0.01:  # Практически равны (с учетом округления)
                     total_buy_cost = total_cost_from_transactions
                 else:
                     # Пропорционально пересчитываем стоимость покупки для текущего количества
                     # (если были продажи, часть бумаг уже продана)
-                    total_buy_cost = (total_cost_from_transactions / total_buy_quantity) * item.quantity
+                    total_buy_cost = (total_cost_from_transactions / effective_total_buy_quantity) * effective_quantity
             else:
                 # Если нет транзакций, используем расчет через среднюю цену
-                total_buy_cost = item.quantity * avg_price_rub
+                total_buy_cost = effective_quantity * avg_price_rub
             
             profit_loss = total_current_value - total_buy_cost
             profit_loss_percent = ((current_price_rub - avg_price_rub) / avg_price_rub * 100) if avg_price_rub > 0 else 0
@@ -1110,9 +1166,9 @@ def get_portfolio():
                 price_change_rub = price_change * fx_rate_change
             else:
                 price_change_rub = price_change
-            
+
             # Рассчитываем количество лотов
-            lots = item.quantity / lotsize if lotsize > 0 else item.quantity
+            lots = effective_quantity / lotsize if lotsize > 0 else effective_quantity
             
             result_item = {
                 'id': item.id,
@@ -1121,7 +1177,7 @@ def get_portfolio():
                 'category': item.category if hasattr(item, 'category') else None,
                 'asset_type': item.asset_type if hasattr(item, 'asset_type') else None,
                 'instrument_type': item.instrument_type.value if hasattr(item, 'instrument_type') and item.instrument_type else 'Акция',
-                'quantity': item.quantity,  # Количество бумаг
+                'quantity': effective_quantity,  # Количество бумаг (после коэффициентов сплитов)
                 'lots': lots,  # Количество лотов
                 'lotsize': lotsize,  # Размер лота
                 'average_buy_price': avg_price_rub,  # уже в рублях для облигаций
