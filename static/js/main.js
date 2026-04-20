@@ -559,6 +559,7 @@ async function loadPortfolio(silent = false, useCachedPrices = false) {
             
             // Отображаем данные
             displayPortfolio(currentPortfolioData.portfolio, currentPortfolioData.summary);
+            populateSplitTickerOptions();
             if (!silent) {
                 if (loading) loading.style.display = 'none';
                 if (table) table.style.display = 'table';
@@ -640,6 +641,7 @@ async function refreshSinglePortfolioPosition(ticker) {
             portfolio: data.portfolio,
             summary: data.summary
         };
+        populateSplitTickerOptions();
         
         // Учитываем текущие фильтры по виду актива и категории
         const { type: selectedType, category: selectedCategory } = getPortfolioFilters();
@@ -5673,6 +5675,9 @@ async function loadLoggingSettings() {
     } catch (error) {
         console.error('Ошибка загрузки настроек времени:', error);
     }
+
+    // Загружаем коэффициенты сплитов
+    loadSplitCoefficients();
 }
 
 /**
@@ -5721,6 +5726,122 @@ async function saveLoggingTime() {
     } catch (error) {
         console.error('Ошибка сохранения времени логирования:', error);
         alert('Ошибка соединения с сервером');
+    }
+}
+
+async function loadSplitCoefficients() {
+    const tbody = document.getElementById('split-coefficients-tbody');
+    if (!tbody) return;
+    try {
+        const response = await fetch('/api/split-coefficients');
+        const data = await response.json();
+        if (!data.success) {
+            tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; color:#b91c1c;">Ошибка: ${data.error || 'не удалось загрузить'}</td></tr>`;
+            return;
+        }
+
+        const items = Array.isArray(data.items) ? data.items : [];
+        if (!items.length) {
+            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:#6b7280;">Нет данных</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = items.map(item => `
+            <tr>
+                <td>${item.effective_date || ''}</td>
+                <td>${item.ticker || ''}</td>
+                <td>${item.coefficient}</td>
+                <td>
+                    <button class="btn btn-danger btn-sm" type="button" onclick="deleteSplitCoefficient(${item.id})">Удалить</button>
+                </td>
+            </tr>
+        `).join('');
+    } catch (error) {
+        console.error('Ошибка загрузки коэффициентов:', error);
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:#b91c1c;">Ошибка соединения</td></tr>';
+    }
+}
+
+function populateSplitTickerOptions() {
+    const select = document.getElementById('split-ticker-select');
+    if (!select) return;
+
+    const currentValue = select.value;
+    const tickers = new Set();
+    if (currentPortfolioData && Array.isArray(currentPortfolioData.portfolio)) {
+        currentPortfolioData.portfolio.forEach(item => {
+            if (item && item.ticker) tickers.add(String(item.ticker).toUpperCase());
+        });
+    }
+
+    const sorted = Array.from(tickers).sort((a, b) => a.localeCompare(b, 'ru'));
+    select.innerHTML = '<option value="">Выберите тикер</option>' +
+        sorted.map(t => `<option value="${t}">${t}</option>`).join('');
+
+    if (currentValue && sorted.includes(currentValue)) {
+        select.value = currentValue;
+    }
+}
+
+async function addSplitCoefficient() {
+    const tickerEl = document.getElementById('split-ticker-select');
+    const dateEl = document.getElementById('split-date');
+    const coeffEl = document.getElementById('split-coefficient');
+    if (!tickerEl || !dateEl || !coeffEl) return;
+
+    const ticker = (tickerEl.value || '').trim().toUpperCase();
+    const effective_date = dateEl.value;
+    const coefficient = parseFloat(coeffEl.value);
+
+    if (!ticker) {
+        alert('Укажите тикер');
+        return;
+    }
+    if (!effective_date) {
+        alert('Укажите дату изменения');
+        return;
+    }
+    if (!isFinite(coefficient) || coefficient <= 0) {
+        alert('Коэффициент должен быть больше 0');
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/split-coefficients', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ticker, effective_date, coefficient })
+        });
+        const data = await response.json();
+        if (!data.success) {
+            alert(`Ошибка: ${data.error || 'не удалось добавить коэффициент'}`);
+            return;
+        }
+
+        coeffEl.value = '';
+        await loadSplitCoefficients();
+        // Перерисовываем портфель с новыми коэффициентами
+        await loadPortfolio(true, true);
+    } catch (error) {
+        console.error('Ошибка добавления коэффициента:', error);
+        alert('Ошибка соединения');
+    }
+}
+
+async function deleteSplitCoefficient(id) {
+    if (!confirm('Удалить коэффициент?')) return;
+    try {
+        const response = await fetch(`/api/split-coefficients/${id}`, { method: 'DELETE' });
+        const data = await response.json();
+        if (!data.success) {
+            alert(`Ошибка: ${data.error || 'не удалось удалить коэффициент'}`);
+            return;
+        }
+        await loadSplitCoefficients();
+        await loadPortfolio(true, true);
+    } catch (error) {
+        console.error('Ошибка удаления коэффициента:', error);
+        alert('Ошибка соединения');
     }
 }
 

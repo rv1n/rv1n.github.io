@@ -13,6 +13,7 @@ from models.cash_balance import CashBalance
 from models.settings import Settings
 from models.user import User
 from models.access_log import AccessLog
+from models.split_coefficient import SplitCoefficient
 from services.moex_service import MOEXService
 from services.price_logger import PriceLogger
 from services.currency_service import CurrencyService
@@ -104,6 +105,79 @@ def _get_real_ip():
 
 
 _MOSCOW_TZ = pytz.timezone('Europe/Moscow')
+
+
+def _normalize_ticker(value: str) -> str:
+    return (value or '').strip().upper()
+
+
+def _get_split_coefficients_map(user_id: int, tickers):
+    """
+    Вернуть коэффициенты сплитов по тикерам:
+    {
+      'SBER': [{'effective_date': date(...), 'coefficient': 10.0}, ...]
+    }
+    """
+    if not user_id or not tickers:
+        return {}
+    normalized = sorted({_normalize_ticker(t) for t in tickers if t})
+    if not normalized:
+        return {}
+
+    rows = db_session.query(SplitCoefficient).filter(
+        SplitCoefficient.user_id == user_id,
+        SplitCoefficient.ticker.in_(normalized)
+    ).order_by(SplitCoefficient.ticker.asc(), SplitCoefficient.effective_date.asc(), SplitCoefficient.id.asc()).all()
+
+    result = {t: [] for t in normalized}
+    for r in rows:
+        ticker = _normalize_ticker(r.ticker)
+        result.setdefault(ticker, []).append({
+            'effective_date': r.effective_date,
+            'coefficient': float(r.coefficient or 1.0),
+        })
+    return result
+
+
+def get_adjusted_price_for_date(raw_price: float, price_dt: datetime, ticker: str, split_coeffs_map: dict) -> float:
+    """
+    Приведение цены на дату к текущей шкале с учётом сплитов.
+    Для всех сплитов ПОСЛЕ даты цены: adjusted = raw * product(coeff).
+
+    Пример:
+      - если после даты был сплит 1:10, коэффициент = 0.1
+      - историческая цена 3180 станет 318
+    """
+    if raw_price is None:
+        return None
+
+    ticker_norm = _normalize_ticker(ticker)
+    coeffs = split_coeffs_map.get(ticker_norm, []) if split_coeffs_map else []
+    if not coeffs:
+        return raw_price
+
+    if isinstance(price_dt, datetime):
+        price_date = price_dt.date()
+    else:
+        price_date = price_dt
+    if not price_date:
+        return raw_price
+
+    factor = 1.0
+    for c in coeffs:
+        eff_date = c.get('effective_date')
+        if isinstance(eff_date, str):
+            try:
+                eff_date = datetime.strptime(eff_date, '%Y-%m-%d').date()
+            except Exception:
+                eff_date = None
+        coeff = float(c.get('coefficient') or 1.0)
+        if eff_date and eff_date >= price_date and coeff > 0:
+            factor *= coeff
+
+    if factor <= 0:
+        return raw_price
+    return raw_price * factor
 
 def write_access_log(event: str, username: str = None, success: bool = True):
     """Записать событие доступа в базу данных."""
@@ -254,6 +328,21 @@ def migrate_portfolio_columns():
             conn.execute(text("ALTER TABLE users ADD COLUMN theme_color_header_text VARCHAR(7)"))
         if 'theme_color_subtext' not in cols:
             conn.execute(text("ALTER TABLE users ADD COLUMN theme_color_subtext VARCHAR(7)"))
+        conn.commit()
+
+        # --- Таблица коэффициентов сплитов ---
+        conn.execute(text('''
+            CREATE TABLE IF NOT EXISTS split_coefficients (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL REFERENCES users(id),
+                ticker VARCHAR(20) NOT NULL,
+                effective_date DATE NOT NULL,
+                coefficient REAL NOT NULL,
+                created_at DATETIME
+            )
+        '''))
+        conn.execute(text('CREATE INDEX IF NOT EXISTS idx_split_coefficients_user_ticker ON split_coefficients(user_id, ticker)'))
+        conn.execute(text('CREATE INDEX IF NOT EXISTS idx_split_coefficients_effective_date ON split_coefficients(effective_date)'))
         conn.commit()
 
 migrate_portfolio_columns()
@@ -594,6 +683,7 @@ def get_portfolio():
         
         # Оптимизация: загружаем все транзакции одним запросом
         all_tickers = [item.ticker.upper() for item in unique_items]
+        split_coeffs_map = _get_split_coefficients_map(current_user.id, all_tickers)
         all_transactions_dict = {}
         if all_tickers:
             all_transactions_list = db_session.query(Transaction).filter(
@@ -888,13 +978,18 @@ def get_portfolio():
                     latest_entry_today = ticker_history.get('today')
 
                     if latest_entry_today:
-                        previous_price = latest_entry_today.price
+                        previous_price = get_adjusted_price_for_date(
+                            latest_entry_today.price, latest_entry_today.logged_at, item.ticker, split_coeffs_map
+                        )
                     else:
                         # Нет записи за сегодня — любая последняя доступная запись
                         any_previous = db_session.query(PriceHistory).filter(
                             PriceHistory.ticker == item.ticker
                         ).order_by(PriceHistory.logged_at.desc()).first()
-                        previous_price = any_previous.price if any_previous else latest_price
+                        previous_price = (
+                            get_adjusted_price_for_date(any_previous.price, any_previous.logged_at, item.ticker, split_coeffs_map)
+                            if any_previous else latest_price
+                        )
                 else:
                     # Неделя, месяц и т.д.: предыдущая цена — самая старая запись за период
                     period_start = datetime.now() - timedelta(days=change_days)
@@ -904,25 +999,35 @@ def get_portfolio():
                     ).order_by(PriceHistory.logged_at.asc()).first()
 
                     if oldest_entry:
-                        previous_price = oldest_entry.price
+                        previous_price = get_adjusted_price_for_date(
+                            oldest_entry.price, oldest_entry.logged_at, item.ticker, split_coeffs_map
+                        )
                     else:
                         # Нет записей за период — берём самую свежую доступную
                         any_entry = db_session.query(PriceHistory).filter(
                             PriceHistory.ticker == item.ticker
                         ).order_by(PriceHistory.logged_at.desc()).first()
-                        previous_price = any_entry.price if any_entry else latest_price
+                        previous_price = (
+                            get_adjusted_price_for_date(any_entry.price, any_entry.logged_at, item.ticker, split_coeffs_map)
+                            if any_entry else latest_price
+                        )
             else:
                 # Без периода — дневное изменение: цена из истории за сегодня и текущая из главной таблицы
                 ticker_history = price_history_cache.get(item.ticker.upper(), {})
                 latest_entry_today = ticker_history.get('today')
 
                 if latest_entry_today:
-                    previous_price = latest_entry_today.price
+                    previous_price = get_adjusted_price_for_date(
+                        latest_entry_today.price, latest_entry_today.logged_at, item.ticker, split_coeffs_map
+                    )
                 else:
                     any_previous = db_session.query(PriceHistory).filter(
                         PriceHistory.ticker == item.ticker
                     ).order_by(PriceHistory.logged_at.desc()).first()
-                    previous_price = any_previous.price if any_previous else latest_price
+                    previous_price = (
+                        get_adjusted_price_for_date(any_previous.price, any_previous.logged_at, item.ticker, split_coeffs_map)
+                        if any_previous else latest_price
+                    )
 
             # Рассчитываем изменение: разница между предыдущей и последней ценой
             # Для облигаций цены в истории хранятся в процентах, для акций - в рублях
@@ -2214,12 +2319,29 @@ def get_price_history():
         # и конвертируем цену в рубли для облигаций.
         # Признак облигации определяем по тикеру (bond_info), а не по instrument_type
         # в истории — старые записи могут хранить неверный тип.
+        split_tickers = [ticker.upper()] if ticker else [i.ticker.upper() for i in portfolio_items]
+        split_coeffs_map = _get_split_coefficients_map(current_user.id, split_tickers)
+
         def process_history_item(item):
             ticker = item.get('ticker', '').upper()
             is_bond = (
                 item.get('instrument_type') == 'Облигация'
                 or ticker in bond_info
             )
+            # Приводим историческую цену к текущей шкале с учётом сплитов
+            logged_at_str = item.get('logged_at', '')
+            logged_at_dt = None
+            if logged_at_str:
+                try:
+                    logged_at_dt = datetime.strptime(logged_at_str, '%Y-%m-%d %H:%M:%S')
+                except Exception:
+                    logged_at_dt = None
+
+            raw_price = item.get('price', 0)
+            adjusted_price = get_adjusted_price_for_date(raw_price, logged_at_dt, ticker, split_coeffs_map)
+            item['price_original'] = raw_price
+            item['price'] = adjusted_price
+
             if is_bond:
                 if ticker in bond_info:
                     bond_facevalue = bond_info[ticker]['bond_facevalue']
@@ -2320,6 +2442,7 @@ def get_portfolio_value_history():
 
         tickers = [p.ticker for p in portfolio]
         quantities = {p.ticker: p.quantity for p in portfolio}
+        split_coeffs_map = _get_split_coefficients_map(current_user.id, tickers)
 
         # Собираем информацию об облигациях из портфеля (номинал и валюта),
         # чтобы корректно интерпретировать исторические цены в процентах.
@@ -2354,12 +2477,13 @@ def get_portfolio_value_history():
             date_key = h.logged_at.strftime('%Y-%m-%d')
             ticker = (h.ticker or '').upper()
 
-            price_rub = h.price or 0
+            adjusted_price = get_adjusted_price_for_date(h.price or 0, h.logged_at, ticker, split_coeffs_map)
+            price_rub = adjusted_price or 0
             if ticker in bond_info:
                 info = bond_info[ticker]
                 face = info['bond_facevalue'] or 1000.0
                 curr = (info.get('bond_currency') or 'SUR').strip() or 'SUR'
-                price_percent = h.price or 0
+                price_percent = adjusted_price or 0
                 price_in_nominal = (price_percent * face) / 100 if price_percent else 0
                 if curr not in ('SUR', 'RUB'):
                     try:
@@ -2623,6 +2747,91 @@ def set_hosting_expiration():
         db_session.commit()
         return jsonify({'success': True, 'date': hosting_date.isoformat() if hosting_date else None})
     except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/split-coefficients', methods=['GET'])
+@login_required
+def get_split_coefficients():
+    """
+    Получить список коэффициентов сплитов для текущего пользователя.
+    Query:
+      - ticker (optional)
+    """
+    try:
+        ticker = _normalize_ticker(request.args.get('ticker', ''))
+        q = db_session.query(SplitCoefficient).filter(SplitCoefficient.user_id == current_user.id)
+        if ticker:
+            q = q.filter(SplitCoefficient.ticker == ticker)
+        rows = q.order_by(
+            SplitCoefficient.ticker.asc(),
+            SplitCoefficient.effective_date.asc(),
+            SplitCoefficient.id.asc()
+        ).all()
+        return jsonify({
+            'success': True,
+            'items': [r.to_dict() for r in rows]
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/split-coefficients', methods=['POST'])
+@login_required
+def add_split_coefficient():
+    """
+    Добавить коэффициент сплита.
+    JSON:
+      { "ticker": "SBER", "effective_date": "YYYY-MM-DD", "coefficient": 10 }
+    """
+    try:
+        data = request.get_json() or {}
+        ticker = _normalize_ticker(data.get('ticker'))
+        date_str = (data.get('effective_date') or '').strip()
+        coefficient = float(data.get('coefficient', 0) or 0)
+
+        if not ticker:
+            return jsonify({'success': False, 'error': 'Укажите тикер'}), 400
+        if not date_str:
+            return jsonify({'success': False, 'error': 'Укажите дату изменения'}), 400
+        if coefficient <= 0:
+            return jsonify({'success': False, 'error': 'Коэффициент должен быть больше 0'}), 400
+
+        try:
+            effective_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+        except ValueError:
+            return jsonify({'success': False, 'error': 'Некорректный формат даты, ожидается YYYY-MM-DD'}), 400
+
+        row = SplitCoefficient(
+            user_id=current_user.id,
+            ticker=ticker,
+            effective_date=effective_date,
+            coefficient=coefficient
+        )
+        db_session.add(row)
+        db_session.commit()
+        return jsonify({'success': True, 'item': row.to_dict()})
+    except Exception as e:
+        db_session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/split-coefficients/<int:item_id>', methods=['DELETE'])
+@login_required
+def delete_split_coefficient(item_id):
+    """Удалить коэффициент сплита по id."""
+    try:
+        row = db_session.query(SplitCoefficient).filter(
+            SplitCoefficient.id == item_id,
+            SplitCoefficient.user_id == current_user.id
+        ).first()
+        if not row:
+            return jsonify({'success': False, 'error': 'Запись не найдена'}), 404
+        db_session.delete(row)
+        db_session.commit()
+        return jsonify({'success': True})
+    except Exception as e:
+        db_session.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
