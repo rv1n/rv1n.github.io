@@ -5752,7 +5752,7 @@ async function loadSplitCoefficients() {
                 <td>${item.ticker || ''}</td>
                 <td>${item.coefficient}</td>
                 <td>
-                    <button class="btn btn-danger btn-sm" type="button" onclick="deleteSplitCoefficient(${item.id})">Удалить</button>
+                    <button class="btn btn-danger split-delete-btn" type="button" onclick="deleteSplitCoefficient(${item.id})">Удалить</button>
                 </td>
             </tr>
         `).join('');

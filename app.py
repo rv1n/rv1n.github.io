@@ -2497,8 +2497,15 @@ def get_portfolio_value_history():
             return jsonify({'success': True, 'portfolio': [], 'imoex': []})
 
         tickers = [p.ticker for p in portfolio]
-        quantities = {p.ticker: p.quantity for p in portfolio}
         split_coeffs_map = _get_split_coefficients_map(current_user.id, tickers)
+        # Количество для графика должно совпадать с текущей шкалой портфеля:
+        # применяем тот же коэффициент сплита, что и в /api/portfolio.
+        today_date = datetime.now(_MOSCOW_TZ).date()
+        quantities = {}
+        for p in portfolio:
+            ticker_upper = (p.ticker or '').upper()
+            factor_now = _get_cumulative_split_factor_until(ticker_upper, today_date, split_coeffs_map)
+            quantities[ticker_upper] = (p.quantity / factor_now) if factor_now and factor_now > 0 else p.quantity
 
         # Собираем информацию об облигациях из портфеля (номинал и валюта),
         # чтобы корректно интерпретировать исторические цены в процентах.
@@ -2554,7 +2561,7 @@ def get_portfolio_value_history():
         portfolio_data = []
         for date_str in sorted(daily_prices.keys()):
             prices = daily_prices[date_str]
-            total = sum(quantities.get(t, 0) * p for t, p in prices.items())
+            total = sum(quantities.get((t or '').upper(), 0) * p for t, p in prices.items())
             if total > 0:
                 portfolio_data.append({'date': date_str, 'value': round(total, 2)})
 
