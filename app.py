@@ -685,6 +685,19 @@ def get_portfolio():
     Средняя цена покупки рассчитывается из истории транзакций покупки
     """
     try:
+        ticker_lotsize_overrides = {
+            'CNYM': 1,
+        }
+
+        def normalize_lotsize(ticker: str, lotsize_value):
+            override_value = ticker_lotsize_overrides.get((ticker or '').upper())
+            if override_value:
+                return override_value
+            try:
+                return int(lotsize_value) if lotsize_value else 1
+            except (TypeError, ValueError):
+                return 1
+
         # Период для расчета изменения цены (в днях). Если не задан - используем "последние две записи".
         change_days = request.args.get('change_days', type=int)
         # Флаг: использовать только кэшированные данные (без прямых запросов к MOEX API)
@@ -878,8 +891,8 @@ def get_portfolio():
                         price_data_cache[item.ticker] = None
                 # В cached-режиме берём lotsize из сохранённого в Portfolio
                 security_info_cache[item.ticker] = {
-                    'trading_params': {'lotsize': item.lotsize or 1}
-                } if item.lotsize else None
+                    'trading_params': {'lotsize': normalize_lotsize(item.ticker, item.lotsize)}
+                }
         
         # Обрабатываем каждый элемент с использованием кэшированных данных
         for data in items_data:
@@ -893,7 +906,10 @@ def get_portfolio():
             lotsize = 1  # По умолчанию 1
             security_info = security_info_cache.get(item.ticker)
             if security_info and security_info.get('trading_params'):
-                lotsize = security_info['trading_params'].get('lotsize', 1)
+                lotsize = normalize_lotsize(
+                    item.ticker,
+                    security_info['trading_params'].get('lotsize', 1)
+                )
             
             # Получаем номинал и валюту для облигаций
             bond_facevalue = None
@@ -936,7 +952,7 @@ def get_portfolio():
                     item.current_price = current_price
                     item.current_price_updated_at = datetime.now()
                     if lotsize and lotsize > 0:
-                        item.lotsize = lotsize
+                        item.lotsize = normalize_lotsize(item.ticker, lotsize)
                     db_session.commit()
             else:
                 # Если цена не получена от MOEX — берём сохранённую в БД
@@ -1747,6 +1763,10 @@ def validate_ticker(ticker):
     Возвращает также информацию о размере лота (LOTSIZE)
     """
     try:
+        ticker_lotsize_overrides = {
+            'CNYM': 1,
+        }
+
         ticker = ticker.upper().strip()
         instrument_type = request.args.get('instrument_type', 'STOCK')
         
@@ -1770,7 +1790,8 @@ def validate_ticker(ticker):
             lotsize = 1  # По умолчанию 1
             if security_info and security_info.get('trading_params'):
                 lotsize = security_info['trading_params'].get('lotsize', 1)
-            
+            lotsize = ticker_lotsize_overrides.get(ticker, lotsize)
+
             return jsonify({
                 'success': True,
                 'ticker': ticker,

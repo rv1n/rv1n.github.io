@@ -568,33 +568,65 @@ class MOEXService:
                 if fields:
                     result['fields'] = fields
             
+            # Для некоторых инструментов фиксируем целевой board для корректного LOTSIZE
+            # (например, CNYM на TQTF = 1 бумага в лоте, а на TQTY = 10).
+            ticker_board_lotsize_override = {
+                'CNYM': 'TQTF',
+            }
+            preferred_boardid = ticker_board_lotsize_override.get(ticker)
+
             # Получаем информацию о торговых параметрах из boards (лоты, шаги цены)
             boards_table = data_dict.get('boards', [])
             if boards_table and isinstance(boards_table, list):
-                # Берем первый активный board (обычно это основной режим торгов)
-                for board in boards_table:
-                    if isinstance(board, dict):
-                        lotsize = board.get('lotsize')
-                        minstep = board.get('minstep')
-                        stepprice = board.get('stepprice')
-                        if lotsize is not None and lotsize != '':
-                            try:
-                                trading_params['lotsize'] = int(float(lotsize))
-                            except (ValueError, TypeError):
-                                pass
-                        if minstep is not None and minstep != '':
-                            try:
-                                trading_params['minstep'] = float(minstep)
-                            except (ValueError, TypeError):
-                                pass
-                        if stepprice is not None and stepprice != '':
-                            try:
-                                trading_params['stepprice'] = float(stepprice)
-                            except (ValueError, TypeError):
-                                pass
-                        # Если нашли хотя бы один параметр, используем этот board
-                        if trading_params:
+                # 1) Если для тикера задан preferred board — пробуем сначала его
+                if preferred_boardid:
+                    for board in boards_table:
+                        if isinstance(board, dict) and str(board.get('boardid', '')).upper() == preferred_boardid:
+                            lotsize = board.get('lotsize')
+                            minstep = board.get('minstep')
+                            stepprice = board.get('stepprice')
+                            if lotsize is not None and lotsize != '':
+                                try:
+                                    trading_params['lotsize'] = int(float(lotsize))
+                                except (ValueError, TypeError):
+                                    pass
+                            if minstep is not None and minstep != '':
+                                try:
+                                    trading_params['minstep'] = float(minstep)
+                                except (ValueError, TypeError):
+                                    pass
+                            if stepprice is not None and stepprice != '':
+                                try:
+                                    trading_params['stepprice'] = float(stepprice)
+                                except (ValueError, TypeError):
+                                    pass
                             break
+
+                # Берем первый активный board (обычно это основной режим торгов)
+                if not trading_params:
+                    for board in boards_table:
+                        if isinstance(board, dict):
+                            lotsize = board.get('lotsize')
+                            minstep = board.get('minstep')
+                            stepprice = board.get('stepprice')
+                            if lotsize is not None and lotsize != '':
+                                try:
+                                    trading_params['lotsize'] = int(float(lotsize))
+                                except (ValueError, TypeError):
+                                    pass
+                            if minstep is not None and minstep != '':
+                                try:
+                                    trading_params['minstep'] = float(minstep)
+                                except (ValueError, TypeError):
+                                    pass
+                            if stepprice is not None and stepprice != '':
+                                try:
+                                    trading_params['stepprice'] = float(stepprice)
+                                except (ValueError, TypeError):
+                                    pass
+                            # Если нашли хотя бы один параметр, используем этот board
+                            if trading_params:
+                                break
             
             # Всегда пробуем получить из markets endpoint (более надежный источник для облигаций)
             # Если trading_params пустой или нужно обновить данные, проверяем markets endpoint
@@ -604,30 +636,43 @@ class MOEXService:
                 market_params = {
                     'iss.meta': 'off',
                     'iss.json': 'extended',
-                    'securities.columns': 'SECID,LOTSIZE,MINSTEP,STEPPRICE'
+                    # BOARDID нужен, чтобы корректно выбрать preferred board
+                    # для тикеров, которые торгуются на нескольких режимах
+                    # с разным размером лота.
+                    'securities.columns': 'SECID,BOARDID,LOTSIZE,MINSTEP,STEPPRICE'
                 }
                 market_data = self._make_request(market_url, market_params)
                 if market_data and len(market_data) >= 2:
                     market_dict = market_data[1]
                     securities_table = market_dict.get('securities', [])
                     if securities_table and isinstance(securities_table, list):
-                        # Ищем запись с максимальным LOTSIZE (обычно это основной режим торгов)
-                        # или берем первую с LOTSIZE > 1, если есть
+                        # Если для тикера задан preferred board — сначала берем его.
                         best_sec = None
-                        max_lotsize = 0
-                        for sec in securities_table:
-                            if isinstance(sec, dict):
-                                lotsize = sec.get('LOTSIZE')
-                                if lotsize is not None and lotsize != '':
-                                    try:
-                                        lotsize_int = int(float(lotsize))
-                                        if lotsize_int > max_lotsize:
-                                            max_lotsize = lotsize_int
-                                            best_sec = sec
-                                    except (ValueError, TypeError):
-                                        pass
+                        if preferred_boardid:
+                            for sec in securities_table:
+                                if isinstance(sec, dict) and str(sec.get('BOARDID', '')).upper() == preferred_boardid:
+                                    best_sec = sec
+                                    break
+
+                        # Иначе оставляем старую логику "максимальный LOTSIZE"
+                        if best_sec is None:
+                            max_lotsize = 0
+                            for sec in securities_table:
+                                if isinstance(sec, dict):
+                                    lotsize = sec.get('LOTSIZE')
+                                    if lotsize is not None and lotsize != '':
+                                        try:
+                                            lotsize_int = int(float(lotsize))
+                                            if lotsize_int > max_lotsize:
+                                                max_lotsize = lotsize_int
+                                                best_sec = sec
+                                        except (ValueError, TypeError):
+                                            pass
                         
-                        # Если нашли лучшую запись, используем её (перезаписываем, если markets endpoint дал лучшие данные)
+                        # Если нашли лучшую запись, используем её.
+                        # Для тикеров с preferred board не заменяем уже найденный
+                        # lotsize на "максимальный", иначе CNYM снова станет 10
+                        # вместо 1 бумаги на TQTF.
                         if best_sec:
                             lotsize = best_sec.get('LOTSIZE')
                             minstep = best_sec.get('MINSTEP')
@@ -635,8 +680,13 @@ class MOEXService:
                             if lotsize is not None and lotsize != '':
                                 try:
                                     lotsize_int = int(float(lotsize))
-                                    # Используем данные из markets endpoint, если они лучше (больше lotsize) или если их еще нет
-                                    if not trading_params.get('lotsize') or lotsize_int > trading_params.get('lotsize', 0):
+                                    should_replace_lotsize = not trading_params.get('lotsize')
+                                    if not preferred_boardid and lotsize_int > trading_params.get('lotsize', 0):
+                                        should_replace_lotsize = True
+                                    if preferred_boardid and str(best_sec.get('BOARDID', '')).upper() == preferred_boardid:
+                                        should_replace_lotsize = True
+
+                                    if should_replace_lotsize:
                                         trading_params['lotsize'] = lotsize_int
                                 except (ValueError, TypeError):
                                     pass
