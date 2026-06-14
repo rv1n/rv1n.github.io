@@ -25,8 +25,8 @@ const PORTFOLIO_COLUMNS = [
     { key: 'actions',      index: 9 },
 ];
 
-/** Количество дней на мини-графике в таблице портфеля: 8, 15 или 30 */
-const SPARKLINE_DAYS_OPTIONS = [8, 15, 30];
+/** Количество дней на мини-графике в таблице портфеля */
+const SPARKLINE_DAYS_OPTIONS = [8, 15, 30, 90, 180, 365, 0];
 const SPARKLINE_DAYS_STORAGE_KEY = 'sparklinePortfolioDays';
 
 function getSparklineDays() {
@@ -34,7 +34,7 @@ function getSparklineDays() {
     return SPARKLINE_DAYS_OPTIONS.includes(v) ? v : 15;
 }
 
-/** Выбор 8 / 15 / 30 дней для мини-графиков в колонке «График» */
+/** Выбор периода для мини-графиков в колонке «График» */
 function initSparklineDaysSelect() {
     const sel = document.getElementById('sparkline-days-select');
     if (!sel) return;
@@ -1081,9 +1081,13 @@ async function loadSparklines(portfolio) {
 async function renderSparkline(container, ticker, isBond = false) {
     try {
         const sparklineDays = getSparklineDays();
-        // Календарных дней запрашиваем больше, чтобы набрать нужное число дневных точек (выходные без котировок)
-        const fetchCalendarDays = Math.min(365, Math.max(40, sparklineDays * 4));
-        const response = await fetch(`/api/price-history?ticker=${ticker}&days=${fetchCalendarDays}&limit=500`);
+        // Календарных дней запрашиваем больше, чтобы набрать нужное число дневных точек (выходные без котировок).
+        // Для режима "Все время" берем максимально широкий доступный диапазон.
+        const fetchCalendarDays = sparklineDays === 0
+            ? 3650
+            : Math.min(3650, Math.max(40, sparklineDays * 4));
+        const historyLimit = sparklineDays === 0 ? 5000 : 500;
+        const response = await fetch(`/api/price-history?ticker=${ticker}&days=${fetchCalendarDays}&limit=${historyLimit}`);
         const data = await response.json();
         
         if (!data.success || !data.history || data.history.length === 0) {
@@ -1129,7 +1133,12 @@ async function renderSparkline(container, ticker, isBond = false) {
             return;
         }
         
-        const prices = dailyPrices.slice(-sparklineDays);
+        const prices = sparklineDays === 0 ? dailyPrices : dailyPrices.slice(-sparklineDays);
+
+        if (prices.length === 0) {
+            container.innerHTML = '<span style="color: #95a5a6; font-size: 0.8em;">Нет данных</span>';
+            return;
+        }
         
         // Параметры графика
         const width = 140;
@@ -1172,20 +1181,24 @@ async function renderSparkline(container, ticker, isBond = false) {
         path.setAttribute('stroke-linejoin', 'round');
         svg.appendChild(path);
         
-        // Добавляем точки для каждого дня
-        prices.forEach((price, index) => {
-            const x = padding + (index / (prices.length - 1 || 1)) * graphWidth;
-            const y = padding + graphHeight - ((price - minPrice) / priceRange) * graphHeight;
-            
-            const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-            circle.setAttribute('cx', x);
-            circle.setAttribute('cy', y);
-            circle.setAttribute('r', '2');
-            circle.setAttribute('fill', lineColor);
-            circle.setAttribute('stroke', '#ffffff');
-            circle.setAttribute('stroke-width', '0.5');
-            svg.appendChild(circle);
-        });
+        const shouldShowSparklinePoints = sparklineDays > 0 && sparklineDays <= 30;
+
+        // Для периодов длиннее месяца оставляем только линию без точек.
+        if (shouldShowSparklinePoints) {
+            prices.forEach((price, index) => {
+                const x = padding + (index / (prices.length - 1 || 1)) * graphWidth;
+                const y = padding + graphHeight - ((price - minPrice) / priceRange) * graphHeight;
+
+                const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                circle.setAttribute('cx', x);
+                circle.setAttribute('cy', y);
+                circle.setAttribute('r', '2');
+                circle.setAttribute('fill', lineColor);
+                circle.setAttribute('stroke', '#ffffff');
+                circle.setAttribute('stroke-width', '0.5');
+                svg.appendChild(circle);
+            });
+        }
         
         container.innerHTML = '';
         container.appendChild(svg);
@@ -6316,6 +6329,11 @@ async function loadPortfolioValueChart(daysOrDate) {
         const panelColor = getComputedStyle(document.documentElement)
             .getPropertyValue('--color-panels').trim() || '#1e3a5f';
 
+        const selectedRangeDays = effectiveDateFrom
+            ? Math.max(0, Math.ceil((Date.now() - new Date(`${effectiveDateFrom}T00:00:00`).getTime()) / 86400000))
+            : (_pvcActiveDays > 0 ? _pvcActiveDays : Number.POSITIVE_INFINITY);
+        const hidePoints = selectedRangeDays > 30;
+
         const canvas = document.getElementById('portfolioValueChart');
         if (_portfolioValueChart) _portfolioValueChart.destroy();
 
@@ -6330,8 +6348,8 @@ async function loadPortfolioValueChart(daysOrDate) {
                         borderColor: panelColor,
                         backgroundColor: panelColor + '22',
                         borderWidth: 2,
-                        pointRadius: portfolioNorm.length > 100 ? 0 : 3,
-                        pointHoverRadius: 5,
+                        pointRadius: hidePoints ? 0 : 3,
+                        pointHoverRadius: hidePoints ? 0 : 5,
                         fill: true,
                         tension: 0.3,
                         yAxisID: 'y',
