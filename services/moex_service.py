@@ -770,7 +770,10 @@ class MOEXService:
         Возвращает {'value': float, 'change': float, 'change_percent': float} или None.
         """
         try:
-            url = f"{self.BASE_URL}/engines/stock/markets/index/boards/SNDX/securities/{secid}.json"
+            # RTSI публикуется на отдельном board RTSI; остальные используемые
+            # индексы доступны на основном board SNDX.
+            board = 'RTSI' if secid.upper() == 'RTSI' else 'SNDX'
+            url = f"{self.BASE_URL}/engines/stock/markets/index/boards/{board}/securities/{secid}.json"
             resp = requests.get(url, params={'iss.meta': 'off'}, timeout=10)
             resp.raise_for_status()
             data = resp.json()
@@ -818,6 +821,10 @@ class MOEXService:
     def get_imoex2_current(self) -> Optional[Dict]:
         """Текущее значение IMOEX2 (расширенная сессия)."""
         return self._get_index_current('IMOEX2')
+
+    def get_rtsi_current(self) -> Optional[Dict]:
+        """Текущее значение валютного индекса RTSI."""
+        return self._get_index_current('RTSI')
 
     def get_imoex_history(self, date_from: str, date_to: str) -> list:
         """

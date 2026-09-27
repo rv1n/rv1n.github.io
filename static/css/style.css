@@ -2948,6 +2948,7 @@ tr.row-loading td:first-child::after {
 
     #rate-imoex,
     #rate-imoex2,
+    #rate-rtsi,
     .header-currencies-group {
         display: block;
         margin: 0;

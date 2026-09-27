@@ -1649,6 +1649,7 @@ async function loadCurrencyRates() {
         const cnyEl = document.getElementById('rate-cny');
         const imoexEl = document.getElementById('rate-imoex');
         const imoex2El = document.getElementById('rate-imoex2');
+        const rtsiEl = document.getElementById('rate-rtsi');
 
         const formatRate = (rate) => {
             if (rate === null || rate === undefined) return '-';
@@ -1694,6 +1695,7 @@ async function loadCurrencyRates() {
         };
         updateIndexEl(imoexEl, 'IMOEX', data.imoex);
         updateIndexEl(imoex2El, 'IMOEX2', data.imoex2);
+        updateIndexEl(rtsiEl, 'RTSI', data.rtsi);
     } catch (err) {
         console.error('Ошибка загрузки курсов валют:', err);
     }
